@@ -16,8 +16,19 @@ const launcherAPI: LauncherAPI = {
     create: (payload: CreateInstancePayload) => ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_CREATE, payload),
     update: (payload: UpdateInstancePayload) => ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_UPDATE, payload),
     delete: (instanceId: string) => ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_DELETE, instanceId),
-    openFolder: (instanceId: string) => ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_OPEN_FOLDER, instanceId)
+    openFolder: (instanceId: string) => ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_OPEN_FOLDER, instanceId),
+    setGroup: (instanceId: string, group: string | null) =>
+      ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_SET_GROUP, instanceId, group),
+    renameGroup: (oldName: string, newName: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_RENAME_GROUP, oldName, newName),
+    disbandGroup: (groupName: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_DISBAND_GROUP, groupName),
+    deleteGroup: (groupName: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_DELETE_GROUP, groupName),
+    saveCustomIcon: (instanceId: string, dataUrl: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_SAVE_CUSTOM_ICON, instanceId, dataUrl)
   },
+
   auth: {
     getState: () => ipcRenderer.invoke(IPC_CHANNELS.AUTH_GET_STATE),
     loginMicrosoft: () => ipcRenderer.invoke(IPC_CHANNELS.AUTH_LOGIN_MICROSOFT),

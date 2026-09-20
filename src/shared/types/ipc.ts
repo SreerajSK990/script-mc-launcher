@@ -40,7 +40,13 @@ export interface InstanceActions {
   update: (payload: UpdateInstancePayload) => Promise<InstanceConfiguration>
   delete: (id: string) => Promise<boolean>
   openFolder: (id: string) => Promise<void>
+  setGroup: (instanceId: string, group: string | null) => Promise<InstanceConfiguration>
+  renameGroup: (oldName: string, newName: string) => Promise<void>
+  disbandGroup: (groupName: string) => Promise<void>
+  deleteGroup: (groupName: string) => Promise<void>
+  saveCustomIcon: (instanceId: string, dataUrl: string) => Promise<string>
 }
+
 
 export interface AuthActions {
   getState: () => Promise<AuthState>

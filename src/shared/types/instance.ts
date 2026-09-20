@@ -10,7 +10,9 @@ export interface InstanceConfiguration {
   jvmArguments: string[]
   ramAllocationMegabytes: number
   iconPath?: string
+  icon?: string
   bannerPath?: string
+  group?: string | null
   createdAt: string
   lastPlayedAt: string | null
   totalPlayTimeMinutes: number
@@ -24,6 +26,8 @@ export interface CreateInstancePayload {
   ramAllocationMegabytes?: number
   javaPath?: string | null
   jvmArguments?: string[]
+  icon?: string
+  group?: string | null
 }
 
 export interface UpdateInstancePayload {
@@ -35,6 +39,9 @@ export interface UpdateInstancePayload {
   javaPath?: string | null
   jvmArguments?: string[]
   ramAllocationMegabytes?: number
+  icon?: string
+  group?: string | null
   lastPlayedAt?: string | null
   totalPlayTimeMinutes?: number
 }
+

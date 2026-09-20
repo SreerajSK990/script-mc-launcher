@@ -13,6 +13,7 @@ interface InstancesPageProps {
   onImportClick?: () => void
   onCloneLauncherClick?: () => void
   onManage?: (instance: InstanceConfiguration) => void
+  onRefreshInstances?: () => void
 }
 
 type LoaderFilter = 'all' | ModLoaderType
@@ -34,10 +35,55 @@ export const InstancesPage: React.FC<InstancesPageProps> = ({
   onCreateClick,
   onImportClick,
   onCloneLauncherClick,
-  onManage
+  onManage,
+  onRefreshInstances
 }) => {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedLoader, setSelectedLoader] = useState<LoaderFilter>('all')
+
+  const handleSetGroup = async (instanceId: string, group: string | null) => {
+    try {
+      if (window.launcherAPI?.instances?.setGroup) {
+        await window.launcherAPI.instances.setGroup(instanceId, group)
+        onRefreshInstances?.()
+      }
+    } catch (err) {
+      console.error('Failed to set group:', err)
+    }
+  }
+
+  const handleRenameGroup = async (oldName: string, newName: string) => {
+    try {
+      if (window.launcherAPI?.instances?.renameGroup) {
+        await window.launcherAPI.instances.renameGroup(oldName, newName)
+        onRefreshInstances?.()
+      }
+    } catch (err) {
+      console.error('Failed to rename group:', err)
+    }
+  }
+
+  const handleDisbandGroup = async (groupName: string) => {
+    try {
+      if (window.launcherAPI?.instances?.disbandGroup) {
+        await window.launcherAPI.instances.disbandGroup(groupName)
+        onRefreshInstances?.()
+      }
+    } catch (err) {
+      console.error('Failed to disband group:', err)
+    }
+  }
+
+  const handleDeleteGroup = async (groupName: string) => {
+    try {
+      if (window.launcherAPI?.instances?.deleteGroup) {
+        await window.launcherAPI.instances.deleteGroup(groupName)
+        onRefreshInstances?.()
+      }
+    } catch (err) {
+      console.error('Failed to delete group:', err)
+    }
+  }
 
   const filteredInstances = instances.filter((instance) => {
     const matchesSearch =
@@ -120,7 +166,12 @@ export const InstancesPage: React.FC<InstancesPageProps> = ({
         onDelete={onDelete}
         onCreateClick={onCreateClick}
         onManage={onManage}
+        onSetGroup={handleSetGroup}
+        onRenameGroup={handleRenameGroup}
+        onDisbandGroup={handleDisbandGroup}
+        onDeleteGroup={handleDeleteGroup}
       />
     </div>
   )
 }
+

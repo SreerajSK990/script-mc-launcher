@@ -10,6 +10,11 @@ export const IPC_CHANNELS = {
   INSTANCES_UPDATE: 'instances:update',
   INSTANCES_DELETE: 'instances:delete',
   INSTANCES_OPEN_FOLDER: 'instances:open-folder',
+  INSTANCES_SET_GROUP: 'instances:set-group',
+  INSTANCES_RENAME_GROUP: 'instances:rename-group',
+  INSTANCES_DISBAND_GROUP: 'instances:disband-group',
+  INSTANCES_DELETE_GROUP: 'instances:delete-group',
+  INSTANCES_SAVE_CUSTOM_ICON: 'instances:save-custom-icon',
 
   AUTH_GET_STATE: 'auth:get-state',
   AUTH_LOGIN_MICROSOFT: 'auth:login-microsoft',

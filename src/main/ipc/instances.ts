@@ -6,7 +6,12 @@ import {
   getInstanceById,
   createNewInstance,
   updateExistingInstance,
-  deleteInstanceById
+  deleteInstanceById,
+  setInstanceGroup,
+  renameGroup,
+  disbandGroup,
+  deleteGroup,
+  saveInstanceCustomIcon
 } from '@main/services/instances'
 import { getInstancePath } from '@main/services/paths'
 
@@ -35,4 +40,25 @@ export function registerInstanceIpcHandlers(): void {
     const targetPath = getInstancePath(instanceId)
     await shell.openPath(targetPath)
   })
+
+  ipcMain.handle(IPC_CHANNELS.INSTANCES_SET_GROUP, async (_event, instanceId: string, group: string | null) => {
+    return await setInstanceGroup(instanceId, group)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.INSTANCES_RENAME_GROUP, async (_event, oldName: string, newName: string) => {
+    return await renameGroup(oldName, newName)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.INSTANCES_DISBAND_GROUP, async (_event, groupName: string) => {
+    return await disbandGroup(groupName)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.INSTANCES_DELETE_GROUP, async (_event, groupName: string) => {
+    return await deleteGroup(groupName)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.INSTANCES_SAVE_CUSTOM_ICON, async (_event, instanceId: string, dataUrl: string) => {
+    return await saveInstanceCustomIcon(instanceId, dataUrl)
+  })
 }
+

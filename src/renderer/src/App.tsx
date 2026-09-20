@@ -336,6 +336,11 @@ export const App: React.FC = () => {
                 onOpenFolder={handleOpenFolder}
                 onDelete={handleDeleteInstance}
                 onCreateClick={() => setIsCreateModalOpen(true)}
+                onManage={(inst) => {
+                  setSelectedDetailInstance(inst)
+                  setActiveTab('instances')
+                }}
+                onRefreshInstances={fetchInstances}
               />
             )}
 
@@ -365,9 +370,11 @@ export const App: React.FC = () => {
                   onImportClick={() => setIsImportModpackModalOpen(true)}
                   onCloneLauncherClick={() => setIsImportLauncherModalOpen(true)}
                   onManage={(inst) => setSelectedDetailInstance(inst)}
+                  onRefreshInstances={fetchInstances}
                 />
               )
             )}
+
 
             {activeTab === 'mods' && (
               <ModBrowserPage

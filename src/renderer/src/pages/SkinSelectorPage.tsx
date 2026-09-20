@@ -36,6 +36,8 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
 
   // Subtab for right pane
   const [activeSubTab, setActiveSubTab] = useState<'library' | 'presets'>('library')
+  const [presetFilter, setPresetFilter] = useState<'all' | 'official' | 'events'>('all')
+  const [activeAccountUsername, setActiveAccountUsername] = useState<string | null>(null)
 
   // Search state
   const [searchUsername, setSearchUsername] = useState('')
@@ -55,12 +57,75 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
     try {
       if (window.launcherAPI?.skins) {
         const res = await window.launcherAPI.skins.list()
+        let currentActive = res.activeSkinId || 'preset_steve'
+
+        // Check if user is logged into an active account
+        let activeUserSkin: SkinEntry | null = null
+        try {
+          const authState = await window.launcherAPI?.auth?.getState?.()
+          const activeAccount = authState?.activeAccount
+
+          if (activeAccount?.username) {
+            setActiveAccountUsername(activeAccount.username)
+
+            // Look for user's skin in existing skins
+            const existing = res.skins.find(
+              (s) =>
+                s.name.toLowerCase() === activeAccount.username.toLowerCase() ||
+                s.name.toLowerCase() === `${activeAccount.username.toLowerCase()} (active)`
+            )
+
+            if (existing) {
+              activeUserSkin = existing
+              if (!res.activeSkinId || res.activeSkinId.startsWith('preset_')) {
+                currentActive = existing.id
+              }
+            } else if (activeAccount.skinUrl) {
+              const saved = await window.launcherAPI.skins.save({
+                name: `${activeAccount.username} (Active)`,
+                model: 'classic',
+                textureData: activeAccount.skinUrl,
+                source: 'player'
+              })
+              activeUserSkin = saved
+              res.skins.push(saved)
+              currentActive = saved.id
+              await window.launcherAPI.skins.apply(saved.id)
+            } else {
+              // Automatically resolve player's real skin from Mojang
+              try {
+                const searched = await window.launcherAPI.skins.searchPlayer(activeAccount.username)
+                if (searched && searched.skinUrl) {
+                  const saved = await window.launcherAPI.skins.save({
+                    name: `${activeAccount.username} (Active)`,
+                    model: searched.model,
+                    textureData: searched.skinUrl,
+                    source: 'player'
+                  })
+                  activeUserSkin = saved
+                  res.skins.push(saved)
+                  currentActive = saved.id
+                  await window.launcherAPI.skins.apply(saved.id)
+                }
+              } catch {
+                // Ignore if offline
+              }
+            }
+
+          }
+        } catch (authErr) {
+          console.warn('Could not auto-resolve active player skin:', authErr)
+        }
+
         setSkins(res.skins)
-        const currentActive = res.activeSkinId || 'preset_steve'
         setActiveSkinId(currentActive)
 
-        // Set initial preview skin
-        const found = res.skins.find((s) => s.id === currentActive) || res.skins[0]
+        // Set initial preview skin (prioritize user's active skin!)
+        const found =
+          activeUserSkin ||
+          res.skins.find((s) => s.id === currentActive) ||
+          res.skins[0]
+
         if (found) {
           setPreviewSkin(found)
           setPreviewModel(found.model)
@@ -73,6 +138,7 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
       setIsLoading(false)
     }
   }, [onNotification])
+
 
   useEffect(() => {
     loadSkins()
@@ -597,50 +663,101 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
               )}
 
               {activeSubTab === 'presets' && (
-                <div className="grid grid-cols-2 gap-2.5">
-                  {presetSkins.map((skin) => {
-                    const isSelected = previewSkin?.id === skin.id
-                    const isActive = activeSkinId === skin.id
+                <div className="flex flex-col gap-3">
+                  {/* Category Filter Pills */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                    <button
+                      type="button"
+                      onClick={() => setPresetFilter('all')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer shrink-0 ${
+                        presetFilter === 'all'
+                          ? 'bg-emerald-500 text-white'
+                          : 'bg-white/5 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      All Presets ({presetSkins.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPresetFilter('official')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer shrink-0 ${
+                        presetFilter === 'official'
+                          ? 'bg-emerald-500 text-white'
+                          : 'bg-white/5 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Official Characters
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPresetFilter('events')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer shrink-0 flex items-center gap-1 ${
+                        presetFilter === 'events'
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-white/5 text-purple-300 hover:text-purple-200'
+                      }`}
+                    >
+                      <Sparkles size={12} />
+                      <span>Events & Special</span>
+                    </button>
+                  </div>
 
-                    return (
-                      <div
-                        key={skin.id}
-                        onClick={() => {
-                          setPreviewSkin(skin)
-                          setPreviewModel(skin.model)
-                        }}
-                        className={`p-3 rounded-xl border cursor-pointer transition-all flex flex-col justify-between gap-2 group ${
-                          isSelected
-                            ? 'bg-primary/10 border-primary shadow-md'
-                            : 'bg-background-surface border-border-subtle hover:border-white/20'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-white">{skin.name}</span>
-                          {isActive && (
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400">
-                              ACTIVE
-                            </span>
-                          )}
-                        </div>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {presetSkins
+                      .filter((s) => {
+                        if (presetFilter === 'official') return s.category === 'Official' || !s.category
+                        if (presetFilter === 'events') return s.category === 'Events & Special Editions'
+                        return true
+                      })
+                      .map((skin) => {
+                        const isSelected = previewSkin?.id === skin.id
+                        const isActive = activeSkinId === skin.id
 
-                        <div className="flex items-center justify-between text-[10px] text-slate-400">
-                          <span className="capitalize">{skin.model} model</span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleApplySkin(skin)
+                        return (
+                          <div
+                            key={skin.id}
+                            onClick={() => {
+                              setPreviewSkin(skin)
+                              setPreviewModel(skin.model)
                             }}
-                            className="px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 text-slate-200 text-[10px] font-medium"
+                            className={`p-3 rounded-xl border cursor-pointer transition-all flex flex-col justify-between gap-2 group ${
+                              isSelected
+                                ? 'bg-primary/10 border-primary shadow-md'
+                                : 'bg-background-surface border-border-subtle hover:border-white/20'
+                            }`}
                           >
-                            Apply
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-semibold text-white">{skin.name}</span>
+                              {isActive ? (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400">
+                                  ACTIVE
+                                </span>
+                              ) : skin.category === 'Events & Special Editions' ? (
+                                <span className="px-1.5 py-0.5 rounded text-[8px] font-medium bg-purple-500/20 text-purple-300">
+                                  EVENT
+                                </span>
+                              ) : null}
+                            </div>
+
+                            <div className="flex items-center justify-between text-[10px] text-slate-400">
+                              <span className="capitalize">{skin.model} model</span>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleApplySkin(skin)
+                                }}
+                                className="px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 text-slate-200 text-[10px] font-medium cursor-pointer"
+                              >
+                                Apply
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                  </div>
                 </div>
               )}
+
             </div>
           </div>
         </div>

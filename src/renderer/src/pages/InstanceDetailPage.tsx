@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   ArrowLeft,
   Play,
@@ -21,7 +21,9 @@ import {
   ArrowUpDown,
   ArrowUpCircle,
   RefreshCw,
-  Loader2
+  Loader2,
+  Dices,
+  Upload
 } from 'lucide-react'
 import type { InstanceConfiguration, ModLoaderType } from '@shared/types/instance'
 import type { InstalledModRecord, ModUpdateInfo } from '@shared/types/mods'
@@ -29,6 +31,11 @@ import type { ScreenshotEntry } from '@shared/types/screenshot'
 import { Button } from '@renderer/components/common/Button'
 import { ConfirmModal } from '@renderer/components/common/ConfirmModal'
 import { ChangeModVersionModal } from '@renderer/components/mods/ChangeModVersionModal'
+import {
+  getMinecraftIconById,
+  getRandomMinecraftIcon
+} from '@shared/constants/minecraftIcons'
+
 
 interface InstanceDetailPageProps {
   instance: InstanceConfiguration
@@ -109,8 +116,12 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
   const [ramMb, setRamMb] = useState(instance.ramAllocationMegabytes)
   const [jvmArgsText, setJvmArgsText] = useState((instance.jvmArguments || []).join(' '))
   const [javaPath, setJavaPath] = useState(instance.javaPath || '')
+  const [icon, setIcon] = useState(instance.icon || 'minecraft_grass')
+  const [group, setGroup] = useState(instance.group || '')
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+
 
   // Mods state
   const [installedMods, setInstalledMods] = useState<InstalledModRecord[]>([])
@@ -223,8 +234,11 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
         name: name.trim(),
         ramAllocationMegabytes: ramMb,
         jvmArguments: parsedJvmArgs,
-        javaPath: javaPath.trim() || null
+        javaPath: javaPath.trim() || null,
+        icon: icon,
+        group: group.trim() || null
       })
+
 
       onInstanceUpdated(updated)
       setSaveSuccess(true)
@@ -536,6 +550,85 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
           {/* General & Name */}
           <div className="bg-background-card border border-border-subtle rounded-2xl p-6 space-y-4">
             <h3 className="text-base font-semibold text-white">General Information</h3>
+            
+            {/* Instance Icon Customizer */}
+            <div className="max-w-md">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                Instance Icon
+              </label>
+              <div className="flex items-center gap-4 p-3 bg-background-surface border border-border-subtle rounded-2xl">
+                <div
+                  className={`w-16 h-16 rounded-xl shrink-0 flex items-center justify-center p-2 shadow-inner ${
+                    icon.startsWith('data:') || icon.startsWith('http')
+                      ? 'bg-gradient-to-br from-slate-800 to-zinc-900'
+                      : `bg-gradient-to-br ${getMinecraftIconById(icon).bg}`
+                  }`}
+                >
+                  <img
+                    src={icon.startsWith('data:') || icon.startsWith('http') ? icon : getMinecraftIconById(icon).dataUrl}
+                    alt={name}
+                    className="w-12 h-12 object-contain"
+                    style={{ imageRendering: 'pixelated' }}
+                  />
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-bold text-white truncate">
+                    {icon.startsWith('data:') || icon.startsWith('http') ? 'Custom Uploaded Icon' : getMinecraftIconById(icon).name}
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const random = getRandomMinecraftIcon()
+                        setIcon(random.id)
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Dices size={14} />
+                      <span>Randomize</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-2.5 py-1 rounded-lg bg-background-card hover:bg-slate-700 text-slate-300 border border-border-subtle text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Upload size={14} />
+                      <span>Upload</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIcon('minecraft_grass')}
+                      className="text-[11px] text-slate-500 hover:text-slate-300 ml-1 cursor-pointer"
+                    >
+                      Reset
+                    </button>
+
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) {
+                          const reader = new FileReader()
+                          reader.onload = () => {
+                            if (typeof reader.result === 'string') {
+                              setIcon(reader.result)
+                            }
+                          }
+                          reader.readAsDataURL(file)
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="max-w-md">
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
                 Instance Name
@@ -548,6 +641,23 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
                 placeholder="Instance Name"
               />
             </div>
+
+            <div className="max-w-md">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                Group (Folder Categorization)
+              </label>
+              <input
+                type="text"
+                value={group}
+                onChange={(e) => setGroup(e.target.value)}
+                className="w-full bg-background-surface border border-border-subtle focus:border-primary/60 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none transition-colors"
+                placeholder="e.g. Modpacks, Survival SMP, Testing..."
+              />
+              <p className="text-[11px] text-slate-500 mt-1">
+                Leave blank for an ungrouped instance.
+              </p>
+            </div>
+
           </div>
 
           {/* Memory Allocation */}

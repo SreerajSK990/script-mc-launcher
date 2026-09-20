@@ -1,8 +1,13 @@
-import React, { useState, useEffect } from 'react'
-import { Plus } from 'lucide-react'
+import React, { useState, useEffect, useRef } from 'react'
+import { Plus, Dices, Upload, Sparkles, Folder } from 'lucide-react'
 import type { CreateInstancePayload, ModLoaderType } from '@shared/types/instance'
 import { Modal } from '@renderer/components/common/Modal'
 import { Button } from '@renderer/components/common/Button'
+import {
+  DEFAULT_MINECRAFT_ICON,
+  getRandomMinecraftIcon,
+  getMinecraftIconById
+} from '@shared/constants/minecraftIcons'
 
 interface CreateInstanceModalProps {
   isOpen: boolean
@@ -44,8 +49,30 @@ export const CreateInstanceModal: React.FC<CreateInstanceModalProps> = ({
   const [availableLoaderVersions, setAvailableLoaderVersions] = useState<string[]>([])
   const [isLoadingLoaderVersions, setIsLoadingLoaderVersions] = useState(false)
   const [ramAllocationMb, setRamAllocationMb] = useState(4096)
+
+  // Icon state
+  const [iconId, setIconId] = useState<string>('minecraft_grass')
+  const [customIconDataUrl, setCustomIconDataUrl] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  // Group state
+  const [group, setGroup] = useState<string>('')
+  const [existingGroups, setExistingGroups] = useState<string[]>([])
+
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (isOpen && window.launcherAPI?.instances) {
+      window.launcherAPI.instances.list().then((list) => {
+        const groups = Array.from(
+          new Set(list.map((i) => i.group?.trim()).filter((g): g is string => Boolean(g && g.length > 0)))
+        ).sort((a, b) => a.localeCompare(b))
+        setExistingGroups(groups)
+      })
+    }
+  }, [isOpen])
+
 
   useEffect(() => {
     const loadVersions = async () => {
@@ -117,13 +144,18 @@ export const CreateInstanceModal: React.FC<CreateInstanceModalProps> = ({
         minecraftVersion,
         loaderType,
         loaderVersion: loaderType === 'vanilla' ? null : loaderVersion,
-        ramAllocationMegabytes: ramAllocationMb
+        ramAllocationMegabytes: ramAllocationMb,
+        icon: customIconDataUrl || iconId,
+        group: group.trim() || null
       })
       setName('')
       setMinecraftVersion('1.21.1')
       setLoaderType('vanilla')
       setLoaderVersion(null)
       setRamAllocationMb(4096)
+      setIconId('minecraft_grass')
+      setCustomIconDataUrl(null)
+      setGroup('')
       onClose()
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : 'Failed to create instance'
@@ -148,6 +180,95 @@ export const CreateInstanceModal: React.FC<CreateInstanceModalProps> = ({
           </div>
         )}
 
+        {/* Instance Icon Selector & Randomizer */}
+        <div>
+          <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+            Instance Icon
+          </label>
+          <div className="flex items-center gap-4 p-3 bg-background-darkest border border-border-subtle rounded-2xl">
+            {/* Preview Box */}
+            <div
+              className={`w-16 h-16 rounded-xl shrink-0 flex items-center justify-center p-2 shadow-inner ${
+                customIconDataUrl
+                  ? 'bg-gradient-to-br from-slate-800 to-zinc-900'
+                  : `bg-gradient-to-br ${getMinecraftIconById(iconId).bg}`
+              }`}
+            >
+              <img
+                src={customIconDataUrl || getMinecraftIconById(iconId).dataUrl}
+                alt="Instance Icon"
+                className="w-12 h-12 object-contain"
+                style={{ imageRendering: 'pixelated' }}
+              />
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-bold text-white truncate">
+                {customIconDataUrl ? 'Custom Uploaded Icon' : getMinecraftIconById(iconId).name}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Default Minecraft icon, randomize from blocks & items, or upload custom art.
+              </p>
+
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const random = getRandomMinecraftIcon()
+                    setIconId(random.id)
+                    setCustomIconDataUrl(null)
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Dices size={14} />
+                  <span>Randomize</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-border-subtle text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Upload size={14} />
+                  <span>Upload Custom</span>
+                </button>
+
+                {(customIconDataUrl || iconId !== 'minecraft_grass') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIconId('minecraft_grass')
+                      setCustomIconDataUrl(null)
+                    }}
+                    className="text-[11px] text-slate-500 hover:text-slate-300 ml-1 cursor-pointer"
+                  >
+                    Reset
+                  </button>
+                )}
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) {
+                      const reader = new FileReader()
+                      reader.onload = () => {
+                        if (typeof reader.result === 'string') {
+                          setCustomIconDataUrl(reader.result)
+                        }
+                      }
+                      reader.readAsDataURL(file)
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div>
           <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
             Instance Name
@@ -161,6 +282,32 @@ export const CreateInstanceModal: React.FC<CreateInstanceModalProps> = ({
             autoFocus
           />
         </div>
+
+        {/* Group (Optional) */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+              Group (Optional)
+            </label>
+            <span className="text-[11px] text-slate-500">
+              For collapsible folder organization
+            </span>
+          </div>
+          <input
+            type="text"
+            placeholder="e.g. Modpacks, Survival SMP, Testing..."
+            value={group}
+            onChange={(e) => setGroup(e.target.value)}
+            list="create-modal-group-suggestions"
+            className="w-full px-3.5 py-2.5 rounded-xl bg-background-darkest border border-border-subtle focus:border-emerald-500 focus:outline-none text-slate-100 text-sm placeholder-slate-500"
+          />
+          <datalist id="create-modal-group-suggestions">
+            {existingGroups.map((g) => (
+              <option key={g} value={g} />
+            ))}
+          </datalist>
+        </div>
+
 
         <div>
           <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">

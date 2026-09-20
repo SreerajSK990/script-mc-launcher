@@ -87,6 +87,8 @@ export async function createNewInstance(payload: CreateInstancePayload): Promise
     javaPath: payload.javaPath ?? null,
     jvmArguments: payload.jvmArguments ?? [...DEFAULT_INSTANCE_SETTINGS.JVM_ARGUMENTS],
     ramAllocationMegabytes: payload.ramAllocationMegabytes ?? DEFAULT_INSTANCE_SETTINGS.RAM_ALLOCATION_MB,
+    icon: payload.icon || 'minecraft_grass',
+    group: payload.group ? payload.group.trim() : null,
     createdAt: now,
     lastPlayedAt: null,
     totalPlayTimeMinutes: 0
@@ -113,6 +115,8 @@ export async function updateExistingInstance(payload: UpdateInstancePayload): Pr
     javaPath: payload.javaPath !== undefined ? payload.javaPath : existing.javaPath,
     jvmArguments: payload.jvmArguments ?? existing.jvmArguments,
     ramAllocationMegabytes: payload.ramAllocationMegabytes ?? existing.ramAllocationMegabytes,
+    icon: payload.icon !== undefined ? payload.icon : existing.icon,
+    group: payload.group !== undefined ? (payload.group ? payload.group.trim() : null) : existing.group,
     lastPlayedAt: payload.lastPlayedAt !== undefined ? payload.lastPlayedAt : existing.lastPlayedAt,
     totalPlayTimeMinutes: payload.totalPlayTimeMinutes ?? existing.totalPlayTimeMinutes
   }
@@ -121,6 +125,77 @@ export async function updateExistingInstance(payload: UpdateInstancePayload): Pr
   await writeJsonFileAtomic(configPath, updated)
 
   return updated
+}
+
+export async function setInstanceGroup(instanceId: string, group: string | null): Promise<InstanceConfiguration> {
+  return await updateExistingInstance({
+    id: instanceId,
+    group: group ? group.trim() : null
+  })
+}
+
+export async function renameGroup(oldName: string, newName: string): Promise<void> {
+  const instances = await listAllInstances()
+  const targetGroup = oldName.trim()
+  const cleanNewName = newName.trim()
+
+  for (const instance of instances) {
+    if (instance.group === targetGroup) {
+      await updateExistingInstance({
+        id: instance.id,
+        group: cleanNewName || null
+      })
+    }
+  }
+}
+
+export async function disbandGroup(groupName: string): Promise<void> {
+  const instances = await listAllInstances()
+  const targetGroup = groupName.trim()
+
+  for (const instance of instances) {
+    if (instance.group === targetGroup) {
+      await updateExistingInstance({
+        id: instance.id,
+        group: null
+      })
+    }
+  }
+}
+
+export async function deleteGroup(groupName: string): Promise<void> {
+  const instances = await listAllInstances()
+  const targetGroup = groupName.trim()
+
+  for (const instance of instances) {
+    if (instance.group === targetGroup) {
+      await deleteInstanceById(instance.id)
+    }
+  }
+}
+
+export async function saveInstanceCustomIcon(instanceId: string, dataUrl: string): Promise<string> {
+  const instanceDir = getInstancePath(instanceId)
+  await ensureDirectoryExists(instanceDir)
+
+  // Extract base64
+  const matches = dataUrl.match(/^data:([A-Za-z-+/]+);base64,(.+)$/)
+  if (!matches || matches.length !== 3) {
+    throw new Error('Invalid image data URL format')
+  }
+
+  const buffer = Buffer.from(matches[2], 'base64')
+  const iconFileName = 'icon.png'
+  const targetFilePath = join(instanceDir, iconFileName)
+  await fs.writeFile(targetFilePath, buffer)
+
+  // Update instance configuration with dataUrl or icon path
+  await updateExistingInstance({
+    id: instanceId,
+    icon: dataUrl
+  })
+
+  return dataUrl
 }
 
 export async function deleteInstanceById(instanceId: string): Promise<boolean> {
@@ -134,3 +209,4 @@ export async function deleteInstanceById(instanceId: string): Promise<boolean> {
   await removeDirectorySafely(instanceDirectory)
   return true
 }
+
