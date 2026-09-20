@@ -634,16 +634,16 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
                       role="switch"
                       aria-checked={mod.enabled}
                       onClick={() => handleToggleMod(mod)}
-                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500/40 ${
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                         mod.enabled
                           ? 'bg-emerald-500 shadow-sm shadow-emerald-950/40'
-                          : 'bg-slate-700/90 border border-slate-600/50'
+                          : 'bg-slate-700'
                       }`}
                       title={mod.enabled ? 'Disable mod' : 'Enable mod'}
                     >
                       <span
-                        className={`pointer-events-none inline-block h-3.5 w-3.5 rounded-full bg-white shadow-md transform transition-transform duration-200 ease-in-out ${
-                          mod.enabled ? 'translate-x-4.5' : 'translate-x-0.5'
+                        className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm ring-0 transform transition-transform duration-200 ease-in-out ${
+                          mod.enabled ? 'translate-x-4' : 'translate-x-0'
                         }`}
                       />
                     </button>
