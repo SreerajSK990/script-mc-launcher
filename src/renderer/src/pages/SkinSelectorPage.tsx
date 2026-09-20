@@ -286,7 +286,12 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
 
           {/* 3D Canvas Area */}
           <div className="flex-1 relative flex items-center justify-center bg-radial-gradient from-slate-900/60 to-background-card overflow-hidden">
-            {previewSkin ? (
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center gap-3 text-slate-400">
+                <Loader2 size={32} className="text-primary animate-spin" />
+                <span className="text-xs">Loading 3D skin customizer...</span>
+              </div>
+            ) : previewSkin ? (
               <SkinViewer3D
                 skinUrl={previewSkin.textureUrl}
                 model={previewModel}

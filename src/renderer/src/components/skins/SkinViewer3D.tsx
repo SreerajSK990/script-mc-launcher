@@ -40,17 +40,27 @@ export const SkinViewer3D: React.FC<SkinViewer3DProps> = ({
       canvas: canvasRef.current,
       width,
       height,
-      skin: skinUrl,
-      model: model === 'slim' ? 'slim' : 'default'
+      zoom: 0.95
     })
 
-    viewer.camera.position.z = 65
-    viewer.camera.position.y = -2
     viewer.autoRotate = autoRotate
-    viewer.autoRotateSpeed = 1.2
+    viewer.autoRotateSpeed = 1.0
 
     // Apply animation
     applyAnimation(viewer, animation)
+
+    if (skinUrl) {
+      viewer
+        .loadSkin(skinUrl, {
+          model: model === 'slim' ? 'slim' : 'default'
+        })
+        .then(() => {
+          viewer.playerObject.skin.visible = true
+        })
+        .catch((err) => {
+          console.warn('Initial skin load failed:', err)
+        })
+    }
 
     viewerRef.current = viewer
 
@@ -63,13 +73,18 @@ export const SkinViewer3D: React.FC<SkinViewer3DProps> = ({
   // Update skin texture or model
   useEffect(() => {
     if (!viewerRef.current || !skinUrl) return
-    try {
-      viewerRef.current.loadSkin(skinUrl, {
+    viewerRef.current
+      .loadSkin(skinUrl, {
         model: model === 'slim' ? 'slim' : 'default'
       })
-    } catch (err) {
-      console.warn('Failed to load skin into 3D viewer:', err)
-    }
+      .then(() => {
+        if (viewerRef.current) {
+          viewerRef.current.playerObject.skin.visible = true
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load skin into 3D viewer:', err)
+      })
   }, [skinUrl, model])
 
   // Update animation

@@ -10,89 +10,7 @@ interface SkinsConfigFile {
   skins: SkinEntry[]
 }
 
-const PRESET_SKINS: SkinEntry[] = [
-  {
-    id: 'preset_steve',
-    name: 'Steve',
-    textureUrl: 'https://textures.minecraft.net/texture/1aab223847e090a18ab8cf52199b4566c3e721e35dd74fb85ff3934484c8a',
-    model: 'classic',
-    source: 'preset',
-    author: 'Mojang',
-    category: 'Official Default'
-  },
-  {
-    id: 'preset_alex',
-    name: 'Alex',
-    textureUrl: 'https://textures.minecraft.net/texture/6e10825f385c7c29013327d53b519e685f0ef7a8eb8d5856ebbeec8ca2345e5',
-    model: 'slim',
-    source: 'preset',
-    author: 'Mojang',
-    category: 'Official Default'
-  },
-  {
-    id: 'preset_ari',
-    name: 'Ari',
-    textureUrl: 'https://textures.minecraft.net/texture/4ab908359f1d4ebca5342a78489beba5b3648eb129759c9428ea87de6478953f',
-    model: 'slim',
-    source: 'preset',
-    author: 'Mojang',
-    category: 'Official'
-  },
-  {
-    id: 'preset_efe',
-    name: 'Efe',
-    textureUrl: 'https://textures.minecraft.net/texture/bbabeb6e4a2e5d95dcaec29528f8fbf0f05807ea8693c4e36502ff2c974c2081',
-    model: 'slim',
-    source: 'preset',
-    author: 'Mojang',
-    category: 'Official'
-  },
-  {
-    id: 'preset_kai',
-    name: 'Kai',
-    textureUrl: 'https://textures.minecraft.net/texture/831518fdf1ca1029c54625b5a7ceea5582f34842b4776100236a28795777161b',
-    model: 'classic',
-    source: 'preset',
-    author: 'Mojang',
-    category: 'Official'
-  },
-  {
-    id: 'preset_makena',
-    name: 'Makena',
-    textureUrl: 'https://textures.minecraft.net/texture/96c56784d1421689252328103c8b417e4a7ecf385a81e3c837ea9604aa2ae07b',
-    model: 'classic',
-    source: 'preset',
-    author: 'Mojang',
-    category: 'Official'
-  },
-  {
-    id: 'preset_noor',
-    name: 'Noor',
-    textureUrl: 'https://textures.minecraft.net/texture/e5585043d9370df44719266e70bf410886c99c750b322a36b3060c239d2caefb',
-    model: 'slim',
-    source: 'preset',
-    author: 'Mojang',
-    category: 'Official'
-  },
-  {
-    id: 'preset_sunny',
-    name: 'Sunny',
-    textureUrl: 'https://textures.minecraft.net/texture/b5853f938f328a6f33aa3b34b6b1fcb4decf1abef329431835bc456ab3a49281',
-    model: 'classic',
-    source: 'preset',
-    author: 'Mojang',
-    category: 'Official'
-  },
-  {
-    id: 'preset_zuri',
-    name: 'Zuri',
-    textureUrl: 'https://textures.minecraft.net/texture/90f8ce82110c710dfb47702e0df4aaee7ccb5e408ecda44a86f9f52f3e8248c8',
-    model: 'classic',
-    source: 'preset',
-    author: 'Mojang',
-    category: 'Official'
-  }
-]
+import { PRESET_SKINS } from './presetSkins'
 
 function getConfigFile(): string {
   return join(getSkinsDirectory(), 'skins.json')
@@ -262,9 +180,20 @@ export async function searchPlayerSkin(username: string): Promise<PlayerSkinSear
     }
   }
 
-  const skinUrl = texturesObj.textures?.SKIN?.url
-  if (!skinUrl) {
+  const rawSkinUrl = texturesObj.textures?.SKIN?.url?.replace(/^http:/, 'https:')
+  if (!rawSkinUrl) {
     throw new Error(`Player "${profile.name}" has no active skin URL.`)
+  }
+
+  let finalSkinUrl = rawSkinUrl
+  try {
+    const skinRes = await fetch(rawSkinUrl)
+    if (skinRes.ok) {
+      const buf = Buffer.from(await skinRes.arrayBuffer())
+      finalSkinUrl = `data:image/png;base64,${buf.toString('base64')}`
+    }
+  } catch {
+    // Fallback to raw URL
   }
 
   const model: SkinModelType = texturesObj.textures?.SKIN?.metadata?.model === 'slim' ? 'slim' : 'classic'
@@ -272,7 +201,7 @@ export async function searchPlayerSkin(username: string): Promise<PlayerSkinSear
   return {
     username: profile.name,
     uuid: profile.id,
-    skinUrl,
+    skinUrl: finalSkinUrl,
     model
   }
 }
