@@ -51,7 +51,8 @@ const launcherAPI: LauncherAPI = {
   system: {
     getEnvironment: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_GET_ENVIRONMENT),
     openExternalUrl: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_OPEN_EXTERNAL, url),
-    openDirectory: (directoryPath: string) => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_OPEN_DIRECTORY, directoryPath)
+    openDirectory: (directoryPath: string) => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_OPEN_DIRECTORY, directoryPath),
+    selectFile: (options) => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_SELECT_FILE, options)
   },
   mods: {
     search: (params) => ipcRenderer.invoke(IPC_CHANNELS.MODS_SEARCH, params),
@@ -65,6 +66,24 @@ const launcherAPI: LauncherAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.MODS_DELETE_INSTALLED, instanceId, filename),
     setCurseForgeKey: (key) => ipcRenderer.invoke(IPC_CHANNELS.MODS_SET_CURSEFORGE_KEY, key),
     getCurseForgeKey: () => ipcRenderer.invoke(IPC_CHANNELS.MODS_GET_CURSEFORGE_KEY)
+  },
+  modpacks: {
+    selectFile: () => ipcRenderer.invoke(IPC_CHANNELS.MODPACKS_SELECT_FILE),
+    inspect: (filePath) => ipcRenderer.invoke(IPC_CHANNELS.MODPACKS_INSPECT, filePath),
+    import: (filePath, customName) => ipcRenderer.invoke(IPC_CHANNELS.MODPACKS_IMPORT, filePath, customName),
+    installRemote: (payload) => ipcRenderer.invoke(IPC_CHANNELS.MODPACKS_INSTALL_REMOTE, payload),
+    onProgress: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: any) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.MODPACKS_PROGRESS_EVENT, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.MODPACKS_PROGRESS_EVENT, handler)
+      }
+    }
+  },
+  screenshots: {
+    list: (instanceId) => ipcRenderer.invoke(IPC_CHANNELS.SCREENSHOTS_LIST, instanceId),
+    delete: (instanceId, filename) => ipcRenderer.invoke(IPC_CHANNELS.SCREENSHOTS_DELETE, instanceId, filename),
+    openFolder: (instanceId) => ipcRenderer.invoke(IPC_CHANNELS.SCREENSHOTS_OPEN_FOLDER, instanceId)
   },
   java: {
     getRuntimes: () => ipcRenderer.invoke(IPC_CHANNELS.JAVA_GET_RUNTIMES),

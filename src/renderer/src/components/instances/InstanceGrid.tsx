@@ -10,6 +10,7 @@ interface InstanceGridProps {
   onOpenFolder: (instanceId: string) => void
   onDelete: (instanceId: string) => void
   onCreateClick: () => void
+  onManage?: (instance: InstanceConfiguration) => void
 }
 
 export const InstanceGrid: React.FC<InstanceGridProps> = ({
@@ -17,7 +18,8 @@ export const InstanceGrid: React.FC<InstanceGridProps> = ({
   onPlay,
   onOpenFolder,
   onDelete,
-  onCreateClick
+  onCreateClick,
+  onManage
 }) => {
   if (instances.length === 0) {
     return (
@@ -45,6 +47,7 @@ export const InstanceGrid: React.FC<InstanceGridProps> = ({
           onPlay={onPlay}
           onOpenFolder={onOpenFolder}
           onDelete={onDelete}
+          onManage={onManage}
         />
       ))}
     </div>

@@ -28,6 +28,7 @@ export const IPC_CHANNELS = {
   SYSTEM_GET_ENVIRONMENT: 'system:get-environment',
   SYSTEM_OPEN_EXTERNAL: 'system:open-external',
   SYSTEM_OPEN_DIRECTORY: 'system:open-directory',
+  SYSTEM_SELECT_FILE: 'system:select-file',
 
   MODS_SEARCH: 'mods:search',
   MODS_GET_VERSIONS: 'mods:get-versions',
@@ -37,6 +38,16 @@ export const IPC_CHANNELS = {
   MODS_DELETE_INSTALLED: 'mods:delete-installed',
   MODS_SET_CURSEFORGE_KEY: 'mods:set-curseforge-key',
   MODS_GET_CURSEFORGE_KEY: 'mods:get-curseforge-key',
+
+  MODPACKS_SELECT_FILE: 'modpacks:select-file',
+  MODPACKS_INSPECT: 'modpacks:inspect',
+  MODPACKS_IMPORT: 'modpacks:import',
+  MODPACKS_INSTALL_REMOTE: 'modpacks:install-remote',
+  MODPACKS_PROGRESS_EVENT: 'modpacks:progress',
+
+  SCREENSHOTS_LIST: 'screenshots:list',
+  SCREENSHOTS_DELETE: 'screenshots:delete',
+  SCREENSHOTS_OPEN_FOLDER: 'screenshots:open-folder',
 
   JAVA_GET_RUNTIMES: 'java:get-runtimes',
   JAVA_DOWNLOAD_RUNTIME: 'java:download-runtime'

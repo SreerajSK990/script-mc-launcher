@@ -2,6 +2,20 @@ import type { InstanceConfiguration, CreateInstancePayload, UpdateInstancePayloa
 import type { SystemEnvironment } from './system'
 import type { AuthState, StoredAccount } from './auth'
 import type { LaunchProgressEvent, LaunchLogEvent } from './launch'
+import type {
+  ModSearchResult,
+  ModVersionFile,
+  ModSearchParams,
+  InstallModPayload,
+  InstalledModRecord,
+  ModSource
+} from './mods'
+import type {
+  ModpackManifestInfo,
+  ModpackImportProgressEvent,
+  InstallRemoteModpackPayload
+} from './modpack'
+import type { ScreenshotEntry } from './screenshot'
 
 export interface WindowControlActions {
   minimize: () => Promise<void>
@@ -43,16 +57,8 @@ export interface SystemActions {
   getEnvironment: () => Promise<SystemEnvironment>
   openExternalUrl: (url: string) => Promise<void>
   openDirectory: (directoryPath: string) => Promise<void>
+  selectFile: (options?: { title?: string; filters?: Array<{ name: string; extensions: string[] }> }) => Promise<string | null>
 }
-
-import type {
-  ModSearchResult,
-  ModVersionFile,
-  ModSearchParams,
-  InstallModPayload,
-  InstalledModRecord,
-  ModSource
-} from './mods'
 
 export interface ModActions {
   search: (params: ModSearchParams) => Promise<ModSearchResult[]>
@@ -68,6 +74,20 @@ export interface ModActions {
   deleteInstalled: (instanceId: string, filename: string) => Promise<boolean>
   setCurseForgeKey: (key: string | null) => Promise<boolean>
   getCurseForgeKey: () => Promise<string | null>
+}
+
+export interface ModpackActions {
+  selectFile: () => Promise<string | null>
+  inspect: (filePath: string) => Promise<ModpackManifestInfo>
+  import: (filePath: string, customName?: string) => Promise<InstanceConfiguration>
+  installRemote: (payload: InstallRemoteModpackPayload) => Promise<InstanceConfiguration>
+  onProgress: (callback: (event: ModpackImportProgressEvent) => void) => () => void
+}
+
+export interface ScreenshotActions {
+  list: (instanceId: string) => Promise<ScreenshotEntry[]>
+  delete: (instanceId: string, filename: string) => Promise<boolean>
+  openFolder: (instanceId: string) => Promise<void>
 }
 
 export interface JavaActions {
@@ -91,5 +111,7 @@ export interface LauncherAPI {
   meta: MetaActions
   system: SystemActions
   mods: ModActions
+  modpacks: ModpackActions
+  screenshots: ScreenshotActions
   java: JavaActions
 }

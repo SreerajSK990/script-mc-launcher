@@ -5,6 +5,8 @@ import { registerAuthIpcHandlers } from '@main/ipc/auth'
 import { registerLaunchIpcHandlers } from '@main/ipc/launch'
 import { registerMetaIpcHandlers } from '@main/ipc/meta'
 import { registerModsIpcHandlers } from '@main/ipc/mods'
+import { registerModpackIpcHandlers } from '@main/ipc/modpacks'
+import { registerScreenshotIpcHandlers } from '@main/ipc/screenshots'
 import { registerJavaIpcHandlers } from '@main/ipc/java'
 
 export function registerAllIpcHandlers(mainWindow: BrowserWindow): void {
@@ -14,5 +16,7 @@ export function registerAllIpcHandlers(mainWindow: BrowserWindow): void {
   registerLaunchIpcHandlers(mainWindow)
   registerMetaIpcHandlers()
   registerModsIpcHandlers()
+  registerModpackIpcHandlers(mainWindow)
+  registerScreenshotIpcHandlers()
   registerJavaIpcHandlers()
 }

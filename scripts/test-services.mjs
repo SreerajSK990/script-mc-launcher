@@ -288,10 +288,127 @@ async function runTests() {
   }
   console.log('Verified mod deletion from instance.')
 
-  await deleteInstanceById(targetTestInstance.id)
-  console.log('Deleted temporary test instance.')
+  console.log('--- Modpack & Instance Details & Screenshot Verifications ---')
 
-  console.log('--- All Phase 1, Phase 2, Phase 3, Phase 4, Phase 5, Phase 6 & Phase 7 Verifications Passed! ---')
+  const { parseModpackArchive, importModpackArchive } = await import('../src/main/core/modpacks/importer.ts')
+  const { listInstanceScreenshots, deleteInstanceScreenshot, getScreenshotsDirectory } = await import('../src/main/core/minecraft/screenshots.ts')
+  const { updateExistingInstance } = await import('../src/main/services/instances.ts')
+  const { default: AdmZip } = await import('adm-zip')
+  const { promises: fs } = await import('node:fs')
+
+  // 1. Test Modrinth .mrpack import
+  const mrpackZip = new AdmZip()
+  mrpackZip.addFile(
+    'modrinth.index.json',
+    Buffer.from(
+      JSON.stringify({
+        formatVersion: 1,
+        game: 'minecraft',
+        versionId: '1.0.0',
+        name: 'Speedy Craft',
+        summary: 'A fast lightweight pack',
+        dependencies: {
+          minecraft: '1.20.1',
+          'fabric-loader': '0.15.11'
+        },
+        files: []
+      })
+    )
+  )
+  mrpackZip.addFile('overrides/config/speedy.txt', Buffer.from('fast=true'))
+
+  const mrpackPath = join(testSandboxDir, 'speedy.mrpack')
+  mrpackZip.writeZip(mrpackPath)
+
+  const mrpackInfo = await parseModpackArchive(mrpackPath)
+  console.log('Parsed Modrinth Modpack:', mrpackInfo.name, `(${mrpackInfo.format})`)
+  if (mrpackInfo.loaderType !== 'fabric' || mrpackInfo.minecraftVersion !== '1.20.1') {
+    throw new Error('Modrinth modpack metadata mismatch!')
+  }
+
+  const importedMrpackInstance = await importModpackArchive(mrpackPath)
+  console.log('Imported Modrinth Instance:', importedMrpackInstance.name, `(${importedMrpackInstance.id})`)
+
+  const configContent = await fs.readFile(
+    join(testSandboxDir, 'instances', importedMrpackInstance.id, 'minecraft', 'config', 'speedy.txt'),
+    'utf-8'
+  )
+  if (configContent !== 'fast=true') {
+    throw new Error('Modpack overrides not properly extracted!')
+  }
+  console.log('Verified Modrinth overrides extraction.')
+
+  // 2. Test CurseForge .zip import
+  const curseZip = new AdmZip()
+  curseZip.addFile(
+    'manifest.json',
+    Buffer.from(
+      JSON.stringify({
+        minecraft: {
+          version: '1.20.1',
+          modLoaders: [{ id: 'neoforge-20.4.80', primary: true }]
+        },
+        manifestType: 'minecraftModpack',
+        manifestVersion: 1,
+        name: 'NeoForge Pack',
+        author: 'Tester',
+        files: [],
+        overrides: 'overrides'
+      })
+    )
+  )
+  curseZip.addFile('overrides/defaultoptions.txt', Buffer.from('fov:90'))
+  const cursePath = join(testSandboxDir, 'neoforge-pack.zip')
+  curseZip.writeZip(cursePath)
+
+  const curseInfo = await parseModpackArchive(cursePath)
+  console.log('Parsed CurseForge Modpack:', curseInfo.name, `(${curseInfo.format})`)
+  if (curseInfo.loaderType !== 'neoforge' || curseInfo.loaderVersion !== '20.4.80') {
+    throw new Error('CurseForge modpack metadata mismatch!')
+  }
+
+  const importedCurseInstance = await importModpackArchive(cursePath)
+  console.log('Imported CurseForge Instance:', importedCurseInstance.name)
+
+  // 3. Test Screenshots Service
+  const screenshotsDir = getScreenshotsDirectory(importedMrpackInstance.id)
+  await fs.mkdir(screenshotsDir, { recursive: true })
+  const dummyPngPath = join(screenshotsDir, '2026-09-20_12.00.00.png')
+  await fs.writeFile(dummyPngPath, Buffer.from('fake-png-data'))
+
+  const screenshotsList = await listInstanceScreenshots(importedMrpackInstance.id)
+  console.log('Found screenshots:', screenshotsList.length)
+  if (screenshotsList.length !== 1 || !screenshotsList[0].dataUrl.startsWith('data:image/png;base64,')) {
+    throw new Error('Failed to find or parse screenshot data URL!')
+  }
+
+  const deletedScreenshot = await deleteInstanceScreenshot(importedMrpackInstance.id, '2026-09-20_12.00.00.png')
+  if (!deletedScreenshot) {
+    throw new Error('Failed to delete screenshot!')
+  }
+  const emptyScreenshots = await listInstanceScreenshots(importedMrpackInstance.id)
+  if (emptyScreenshots.length !== 0) {
+    throw new Error('Expected 0 screenshots after deletion!')
+  }
+  console.log('Verified screenshot deletion.')
+
+  // 4. Test Instance Details & Settings Update
+  const updatedInstance = await updateExistingInstance({
+    id: importedMrpackInstance.id,
+    ramAllocationMegabytes: 8192,
+    jvmArguments: ['-XX:+UseG1GC', '-XX:MaxGCPauseMillis=200']
+  })
+  if (updatedInstance.ramAllocationMegabytes !== 8192 || updatedInstance.jvmArguments.length !== 2) {
+    throw new Error('Failed to update instance configuration!')
+  }
+  console.log('Verified instance RAM allocation and custom JVM arguments update.')
+
+  await deleteInstanceById(importedMrpackInstance.id)
+  await deleteInstanceById(importedCurseInstance.id)
+  await deleteInstanceById(targetTestInstance.id)
+  console.log('Deleted temporary test instances.')
+
+  console.log('--- All Modpack, Screenshot, Instance Settings & Mod Verifications Passed! ---')
 }
 
 runTests()

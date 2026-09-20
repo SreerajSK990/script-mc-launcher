@@ -7,18 +7,23 @@ import { TitleBar } from '@renderer/components/layout/TitleBar'
 import { Sidebar, type ActivePageTab } from '@renderer/components/layout/Sidebar'
 import { DashboardPage } from '@renderer/pages/DashboardPage'
 import { InstancesPage } from '@renderer/pages/InstancesPage'
+import { InstanceDetailPage } from '@renderer/pages/InstanceDetailPage'
 import { ModBrowserPage } from '@renderer/pages/ModBrowserPage'
 import { LogsPage } from '@renderer/pages/LogsPage'
 import { SettingsPage } from '@renderer/pages/SettingsPage'
 import { CreateInstanceModal } from '@renderer/components/instances/CreateInstanceModal'
+import { ImportModpackModal } from '@renderer/components/instances/ImportModpackModal'
 import { AccountModal } from '@renderer/components/auth/AccountModal'
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActivePageTab>('dashboard')
   const [instances, setInstances] = useState<InstanceConfiguration[]>([])
+  const [selectedDetailInstance, setSelectedDetailInstance] = useState<InstanceConfiguration | null>(null)
+  const [modBrowserTargetInstanceId, setModBrowserTargetInstanceId] = useState<string | undefined>(undefined)
   const [systemEnv, setSystemEnv] = useState<SystemEnvironment | null>(null)
   const [authState, setAuthState] = useState<AuthState>({ activeAccount: null, accounts: [] })
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [isImportModpackModalOpen, setIsImportModpackModalOpen] = useState(false)
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false)
   const [activeNotification, setActiveNotification] = useState<string | null>(null)
 
@@ -193,7 +198,12 @@ export const App: React.FC = () => {
       <div className="flex-1 flex overflow-hidden">
         <Sidebar
           activeTab={activeTab}
-          onSelectTab={setActiveTab}
+          onSelectTab={(tab) => {
+            if (tab === 'instances') {
+              setSelectedDetailInstance(null)
+            }
+            setActiveTab(tab)
+          }}
           onOpenCreateModal={() => setIsCreateModalOpen(true)}
           onOpenAccountModal={() => setIsAccountModalOpen(true)}
           activeAccount={authState.activeAccount}
@@ -227,13 +237,32 @@ export const App: React.FC = () => {
             )}
 
             {activeTab === 'instances' && (
-              <InstancesPage
-                instances={instances}
-                onPlay={handlePlayInstance}
-                onOpenFolder={handleOpenFolder}
-                onDelete={handleDeleteInstance}
-                onCreateClick={() => setIsCreateModalOpen(true)}
-              />
+              selectedDetailInstance ? (
+                <InstanceDetailPage
+                  instance={selectedDetailInstance}
+                  onBack={() => setSelectedDetailInstance(null)}
+                  onLaunch={handlePlayInstance}
+                  onOpenFolder={handleOpenFolder}
+                  onBrowseMods={(inst) => {
+                    setModBrowserTargetInstanceId(inst.id)
+                    setActiveTab('mods')
+                  }}
+                  onInstanceUpdated={(updated) => {
+                    setSelectedDetailInstance(updated)
+                    setInstances((prev) => prev.map((i) => (i.id === updated.id ? updated : i)))
+                  }}
+                />
+              ) : (
+                <InstancesPage
+                  instances={instances}
+                  onPlay={handlePlayInstance}
+                  onOpenFolder={handleOpenFolder}
+                  onDelete={handleDeleteInstance}
+                  onCreateClick={() => setIsCreateModalOpen(true)}
+                  onImportClick={() => setIsImportModpackModalOpen(true)}
+                  onManage={(inst) => setSelectedDetailInstance(inst)}
+                />
+              )
             )}
 
             {activeTab === 'mods' && (
@@ -241,6 +270,12 @@ export const App: React.FC = () => {
                 instances={instances}
                 onOpenFolder={handleOpenFolder}
                 onNotification={showNotification}
+                initialInstanceId={modBrowserTargetInstanceId}
+                onInstanceCreated={(newInstance) => {
+                  fetchInstances()
+                  setSelectedDetailInstance(newInstance)
+                  setActiveTab('instances')
+                }}
               />
             )}
 
@@ -264,6 +299,17 @@ export const App: React.FC = () => {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onCreate={handleCreateInstance}
+      />
+
+      <ImportModpackModal
+        isOpen={isImportModpackModalOpen}
+        onClose={() => setIsImportModpackModalOpen(false)}
+        onSuccess={(newInstance) => {
+          fetchInstances()
+          showNotification(`Successfully imported ${newInstance.name}!`)
+          setSelectedDetailInstance(newInstance)
+          setActiveTab('instances')
+        }}
       />
 
       <AccountModal

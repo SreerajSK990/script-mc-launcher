@@ -1,5 +1,5 @@
 import React from 'react'
-import { Play, FolderOpen, Trash2, Cpu, Clock } from 'lucide-react'
+import { Play, FolderOpen, Trash2, Cpu, Clock, SlidersHorizontal } from 'lucide-react'
 import type { InstanceConfiguration, ModLoaderType } from '@shared/types/instance'
 import { Button } from '@renderer/components/common/Button'
 
@@ -8,6 +8,7 @@ interface InstanceCardProps {
   onPlay: (instance: InstanceConfiguration) => void
   onOpenFolder: (instanceId: string) => void
   onDelete: (instanceId: string) => void
+  onManage?: (instance: InstanceConfiguration) => void
 }
 
 function getLoaderBadgeColor(loader: ModLoaderType): string {
@@ -41,16 +42,20 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
   instance,
   onPlay,
   onOpenFolder,
-  onDelete
+  onDelete,
+  onManage
 }) => {
   const ramGigabytes = (instance.ramAllocationMegabytes / 1024).toFixed(1)
 
   return (
     <div className="group relative bg-background-card hover:bg-background-surface/80 border border-border-subtle hover:border-border-strong rounded-2xl p-5 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-xl hover:shadow-black/20">
-      <div>
+      <div
+        className={onManage ? 'cursor-pointer' : undefined}
+        onClick={() => onManage?.(instance)}
+      >
         <div className="flex items-start justify-between gap-3 mb-4">
           <div className="flex-1 min-w-0">
-            <h3 className="text-base font-semibold text-slate-100 truncate group-hover:text-white transition-colors">
+            <h3 className="text-base font-semibold text-slate-100 truncate group-hover:text-primary transition-colors">
               {instance.name}
             </h3>
             <p className="text-xs text-slate-400 mt-0.5">
@@ -90,6 +95,17 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
         >
           Launch
         </Button>
+
+        {onManage && (
+          <button
+            onClick={() => onManage(instance)}
+            className="p-2 rounded-lg bg-background-surface hover:bg-slate-700 text-slate-400 hover:text-slate-100 border border-border-subtle transition-colors"
+            title="Manage Instance & Settings"
+            aria-label="Manage Instance & Settings"
+          >
+            <SlidersHorizontal size={15} />
+          </button>
+        )}
 
         <button
           onClick={() => onOpenFolder(instance.id)}

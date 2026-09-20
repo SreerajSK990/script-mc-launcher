@@ -4,6 +4,7 @@ import type { ModSearchResult, ModVersionFile, ModSearchParams } from '@shared/t
 const CURSEFORGE_API_BASE = 'https://api.curseforge.com/v1'
 const MINECRAFT_GAME_ID = 432
 const MODS_CLASS_ID = 6
+const MODPACKS_CLASS_ID = 4471
 
 let customCurseForgeApiKey: string | null = null
 
@@ -68,7 +69,7 @@ interface CurseForgeMod {
   }[]
 }
 
-interface CurseForgeFile {
+export interface CurseForgeFile {
   id: number
   gameId: number
   modId: number
@@ -82,6 +83,39 @@ interface CurseForgeFile {
   hashes: { value: string; algo: number }[]
 }
 
+export async function batchGetCurseForgeFiles(fileIds: number[]): Promise<CurseForgeFile[]> {
+  const apiKey = getCurseForgeApiKey()
+  if (!apiKey || fileIds.length === 0) {
+    return []
+  }
+
+  const results: CurseForgeFile[] = []
+  for (let i = 0; i < fileIds.length; i += 50) {
+    const chunk = fileIds.slice(i, i + 50)
+    try {
+      const response = await fetch(`${CURSEFORGE_API_BASE}/mods/files`, {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ fileIds: chunk })
+      })
+
+      if (response.ok) {
+        const json = (await response.json()) as { data: CurseForgeFile[] }
+        if (json.data) {
+          results.push(...json.data)
+        }
+      }
+    } catch {
+      // Ignore and continue
+    }
+  }
+
+  return results
+}
+
 export async function searchCurseForge(params: ModSearchParams): Promise<ModSearchResult[]> {
   const apiKey = getCurseForgeApiKey()
   if (!apiKey) {
@@ -90,7 +124,8 @@ export async function searchCurseForge(params: ModSearchParams): Promise<ModSear
 
   const queryParams = new URLSearchParams()
   queryParams.set('gameId', String(MINECRAFT_GAME_ID))
-  queryParams.set('classId', String(MODS_CLASS_ID))
+  const classId = params.projectType === 'modpack' ? MODPACKS_CLASS_ID : MODS_CLASS_ID
+  queryParams.set('classId', String(classId))
 
   if (params.query?.trim()) {
     queryParams.set('searchFilter', params.query.trim())
@@ -143,7 +178,8 @@ export async function searchCurseForge(params: ModSearchParams): Promise<ModSear
         downloads: mod.downloadCount,
         source: 'curseforge',
         categories: mod.categories.map((c) => c.name),
-        loaders: Array.from(loaders)
+        loaders: Array.from(loaders),
+        projectType: params.projectType === 'modpack' ? 'modpack' : 'mod'
       }
     })
   } catch {

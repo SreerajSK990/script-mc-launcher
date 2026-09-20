@@ -9,6 +9,7 @@ export interface DownloadTask {
   url: string
   destination: string
   sha1?: string
+  sha512?: string
   size?: number
 }
 
@@ -118,7 +119,11 @@ export async function downloadBatch(
       const task = uniqueTasks[currentTaskIndex]
       if (!task) break
 
-      await downloadFileWithSha1(task.url, task.destination, task.sha1)
+      if (task.sha512) {
+        await downloadFileWithHash(task.url, task.destination, task.sha512, 'sha512')
+      } else {
+        await downloadFileWithSha1(task.url, task.destination, task.sha1)
+      }
       completed++
       if (onProgress) {
         onProgress(completed, total, task.url)

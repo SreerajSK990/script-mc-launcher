@@ -22,6 +22,20 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
   - Automatically filters mods to match your selected instance's Minecraft version and mod loader.
   - One-click mod installation directly into your instance's `mods/` folder with SHA-512 hash verification.
   - In-app mod manager to toggle mods on/off (`.jar.disabled`) or delete them without digging through File Explorer.
+- **Modpack Support (Local Imports & Direct Online Downloads):**
+  - **Local Archive Import:** One-click import for Modrinth (`.mrpack`) and CurseForge (`.zip`) archives. Automatically extracts `overrides/` (configs, options, resource packs) directly into your instance and batch-downloads all required mods with hash verification.
+  - **Online Modpack Browser:** Search and browse thousands of curated modpacks on Modrinth and CurseForge directly from the Mods page. One-click "Install Modpack" creates a brand new instance and installs everything automatically.
+- **Dedicated Instance Detail & Settings View:**
+  - Full-window management page for each instance accessible directly from instance cards.
+  - **RAM Memory Tuning:** Dynamic memory slider with quick preset pills (2 GB, 4 GB, 6 GB, 8 GB, 12 GB, 16 GB).
+  - **JVM Arguments Editor:** Quick-apply presets for Aikar's high-performance G1GC flags, ultra-low-latency Shenandoah GC, or custom arguments.
+  - **Custom Java Override:** Browse and select any external `java.exe` binary with file picker, or let the launcher auto-manage it.
+  - **Embedded Mod Manager:** Direct mod list table with search filtering, on/off toggles (`.jar.disabled`), and quick deletion.
+- **In-App Screenshots Gallery:**
+  - Visual gallery scanning each instance's `screenshots/` directory automatically.
+  - High-resolution Lightbox modal viewer for full-screen inspection.
+  - One-click copy image to system clipboard (paste directly into Discord, Slack, etc.).
+  - Screenshot deletion and "Open Screenshots Folder" shortcuts.
 - **Microsoft OAuth & Local Dev Profiles:**
   - Safe Microsoft Xbox Live login with tokens encrypted on disk via Electron's Windows DPAPI `safeStorage`.
   - Offline local player accounts for testing and dev environments.
@@ -52,7 +66,8 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 │   │   │   ├── java/            # Mojang JRE API client and auto-downloader
 │   │   │   ├── loaders/         # Fabric, Quilt, Forge, NeoForge resolvers
 │   │   │   ├── meta/            # Prism Meta client with disk cache & TTL
-│   │   │   ├── minecraft/       # Piston manifest, assets, libraries, args, process spawner
+│   │   │   ├── minecraft/       # Piston manifest, assets, libraries, args, process spawner, screenshots
+│   │   │   ├── modpacks/        # Modrinth (.mrpack) and CurseForge (.zip) archive & online importer
 │   │   │   └── mods/            # Modrinth client, CurseForge client, instance mod manager
 │   │   ├── services/            # Instances, auth state, launch engine, paths, system specs
 │   │   ├── ipc/                 # Typed IPC handlers (bridge to renderer)
@@ -60,7 +75,7 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 │   ├── renderer/                # Electron Renderer Process (React UI)
 │   │   ├── src/
 │   │   │   ├── components/      # TitleBar, Sidebar, Modals, Cards, Buttons
-│   │   │   ├── pages/           # Dashboard, Instances, ModBrowser, Logs, Settings
+│   │   │   ├── pages/           # Dashboard, Instances, InstanceDetail, ModBrowser, Logs, Settings
 │   │   │   └── App.tsx          # Root routing and state management
 │   ├── preload/                 # Secure contextBridge API exposing window.launcherAPI
 │   └── shared/                  # Shared types (instances, auth, launch, mods, ipc)

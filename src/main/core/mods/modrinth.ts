@@ -51,7 +51,8 @@ interface ModrinthVersionResponse {
 }
 
 export async function searchModrinth(params: ModSearchParams): Promise<ModSearchResult[]> {
-  const facets: string[][] = [['project_type:mod']]
+  const projectType = params.projectType === 'modpack' ? 'modpack' : 'mod'
+  const facets: string[][] = [[`project_type:${projectType}`]]
 
   if (params.loader) {
     facets.push([`categories:${params.loader.toLowerCase()}`])
@@ -112,6 +113,7 @@ export async function searchModrinth(params: ModSearchParams): Promise<ModSearch
       source: 'modrinth',
       categories: nonLoaderCategories,
       loaders: matchedLoaders,
+      projectType,
       latestVersion: hit.latest_version,
       clientSide: hit.client_side,
       serverSide: hit.server_side

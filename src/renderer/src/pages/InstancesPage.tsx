@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Search, Plus, Filter } from 'lucide-react'
+import { Search, Plus, Filter, Upload } from 'lucide-react'
 import type { InstanceConfiguration, ModLoaderType } from '@shared/types/instance'
 import { Button } from '@renderer/components/common/Button'
 import { InstanceGrid } from '@renderer/components/instances/InstanceGrid'
@@ -10,6 +10,8 @@ interface InstancesPageProps {
   onOpenFolder: (instanceId: string) => void
   onDelete: (instanceId: string) => void
   onCreateClick: () => void
+  onImportClick?: () => void
+  onManage?: (instance: InstanceConfiguration) => void
 }
 
 type LoaderFilter = 'all' | ModLoaderType
@@ -28,7 +30,9 @@ export const InstancesPage: React.FC<InstancesPageProps> = ({
   onPlay,
   onOpenFolder,
   onDelete,
-  onCreateClick
+  onCreateClick,
+  onImportClick,
+  onManage
 }) => {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedLoader, setSelectedLoader] = useState<LoaderFilter>('all')
@@ -54,9 +58,16 @@ export const InstancesPage: React.FC<InstancesPageProps> = ({
           </p>
         </div>
 
-        <Button variant="primary" icon={Plus} onClick={onCreateClick}>
-          New Instance
-        </Button>
+        <div className="flex items-center gap-2.5">
+          {onImportClick && (
+            <Button variant="secondary" icon={Upload} onClick={onImportClick}>
+              Import Modpack
+            </Button>
+          )}
+          <Button variant="primary" icon={Plus} onClick={onCreateClick}>
+            New Instance
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-background-card border border-border-subtle p-3 rounded-2xl">
@@ -101,6 +112,7 @@ export const InstancesPage: React.FC<InstancesPageProps> = ({
         onOpenFolder={onOpenFolder}
         onDelete={onDelete}
         onCreateClick={onCreateClick}
+        onManage={onManage}
       />
     </div>
   )

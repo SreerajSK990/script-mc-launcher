@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, shell } from 'electron'
+import { ipcMain, BrowserWindow, shell, dialog } from 'electron'
 import { IPC_CHANNELS } from '@shared/constants/channels'
 import { getSystemEnvironment } from '@main/services/system'
 
@@ -43,4 +43,25 @@ export function registerSystemIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(IPC_CHANNELS.SYSTEM_OPEN_DIRECTORY, async (_event, directoryPath: string) => {
     await shell.openPath(directoryPath)
   })
+
+  ipcMain.handle(
+    IPC_CHANNELS.SYSTEM_SELECT_FILE,
+    async (
+      _event,
+      options?: { title?: string; filters?: Array<{ name: string; extensions: string[] }> }
+    ) => {
+      const result = await dialog.showOpenDialog(mainWindow, {
+        title: options?.title || 'Select File',
+        properties: ['openFile'],
+        filters: options?.filters
+      })
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return null
+      }
+
+      return result.filePaths[0]
+    }
+  )
 }
+
