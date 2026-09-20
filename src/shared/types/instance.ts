@@ -13,6 +13,7 @@ export interface InstanceConfiguration {
   icon?: string
   bannerPath?: string
   group?: string | null
+  isFavorite?: boolean
   createdAt: string
   lastPlayedAt: string | null
   totalPlayTimeMinutes: number
@@ -28,6 +29,7 @@ export interface CreateInstancePayload {
   jvmArguments?: string[]
   icon?: string
   group?: string | null
+  isFavorite?: boolean
 }
 
 export interface UpdateInstancePayload {
@@ -41,7 +43,9 @@ export interface UpdateInstancePayload {
   ramAllocationMegabytes?: number
   icon?: string
   group?: string | null
+  isFavorite?: boolean
   lastPlayedAt?: string | null
   totalPlayTimeMinutes?: number
 }
+
 

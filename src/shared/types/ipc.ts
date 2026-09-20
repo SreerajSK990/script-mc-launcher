@@ -24,7 +24,7 @@ import type {
 } from './externalLauncher'
 import type { CustomFontEntry } from './fonts'
 import type { QuickPlayTarget, ServerPingStatus, QuickPlayLaunchOptions } from './servers'
-import type { SkinEntry, SkinModelType, PlayerSkinSearchResult } from './skins'
+import type { SkinEntry, SkinModelType, PlayerSkinSearchResult, ApplySkinResult } from './skins'
 
 export interface WindowControlActions {
   minimize: () => Promise<void>
@@ -45,7 +45,9 @@ export interface InstanceActions {
   disbandGroup: (groupName: string) => Promise<void>
   deleteGroup: (groupName: string) => Promise<void>
   saveCustomIcon: (instanceId: string, dataUrl: string) => Promise<string>
+  toggleFavorite: (instanceId: string) => Promise<InstanceConfiguration>
 }
+
 
 
 export interface AuthActions {
@@ -158,7 +160,7 @@ export interface ServerActions {
 export interface SkinActions {
   list: () => Promise<{ activeSkinId: string | null; skins: SkinEntry[] }>
   getActive: () => Promise<string | null>
-  apply: (skinId: string) => Promise<boolean>
+  apply: (skinId: string) => Promise<ApplySkinResult>
   save: (params: {
     name: string
     textureData: string

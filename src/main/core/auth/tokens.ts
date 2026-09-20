@@ -209,3 +209,30 @@ export async function checkGameOwnership(mcAccessToken: string): Promise<boolean
     return false
   }
 }
+
+export async function uploadSkinToMojang(
+  mcAccessToken: string,
+  imageBuffer: Buffer,
+  variant: 'classic' | 'slim'
+): Promise<boolean> {
+  const formData = new FormData()
+  formData.append('variant', variant === 'slim' ? 'slim' : 'classic')
+  formData.append('file', new Blob([new Uint8Array(imageBuffer)], { type: 'image/png' }), 'skin.png')
+
+
+  const response = await fetch('https://api.minecraftservices.com/minecraft/profile/skins', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${mcAccessToken}`
+    },
+    body: formData
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '')
+    throw new Error(`Failed to upload skin to Mojang: ${response.status} - ${errorText}`)
+  }
+
+  return true
+}
+

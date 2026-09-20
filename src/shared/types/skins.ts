@@ -3,7 +3,7 @@ export type SkinModelType = 'classic' | 'slim'
 export interface SkinEntry {
   id: string
   name: string
-  textureUrl: string // base64 dataUrl or remote URL
+  textureUrl: string
   model: SkinModelType
   source: 'preset' | 'custom' | 'player'
   author?: string
@@ -17,3 +17,10 @@ export interface PlayerSkinSearchResult {
   skinUrl: string
   model: SkinModelType
 }
+
+export interface ApplySkinResult {
+  success: boolean
+  uploadedToMojang: boolean
+  message: string
+}
+

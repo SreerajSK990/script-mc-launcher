@@ -46,7 +46,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       const targets = await window.launcherAPI.servers.listAll()
       setQuickPlayTargets(targets)
 
-      // Ping servers in background
       const servers = targets.filter(
         (t): t is import('@shared/types/servers').MinecraftServerEntry => t.type === 'server'
       )
@@ -119,9 +118,23 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     }
   }
 
+  const handleToggleFavorite = async (instanceId: string) => {
+    try {
+      if (window.launcherAPI?.instances?.toggleFavorite) {
+        await window.launcherAPI.instances.toggleFavorite(instanceId)
+        onRefreshInstances?.()
+      }
+    } catch (err) {
+      console.error('Failed to toggle favorite:', err)
+    }
+  }
+
+  const handleIconUpdated = async () => {
+    onRefreshInstances?.()
+  }
+
   return (
     <div className="flex flex-col gap-6 w-full">
-      {/* 1. "Jump In" Container is First at the Top! */}
       <div className="bg-background-card border border-border-subtle rounded-3xl p-5 md:p-6 shadow-xl flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <div>
@@ -155,7 +168,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             {quickPlayTargets.map((target) => {
               if (target.type === 'server') {
                 const ping = pingStatuses[target.id]
-                // Fallback to classic Minecraft icon if server has no icon
                 const iconSrc = ping?.favicon || target.icon || DEFAULT_MINECRAFT_ICON.dataUrl
 
                 return (
@@ -164,7 +176,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                     className="bg-background-darkest/70 border border-border-subtle hover:border-border-strong rounded-2xl p-3.5 flex flex-col justify-between gap-3 shadow-md transition-all group"
                   >
                     <div className="flex items-start gap-3">
-                      {/* Server Icon with Minecraft Grass fallback */}
                       <div className="w-12 h-12 rounded-xl bg-background-card border border-white/10 shrink-0 overflow-hidden flex items-center justify-center p-1">
                         <img
                           src={iconSrc}
@@ -172,7 +183,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                           className="w-full h-full object-contain"
                           style={{ imageRendering: 'pixelated' }}
                           onError={(e) => {
-                            // Fallback to Minecraft default icon on image load error
                             ;(e.target as HTMLImageElement).src = DEFAULT_MINECRAFT_ICON.dataUrl
                           }}
                         />
@@ -239,14 +249,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 )
               }
 
-              // Singleplayer World Card
               return (
                 <div
                   key={target.id}
                   className="bg-background-darkest/70 border border-border-subtle hover:border-border-strong rounded-2xl p-3.5 flex flex-col justify-between gap-3 shadow-md transition-all group"
                 >
                   <div className="flex items-start gap-3">
-                    {/* World Icon with Minecraft Grass fallback */}
                     <div className="w-12 h-12 rounded-xl bg-background-card border border-white/10 shrink-0 overflow-hidden flex items-center justify-center">
                       <img
                         src={target.icon || DEFAULT_MINECRAFT_ICON.dataUrl}
@@ -293,7 +301,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         )}
       </div>
 
-      {/* 2. All Instances Showcase (Modrinth Layout + Grouping) */}
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <div>
@@ -316,6 +323,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           onRenameGroup={handleRenameGroup}
           onDisbandGroup={handleDisbandGroup}
           onDeleteGroup={handleDeleteGroup}
+          onToggleFavorite={handleToggleFavorite}
+          onIconUpdated={handleIconUpdated}
         />
       </div>
     </div>

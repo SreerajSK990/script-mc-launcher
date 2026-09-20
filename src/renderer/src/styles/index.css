@@ -11,6 +11,16 @@
   }
 }
 
+html,
+body,
+button,
+input,
+select,
+textarea,
+[role="dialog"] {
+  font-family: var(--font-sans, "Plus Jakarta Sans"), system-ui, -apple-system, sans-serif !important;
+}
+
 input,
 select,
 textarea,
@@ -18,6 +28,7 @@ button,
 [role="dialog"] {
   -webkit-app-region: no-drag;
 }
+
 
 ::-webkit-scrollbar {
   width: 6px;

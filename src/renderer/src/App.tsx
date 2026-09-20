@@ -18,6 +18,7 @@ import { ImportModpackModal } from '@renderer/components/instances/ImportModpack
 import { ImportFromLauncherModal } from '@renderer/components/instances/ImportFromLauncherModal'
 import { AccountModal } from '@renderer/components/auth/AccountModal'
 import { ConfirmModal } from '@renderer/components/common/ConfirmModal'
+import { ToastNotification } from '@renderer/components/common/ToastNotification'
 import { applyLauncherFont } from '@renderer/components/settings/FontSettingsSection'
 
 export const App: React.FC = () => {
@@ -37,7 +38,6 @@ export const App: React.FC = () => {
   const [launchProgress, setLaunchProgress] = useState<LaunchProgressEvent | null>(null)
   const [launchLogs, setLaunchLogs] = useState<LaunchLogEvent[]>([])
 
-  // Themed confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean
     title: string
@@ -58,8 +58,8 @@ export const App: React.FC = () => {
 
   const showNotification = (message: string) => {
     setActiveNotification(message)
-    setTimeout(() => setActiveNotification(null), 3000)
   }
+
 
   const fetchInstances = useCallback(async () => {
     if (window.launcherAPI?.instances) {
@@ -315,18 +315,6 @@ export const App: React.FC = () => {
 
         <main className="flex-1 overflow-y-auto p-6 md:p-8 bg-background-dark/50">
           <div className="w-full max-w-[1600px] h-full mx-auto">
-            {activeNotification && (
-              <div className="mb-6 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-center justify-between shadow-lg">
-                <span>{activeNotification}</span>
-                <button
-                  onClick={() => setActiveNotification(null)}
-                  className="text-emerald-400 hover:text-white"
-                >
-                  Dismiss
-                </button>
-              </div>
-            )}
-
             {activeTab === 'dashboard' && (
               <DashboardPage
                 instances={instances}
@@ -446,7 +434,6 @@ export const App: React.FC = () => {
         onLogout={handleLogout}
       />
 
-      {/* Themed Confirmation Modal */}
       <ConfirmModal
         isOpen={confirmDialog.isOpen}
         title={confirmDialog.title}
@@ -456,6 +443,13 @@ export const App: React.FC = () => {
         onConfirm={confirmDialog.onConfirm}
         onCancel={closeConfirmDialog}
       />
+
+      <ToastNotification
+        message={activeNotification}
+        durationMs={5000}
+        onClose={() => setActiveNotification(null)}
+      />
     </div>
   )
 }
+

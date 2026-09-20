@@ -85,6 +85,22 @@ export const InstancesPage: React.FC<InstancesPageProps> = ({
     }
   }
 
+  const handleToggleFavorite = async (instanceId: string) => {
+    try {
+      if (window.launcherAPI?.instances?.toggleFavorite) {
+        await window.launcherAPI.instances.toggleFavorite(instanceId)
+        onRefreshInstances?.()
+      }
+    } catch (err) {
+      console.error('Failed to toggle favorite:', err)
+    }
+  }
+
+  const handleIconUpdated = async () => {
+    onRefreshInstances?.()
+  }
+
+
   const filteredInstances = instances.filter((instance) => {
     const matchesSearch =
       instance.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -170,6 +186,8 @@ export const InstancesPage: React.FC<InstancesPageProps> = ({
         onRenameGroup={handleRenameGroup}
         onDisbandGroup={handleDisbandGroup}
         onDeleteGroup={handleDeleteGroup}
+        onToggleFavorite={handleToggleFavorite}
+        onIconUpdated={handleIconUpdated}
       />
     </div>
   )

@@ -11,7 +11,8 @@ import {
   renameGroup,
   disbandGroup,
   deleteGroup,
-  saveInstanceCustomIcon
+  saveInstanceCustomIcon,
+  toggleInstanceFavorite
 } from '@main/services/instances'
 import { getInstancePath } from '@main/services/paths'
 
@@ -60,5 +61,10 @@ export function registerInstanceIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.INSTANCES_SAVE_CUSTOM_ICON, async (_event, instanceId: string, dataUrl: string) => {
     return await saveInstanceCustomIcon(instanceId, dataUrl)
   })
+
+  ipcMain.handle(IPC_CHANNELS.INSTANCES_TOGGLE_FAVORITE, async (_event, instanceId: string) => {
+    return await toggleInstanceFavorite(instanceId)
+  })
 }
+
 

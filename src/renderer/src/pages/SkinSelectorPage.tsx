@@ -28,28 +28,23 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
   const [skins, setSkins] = useState<SkinEntry[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  // Currently previewed skin in 3D viewer
   const [previewSkin, setPreviewSkin] = useState<SkinEntry | null>(null)
   const [previewModel, setPreviewModel] = useState<SkinModelType>('classic')
   const [animation, setAnimation] = useState<SkinAnimationType>('walk')
   const [autoRotate, setAutoRotate] = useState(false)
 
-  // Subtab for right pane
   const [activeSubTab, setActiveSubTab] = useState<'library' | 'presets'>('library')
   const [presetFilter, setPresetFilter] = useState<'all' | 'official' | 'events'>('all')
   const [activeAccountUsername, setActiveAccountUsername] = useState<string | null>(null)
 
-  // Search state
   const [searchUsername, setSearchUsername] = useState('')
   const [isSearching, setIsSearching] = useState(false)
   const [searchResult, setSearchResult] = useState<PlayerSkinSearchResult | null>(null)
   const [searchError, setSearchError] = useState<string | null>(null)
 
-  // Drag and drop / file upload state
   const [isDraggingOver, setIsDraggingOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
-  // Delete modal state
   const [skinToDelete, setSkinToDelete] = useState<SkinEntry | null>(null)
 
   const loadSkins = useCallback(async () => {
@@ -59,7 +54,6 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
         const res = await window.launcherAPI.skins.list()
         let currentActive = res.activeSkinId || 'preset_steve'
 
-        // Check if user is logged into an active account
         let activeUserSkin: SkinEntry | null = null
         try {
           const authState = await window.launcherAPI?.auth?.getState?.()
@@ -68,7 +62,6 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
           if (activeAccount?.username) {
             setActiveAccountUsername(activeAccount.username)
 
-            // Look for user's skin in existing skins
             const existing = res.skins.find(
               (s) =>
                 s.name.toLowerCase() === activeAccount.username.toLowerCase() ||
@@ -92,7 +85,6 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
               currentActive = saved.id
               await window.launcherAPI.skins.apply(saved.id)
             } else {
-              // Automatically resolve player's real skin from Mojang
               try {
                 const searched = await window.launcherAPI.skins.searchPlayer(activeAccount.username)
                 if (searched && searched.skinUrl) {
@@ -108,7 +100,6 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
                   await window.launcherAPI.skins.apply(saved.id)
                 }
               } catch {
-                // Ignore if offline
               }
             }
 
@@ -120,7 +111,6 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
         setSkins(res.skins)
         setActiveSkinId(currentActive)
 
-        // Set initial preview skin (prioritize user's active skin!)
         const found =
           activeUserSkin ||
           res.skins.find((s) => s.id === currentActive) ||
@@ -147,9 +137,13 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
   const handleApplySkin = async (skin: SkinEntry) => {
     try {
       if (window.launcherAPI?.skins) {
-        await window.launcherAPI.skins.apply(skin.id)
-        setActiveSkinId(skin.id)
-        onNotification(`Skin "${skin.name}" is now active!`)
+        const res = await window.launcherAPI.skins.apply(skin.id)
+        if (res.success) {
+          setActiveSkinId(skin.id)
+          onNotification(res.message || `Skin "${skin.name}" is now active!`)
+        } else {
+          onNotification(res.message || 'Failed to apply skin.')
+        }
       }
     } catch (err) {
       console.error('Failed to apply skin:', err)
@@ -183,7 +177,6 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
       if (window.launcherAPI?.skins) {
         const result = await window.launcherAPI.skins.searchPlayer(trimmed)
         setSearchResult(result)
-        // Automatically show preview in 3D
         setPreviewSkin({
           id: `temp_${result.uuid}`,
           name: `${result.username}'s Skin`,
@@ -257,7 +250,6 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
       if (filePath) {
         textureData = filePath
       } else {
-        // Read file as base64 dataUrl
         const buffer = await file.arrayBuffer()
         const base64 = btoa(
           new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
@@ -292,7 +284,6 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
 
   return (
     <div className="flex flex-col gap-6 w-full h-[calc(100vh-4rem)]">
-      {/* Page Header */}
       <div className="flex items-center justify-between shrink-0">
         <div>
           <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
@@ -305,11 +296,8 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
         </div>
       </div>
 
-      {/* Main Content Layout */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0">
-        {/* Left / Center 3D Preview Column (7 cols) */}
         <div className="lg:col-span-7 flex flex-col bg-background-card border border-border-subtle rounded-2xl overflow-hidden shadow-xl">
-          {/* Top Preview Bar */}
           <div className="flex items-center justify-between px-5 py-3 border-b border-border-subtle bg-background-dark/50">
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-slate-300">
@@ -325,7 +313,6 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
               )}
             </div>
 
-            {/* Model Toggle */}
             <div className="flex items-center gap-1 bg-background-surface border border-border-subtle rounded-xl p-0.5">
               <button
                 onClick={() => setPreviewModel('classic')}
@@ -350,7 +337,6 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
             </div>
           </div>
 
-          {/* 3D Canvas Area */}
           <div className="flex-1 relative flex items-center justify-center bg-radial-gradient from-slate-900/60 to-background-card overflow-hidden">
             {isLoading ? (
               <div className="flex flex-col items-center justify-center gap-3 text-slate-400">
@@ -374,9 +360,7 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
               </div>
             )}
 
-            {/* Floating Quick Controls Bar */}
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-background-dark/80 backdrop-blur-md border border-border-subtle rounded-2xl p-1.5 shadow-2xl">
-              {/* Animation Switcher */}
               <div className="flex items-center gap-1">
                 {(['walk', 'run', 'idle', 'fly', 'wave', 'none'] as SkinAnimationType[]).map((anim) => (
                   <button
@@ -395,7 +379,6 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
 
               <div className="w-[1px] h-4 bg-white/10" />
 
-              {/* Auto Rotate Toggle */}
               <button
                 onClick={() => setAutoRotate(!autoRotate)}
                 title={autoRotate ? 'Stop rotation' : 'Auto-rotate'}
@@ -410,7 +393,6 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
             </div>
           </div>
 
-          {/* Bottom Action Footer */}
           <div className="flex items-center justify-between p-4 border-t border-border-subtle bg-background-dark/30">
             <div className="text-xs text-slate-400">
               {previewSkin?.source === 'preset'
@@ -447,9 +429,7 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
           </div>
         </div>
 
-        {/* Right Pane (5 cols): Library, Player Search & Presets */}
         <div className="lg:col-span-5 flex flex-col gap-4 min-h-0">
-          {/* Player Search Section */}
           <div className="bg-background-card border border-border-subtle rounded-2xl p-4 shrink-0 space-y-3">
             <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
               <Search size={14} className="text-primary" />
@@ -515,9 +495,7 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
             )}
           </div>
 
-          {/* Library / Presets Tabs Container */}
           <div className="flex-1 bg-background-card border border-border-subtle rounded-2xl flex flex-col min-h-0 overflow-hidden">
-            {/* Tabs Header */}
             <div className="flex items-center justify-between border-b border-border-subtle px-4 pt-3 pb-2">
               <div className="flex items-center gap-2">
                 <button
@@ -569,11 +547,9 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
               )}
             </div>
 
-            {/* Tab Contents */}
             <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
               {activeSubTab === 'library' && (
                 <div className="flex flex-col gap-3">
-                  {/* Drag and Drop Zone */}
                   <div
                     onDragOver={(e) => {
                       e.preventDefault()
@@ -664,7 +640,6 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
 
               {activeSubTab === 'presets' && (
                 <div className="flex flex-col gap-3">
-                  {/* Category Filter Pills */}
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
                     <button
                       type="button"
@@ -763,7 +738,6 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
         </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
       <ConfirmModal
         isOpen={Boolean(skinToDelete)}
         title="Delete Custom Skin"

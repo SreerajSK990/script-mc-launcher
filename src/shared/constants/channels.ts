@@ -15,6 +15,7 @@ export const IPC_CHANNELS = {
   INSTANCES_DISBAND_GROUP: 'instances:disband-group',
   INSTANCES_DELETE_GROUP: 'instances:delete-group',
   INSTANCES_SAVE_CUSTOM_ICON: 'instances:save-custom-icon',
+  INSTANCES_TOGGLE_FAVORITE: 'instances:toggle-favorite',
 
   AUTH_GET_STATE: 'auth:get-state',
   AUTH_LOGIN_MICROSOFT: 'auth:login-microsoft',

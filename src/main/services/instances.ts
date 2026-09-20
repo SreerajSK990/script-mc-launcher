@@ -178,7 +178,6 @@ export async function saveInstanceCustomIcon(instanceId: string, dataUrl: string
   const instanceDir = getInstancePath(instanceId)
   await ensureDirectoryExists(instanceDir)
 
-  // Extract base64
   const matches = dataUrl.match(/^data:([A-Za-z-+/]+);base64,(.+)$/)
   if (!matches || matches.length !== 3) {
     throw new Error('Invalid image data URL format')
@@ -189,7 +188,6 @@ export async function saveInstanceCustomIcon(instanceId: string, dataUrl: string
   const targetFilePath = join(instanceDir, iconFileName)
   await fs.writeFile(targetFilePath, buffer)
 
-  // Update instance configuration with dataUrl or icon path
   await updateExistingInstance({
     id: instanceId,
     icon: dataUrl
@@ -209,4 +207,19 @@ export async function deleteInstanceById(instanceId: string): Promise<boolean> {
   await removeDirectorySafely(instanceDirectory)
   return true
 }
+
+export async function toggleInstanceFavorite(instanceId: string): Promise<InstanceConfiguration> {
+  const instance = await getInstanceById(instanceId)
+  if (!instance) {
+    throw new Error(`Instance not found: ${instanceId}`)
+  }
+
+  const updatedFavorite = !Boolean(instance.isFavorite)
+  return await updateExistingInstance({
+    id: instanceId,
+    isFavorite: updatedFavorite
+  })
+}
+
+
 

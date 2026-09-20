@@ -33,7 +33,11 @@ export function registerSkinsIpcHandlers(): void {
       return await setActiveSkin(skinId)
     } catch (error) {
       console.error('Failed to apply skin:', error)
-      return false
+      return {
+        success: false,
+        uploadedToMojang: false,
+        message: error instanceof Error ? error.message : 'Failed to apply skin'
+      }
     }
   })
 

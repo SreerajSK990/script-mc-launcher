@@ -26,8 +26,11 @@ const launcherAPI: LauncherAPI = {
     deleteGroup: (groupName: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_DELETE_GROUP, groupName),
     saveCustomIcon: (instanceId: string, dataUrl: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_SAVE_CUSTOM_ICON, instanceId, dataUrl)
+      ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_SAVE_CUSTOM_ICON, instanceId, dataUrl),
+    toggleFavorite: (instanceId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_TOGGLE_FAVORITE, instanceId)
   },
+
 
   auth: {
     getState: () => ipcRenderer.invoke(IPC_CHANNELS.AUTH_GET_STATE),
@@ -163,6 +166,6 @@ if (process.contextIsolated) {
     console.error('Failed to expose launcherAPI in main world:', error)
   }
 } else {
-  // @ts-expect-error fallback when context isolation is disabled
-  window.launcherAPI = launcherAPI
+  ;(window as unknown as { launcherAPI: unknown }).launcherAPI = launcherAPI
 }
+

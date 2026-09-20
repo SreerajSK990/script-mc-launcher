@@ -6,10 +6,13 @@ import {
   SlidersHorizontal,
   MoreVertical,
   Layers,
-  FolderMinus
+  FolderMinus,
+  Star,
+  Image as ImageIcon
 } from 'lucide-react'
 import type { InstanceConfiguration } from '@shared/types/instance'
 import { getMinecraftIconById } from '@shared/constants/minecraftIcons'
+import { ChangeInstanceIconModal } from './ChangeInstanceIconModal'
 
 interface InstanceCardProps {
   instance: InstanceConfiguration
@@ -19,6 +22,8 @@ interface InstanceCardProps {
   onDelete: (instanceId: string) => void
   onManage?: (instance: InstanceConfiguration) => void
   onSetGroup?: (instanceId: string, group: string | null) => void
+  onToggleFavorite?: (instanceId: string) => void
+  onIconUpdated?: (instanceId: string, newIcon: string) => void
 }
 
 export const InstanceCard: React.FC<InstanceCardProps> = ({
@@ -28,10 +33,13 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
   onOpenFolder,
   onDelete,
   onManage,
-  onSetGroup
+  onSetGroup,
+  onToggleFavorite,
+  onIconUpdated
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false)
+  const [isChangeIconModalOpen, setIsChangeIconModalOpen] = useState(false)
   const [targetGroupInput, setTargetGroupInput] = useState(instance.group || '')
   const menuRef = useRef<HTMLDivElement | null>(null)
 
@@ -49,7 +57,6 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
     }
   }, [isMenuOpen])
 
-  // Resolve icon definition
   const iconDef = getMinecraftIconById(instance.icon)
   const isCustomDataUrl =
     instance.icon?.startsWith('data:') ||
@@ -75,212 +82,262 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
   }
 
   return (
-    <div
-      draggable
-      onDragStart={handleDragStart}
-      onClick={() => onManage?.(instance)}
-      className="group relative flex flex-col bg-background-card hover:bg-background-surface/70 border border-border-subtle hover:border-border-strong rounded-2xl p-2.5 transition-all duration-200 hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-500/5 active:scale-[0.99] cursor-pointer select-none"
-    >
-      {/* Top Square Icon Banner matching Modrinth layout */}
+    <>
       <div
-        className={`w-full aspect-square rounded-xl ${bgClass} flex items-center justify-center relative overflow-hidden shadow-inner`}
+        draggable
+        onDragStart={handleDragStart}
+        onClick={() => onManage?.(instance)}
+        className="group relative flex flex-col bg-background-card hover:bg-background-surface/70 border border-border-subtle hover:border-border-strong rounded-2xl p-2.5 transition-all duration-200 hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-500/5 active:scale-[0.99] cursor-pointer select-none"
       >
-        <img
-          src={iconSrc}
-          alt={instance.name}
-          className="w-20 h-20 object-contain drop-shadow-md transition-transform duration-200 group-hover:scale-105"
-          style={{ imageRendering: 'pixelated' }}
-        />
-
-        {/* Hover Play Button (Bottom-Right Circular Green Button matching Screenshot 3) */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            onPlay(instance)
-          }}
-          className="absolute right-2.5 bottom-2.5 w-10 h-10 rounded-full bg-emerald-400 hover:bg-emerald-300 text-black shadow-lg shadow-emerald-950/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-150 transform scale-90 hover:scale-105 active:scale-95 cursor-pointer z-10"
-          title="Launch Game"
-          aria-label="Launch Game"
+        <div
+          className={`w-full aspect-square rounded-xl ${bgClass} flex items-center justify-center relative overflow-hidden shadow-inner`}
         >
-          <Play size={18} className="fill-black text-black ml-0.5" />
-        </button>
-      </div>
+          <img
+            src={iconSrc}
+            alt={instance.name}
+            className="w-20 h-20 object-contain drop-shadow-md transition-transform duration-200 group-hover:scale-105"
+            style={{ imageRendering: 'pixelated' }}
+          />
 
-      {/* Bottom Info: Bold Title & Version Subtitle */}
-      <div className="flex items-center justify-between gap-1.5 mt-2.5 px-1 min-w-0">
-        <div className="flex-1 min-w-0">
-          <h4 className="text-sm font-bold text-white truncate group-hover:text-emerald-400 transition-colors">
-            {instance.name}
-          </h4>
-          <p className="text-xs text-slate-400 truncate mt-0.5 capitalize">
-            {instance.loaderType} {instance.loaderVersion || instance.minecraftVersion}
-          </p>
-        </div>
-
-        {/* Card Options / Kebab Menu */}
-        <div className="relative shrink-0" ref={menuRef}>
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation()
-              setIsMenuOpen((prev) => !prev)
+              onToggleFavorite?.(instance.id)
             }}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity"
-            title="More Options"
-            aria-label="More Options"
+            className={`absolute top-2.5 right-2.5 p-1.5 rounded-lg bg-black/40 backdrop-blur-md transition-all cursor-pointer z-10 ${
+              instance.isFavorite
+                ? 'text-amber-400 opacity-100 hover:scale-110'
+                : 'text-slate-400 opacity-0 group-hover:opacity-100 hover:text-amber-300 hover:scale-110'
+            }`}
+            title={instance.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+            aria-label={instance.isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
           >
-            <MoreVertical size={16} />
+            <Star size={16} className={instance.isFavorite ? 'fill-amber-400 text-amber-400' : ''} />
           </button>
 
-          {isMenuOpen && (
-            <div
-              onClick={(e) => e.stopPropagation()}
-              className="absolute right-0 bottom-full mb-1.5 w-44 bg-background-darkest/95 backdrop-blur-md border border-border-subtle rounded-xl p-1.5 shadow-2xl z-30 flex flex-col gap-0.5 text-xs text-slate-300"
-            >
-              {onManage && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsMenuOpen(false)
-                    onManage(instance)
-                  }}
-                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-colors text-left w-full"
-                >
-                  <SlidersHorizontal size={13} className="text-slate-400" />
-                  <span>Manage Instance</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => {
-                  setTargetGroupInput(instance.group || '')
-                  setIsGroupModalOpen(true)
-                  setIsMenuOpen(false)
-                }}
-                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-colors text-left w-full"
-              >
-                <Layers size={13} className="text-emerald-400" />
-                <span>{instance.group ? 'Change Group' : 'Add to Group'}</span>
-              </button>
-
-              {instance.group && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsMenuOpen(false)
-                    onSetGroup?.(instance.id, null)
-                  }}
-                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-colors text-left w-full"
-                >
-                  <FolderMinus size={13} className="text-amber-400" />
-                  <span>Remove from Group</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => {
-                  setIsMenuOpen(false)
-                  onOpenFolder(instance.id)
-                }}
-                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-colors text-left w-full"
-              >
-                <FolderOpen size={13} className="text-slate-400" />
-                <span>Open Folder</span>
-              </button>
-
-              <div className="h-px bg-border-subtle my-0.5" />
-
-              <button
-                type="button"
-                onClick={() => {
-                  setIsMenuOpen(false)
-                  onDelete(instance.id)
-                }}
-                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 transition-colors text-left w-full"
-              >
-                <Trash2 size={13} />
-                <span>Delete</span>
-              </button>
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onPlay(instance)
+            }}
+            className="absolute right-2.5 bottom-2.5 w-10 h-10 rounded-full bg-emerald-400 hover:bg-emerald-300 text-black shadow-lg shadow-emerald-950/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-150 transform scale-90 hover:scale-105 active:scale-95 cursor-pointer z-10"
+            title="Launch Game"
+            aria-label="Launch Game"
+          >
+            <Play size={18} className="fill-black text-black ml-0.5" />
+          </button>
         </div>
-      </div>
 
-      {/* Inline Group Picker Modal */}
-      {isGroupModalOpen && (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150"
-        >
-          <div className="bg-background-card border border-border-subtle rounded-2xl p-5 max-w-sm w-full shadow-2xl">
-            <h3 className="text-base font-bold text-white mb-1">Set Instance Group</h3>
-            <p className="text-xs text-slate-400 mb-4">
-              Organize <span className="text-white font-medium">{instance.name}</span> into a collapsible folder group.
-            </p>
-
-            <form onSubmit={handleApplyGroup} className="flex flex-col gap-3">
-              <div>
-                <label className="text-xs font-semibold text-slate-300 block mb-1">
-                  Group Name
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Modpacks, Survival SMP, Testing..."
-                  value={targetGroupInput}
-                  onChange={(e) => setTargetGroupInput(e.target.value)}
-                  list={`groups-list-${instance.id}`}
-                  autoFocus
-                  className="w-full px-3 py-2 bg-background-darkest border border-border-subtle rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-                />
-                <datalist id={`groups-list-${instance.id}`}>
-                  {availableGroups.map((g) => (
-                    <option key={g} value={g} />
-                  ))}
-                </datalist>
-              </div>
-
-              {availableGroups.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  <span className="text-[11px] text-slate-400 w-full">Quick Pick:</span>
-                  {availableGroups.map((g) => (
-                    <button
-                      key={g}
-                      type="button"
-                      onClick={() => setTargetGroupInput(g)}
-                      className={`text-[11px] px-2 py-0.5 rounded-md border transition-colors ${
-                        targetGroupInput === g
-                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                          : 'bg-white/5 text-slate-300 border-border-subtle hover:bg-white/10'
-                      }`}
-                    >
-                      {g}
-                    </button>
-                  ))}
-                </div>
+        <div className="flex items-center justify-between gap-1.5 mt-2.5 px-1 min-w-0">
+          <div className="flex-1 min-w-0">
+            <h4 className="text-sm font-bold text-white truncate group-hover:text-emerald-400 transition-colors flex items-center gap-1.5">
+              <span className="truncate">{instance.name}</span>
+              {instance.isFavorite && (
+                <Star size={12} className="text-amber-400 fill-amber-400 shrink-0" />
               )}
+            </h4>
+            <p className="text-xs text-slate-400 truncate mt-0.5 capitalize">
+              {instance.loaderType} {instance.loaderVersion || instance.minecraftVersion}
+            </p>
+          </div>
 
-              <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-border-subtle">
+          <div className="relative shrink-0" ref={menuRef}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                setIsMenuOpen((prev) => !prev)
+              }}
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity"
+              title="More Options"
+              aria-label="More Options"
+            >
+              <MoreVertical size={16} />
+            </button>
+
+            {isMenuOpen && (
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="absolute right-0 bottom-full mb-1.5 w-44 bg-background-darkest/95 backdrop-blur-md border border-border-subtle rounded-xl p-1.5 shadow-2xl z-30 flex flex-col gap-0.5 text-xs text-slate-300"
+              >
+                {onManage && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false)
+                      onManage(instance)
+                    }}
+                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-colors text-left w-full cursor-pointer"
+                  >
+                    <SlidersHorizontal size={13} className="text-slate-400" />
+                    <span>Manage Instance</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
-                  onClick={() => setIsGroupModalOpen(false)}
-                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-white rounded-lg hover:bg-white/5"
+                  onClick={() => {
+                    setIsMenuOpen(false)
+                    onToggleFavorite?.(instance.id)
+                  }}
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-colors text-left w-full cursor-pointer"
                 >
-                  Cancel
+                  <Star size={13} className={instance.isFavorite ? 'text-amber-400 fill-amber-400' : 'text-slate-400'} />
+                  <span>{instance.isFavorite ? 'Unfavorite' : 'Favorite'}</span>
                 </button>
+
                 <button
-                  type="submit"
-                  className="px-4 py-1.5 text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black rounded-lg transition-colors"
+                  type="button"
+                  onClick={() => {
+                    setIsMenuOpen(false)
+                    setIsChangeIconModalOpen(true)
+                  }}
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-colors text-left w-full cursor-pointer"
                 >
-                  Save Group
+                  <ImageIcon size={13} className="text-emerald-400" />
+                  <span>Change Icon</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTargetGroupInput(instance.group || '')
+                    setIsGroupModalOpen(true)
+                    setIsMenuOpen(false)
+                  }}
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-colors text-left w-full cursor-pointer"
+                >
+                  <Layers size={13} className="text-emerald-400" />
+                  <span>{instance.group ? 'Change Group' : 'Add to Group'}</span>
+                </button>
+
+                {instance.group && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false)
+                      onSetGroup?.(instance.id, null)
+                    }}
+                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-colors text-left w-full cursor-pointer"
+                  >
+                    <FolderMinus size={13} className="text-amber-400" />
+                    <span>Remove from Group</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMenuOpen(false)
+                    onOpenFolder(instance.id)
+                  }}
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-colors text-left w-full cursor-pointer"
+                >
+                  <FolderOpen size={13} className="text-slate-400" />
+                  <span>Open Folder</span>
+                </button>
+
+                <div className="h-px bg-border-subtle my-0.5" />
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMenuOpen(false)
+                    onDelete(instance.id)
+                  }}
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 transition-colors text-left w-full cursor-pointer"
+                >
+                  <Trash2 size={13} />
+                  <span>Delete</span>
                 </button>
               </div>
-            </form>
+            )}
           </div>
         </div>
-      )}
-    </div>
+
+        {isGroupModalOpen && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150"
+          >
+            <div className="bg-background-card border border-border-subtle rounded-2xl p-5 max-w-sm w-full shadow-2xl">
+              <h3 className="text-base font-bold text-white mb-1">Set Instance Group</h3>
+              <p className="text-xs text-slate-400 mb-4">
+                Organize <span className="text-white font-medium">{instance.name}</span> into a collapsible folder group.
+              </p>
+
+              <form onSubmit={handleApplyGroup} className="flex flex-col gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1">
+                    Group Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Modpacks, Survival SMP, Testing..."
+                    value={targetGroupInput}
+                    onChange={(e) => setTargetGroupInput(e.target.value)}
+                    list={`groups-list-${instance.id}`}
+                    autoFocus
+                    className="w-full px-3 py-2 bg-background-darkest border border-border-subtle rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  />
+                  <datalist id={`groups-list-${instance.id}`}>
+                    {availableGroups.map((g) => (
+                      <option key={g} value={g} />
+                    ))}
+                  </datalist>
+                </div>
+
+                {availableGroups.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    <span className="text-[11px] text-slate-400 w-full">Quick Pick:</span>
+                    {availableGroups.map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => setTargetGroupInput(g)}
+                        className={`text-[11px] px-2 py-0.5 rounded-md border transition-colors ${
+                          targetGroupInput === g
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                            : 'bg-white/5 text-slate-300 border-border-subtle hover:bg-white/10'
+                        }`}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-border-subtle">
+                  <button
+                    type="button"
+                    onClick={() => setIsGroupModalOpen(false)}
+                    className="px-3 py-1.5 text-xs text-slate-400 hover:text-white rounded-lg hover:bg-white/5 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-1.5 text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black rounded-lg transition-colors cursor-pointer"
+                  >
+                    Save Group
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <ChangeInstanceIconModal
+        isOpen={isChangeIconModalOpen}
+        instance={instance}
+        onClose={() => setIsChangeIconModalOpen(false)}
+        onIconSaved={(newIcon) => {
+          onIconUpdated?.(instance.id, newIcon)
+        }}
+      />
+    </>
   )
 }

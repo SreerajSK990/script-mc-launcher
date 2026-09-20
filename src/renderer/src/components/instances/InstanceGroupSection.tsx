@@ -26,6 +26,8 @@ interface InstanceGroupSectionProps {
   onDisbandGroup: (groupName: string) => void
   onDeleteGroup: (groupName: string) => void
   onDropInstance: (instanceId: string, targetGroup: string) => void
+  onToggleFavorite?: (instanceId: string) => void
+  onIconUpdated?: (instanceId: string, newIcon: string) => void
 }
 
 export const InstanceGroupSection: React.FC<InstanceGroupSectionProps> = ({
@@ -40,7 +42,9 @@ export const InstanceGroupSection: React.FC<InstanceGroupSectionProps> = ({
   onRenameGroup,
   onDisbandGroup,
   onDeleteGroup,
-  onDropInstance
+  onDropInstance,
+  onToggleFavorite,
+  onIconUpdated
 }) => {
   const storageKey = `scriptlauncher_group_collapsed_${groupName}`
   const [isCollapsed, setIsCollapsed] = useState(() => {
@@ -64,7 +68,6 @@ export const InstanceGroupSection: React.FC<InstanceGroupSectionProps> = ({
       try {
         localStorage.setItem(storageKey, String(next))
       } catch {
-        // ignore
       }
       return next
     })
@@ -77,7 +80,6 @@ export const InstanceGroupSection: React.FC<InstanceGroupSectionProps> = ({
   }
 
   const handleDragLeave = (e: React.DragEvent) => {
-    // Only clear if leaving the component
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
       setIsDraggingOver(false)
     }
@@ -112,7 +114,6 @@ export const InstanceGroupSection: React.FC<InstanceGroupSectionProps> = ({
           : 'bg-transparent'
       }`}
     >
-      {/* Group Header */}
       <div className="flex items-center justify-between gap-3 py-2 px-1 mb-2 border-b border-border-subtle/50">
         <div
           onClick={toggleCollapse}
@@ -140,7 +141,6 @@ export const InstanceGroupSection: React.FC<InstanceGroupSectionProps> = ({
           </span>
         </div>
 
-        {/* Group Action Menu */}
         <div className="relative">
           <button
             type="button"
@@ -193,7 +193,6 @@ export const InstanceGroupSection: React.FC<InstanceGroupSectionProps> = ({
         </div>
       </div>
 
-      {/* Group Content */}
       {!isCollapsed && (
         <div className="pt-1 pb-3">
           {instances.length === 0 ? (
@@ -212,6 +211,8 @@ export const InstanceGroupSection: React.FC<InstanceGroupSectionProps> = ({
                   onDelete={onDelete}
                   onManage={onManage}
                   onSetGroup={onSetGroup}
+                  onToggleFavorite={onToggleFavorite}
+                  onIconUpdated={onIconUpdated}
                 />
               ))}
             </div>
@@ -219,7 +220,6 @@ export const InstanceGroupSection: React.FC<InstanceGroupSectionProps> = ({
         </div>
       )}
 
-      {/* Rename Modal */}
       {isRenameModalOpen && (
         <div
           onClick={(e) => e.stopPropagation()}
@@ -261,7 +261,6 @@ export const InstanceGroupSection: React.FC<InstanceGroupSectionProps> = ({
         </div>
       )}
 
-      {/* Disband Confirmation */}
       <ConfirmModal
         isOpen={isDisbandModalOpen}
         title="Disband Group"
@@ -276,7 +275,6 @@ export const InstanceGroupSection: React.FC<InstanceGroupSectionProps> = ({
         onCancel={() => setIsDisbandModalOpen(false)}
       />
 
-      {/* Delete All Instances Confirmation */}
       <ConfirmModal
         isOpen={isDeleteAllModalOpen}
         title={`Delete All Instances in "${groupName}"?`}

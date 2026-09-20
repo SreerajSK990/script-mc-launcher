@@ -1,16 +1,18 @@
 import { join } from 'node:path'
 import { promises as fs } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import type { SkinEntry, SkinModelType, PlayerSkinSearchResult } from '@shared/types/skins'
+import type { SkinEntry, SkinModelType, PlayerSkinSearchResult, ApplySkinResult } from '@shared/types/skins'
 import { getSkinsDirectory } from '@main/services/paths'
 import { readJsonFile, writeJsonFileAtomic } from '@main/utils/filesystem'
+import { PRESET_SKINS } from './presetSkins'
+import { getCurrentAuthState } from '@main/services/auth'
+import { saveStoredAccounts } from '@main/core/auth/storage'
+import { uploadSkinToMojang, fetchMinecraftProfile } from '@main/core/auth/tokens'
 
 interface SkinsConfigFile {
   activeSkinId: string | null
   skins: SkinEntry[]
 }
-
-import { PRESET_SKINS } from './presetSkins'
 
 function getConfigFile(): string {
   return join(getSkinsDirectory(), 'skins.json')
@@ -46,15 +48,73 @@ export async function getActiveSkinId(): Promise<string | null> {
   return cfg.activeSkinId || 'preset_steve'
 }
 
-export async function setActiveSkin(skinId: string): Promise<boolean> {
+export async function setActiveSkin(skinId: string): Promise<ApplySkinResult> {
   const cfg = await loadConfig()
+  const allSkins = [...PRESET_SKINS, ...cfg.skins]
+  const targetSkin = allSkins.find((s) => s.id === skinId)
+  if (!targetSkin) {
+    return {
+      success: false,
+      uploadedToMojang: false,
+      message: 'Selected skin not found in library.'
+    }
+  }
+
   cfg.activeSkinId = skinId
   await saveConfig(cfg)
-  return true
+
+  try {
+    const authState = await getCurrentAuthState()
+    const activeAcc = authState.activeAccount
+
+    if (activeAcc && activeAcc.accountType === 'microsoft' && activeAcc.accessToken) {
+      let imageBuffer: Buffer
+
+      if (targetSkin.textureUrl.startsWith('data:image/')) {
+        const b64 = targetSkin.textureUrl.split(',')[1] || ''
+        imageBuffer = Buffer.from(b64, 'base64')
+      } else if (targetSkin.textureUrl.startsWith('http://') || targetSkin.textureUrl.startsWith('https://')) {
+        const resp = await fetch(targetSkin.textureUrl)
+        if (!resp.ok) {
+          throw new Error(`Failed to fetch skin texture: HTTP ${resp.status}`)
+        }
+        imageBuffer = Buffer.from(await resp.arrayBuffer())
+      } else {
+        imageBuffer = await fs.readFile(targetSkin.textureUrl)
+      }
+
+      await uploadSkinToMojang(activeAcc.accessToken, imageBuffer, targetSkin.model)
+
+      try {
+        const freshProfile = await fetchMinecraftProfile(activeAcc.accessToken)
+        const newActiveSkin = freshProfile.skins.find((s) => s.state === 'ACTIVE')
+        activeAcc.skinUrl = newActiveSkin?.url || targetSkin.textureUrl
+        await saveStoredAccounts(activeAcc.id, authState.accounts)
+      } catch {
+      }
+
+      return {
+        success: true,
+        uploadedToMojang: true,
+        message: `Skin "${targetSkin.name}" uploaded to your Minecraft account! Changes will appear in-game.`
+      }
+    }
+
+    return {
+      success: true,
+      uploadedToMojang: false,
+      message: `Skin "${targetSkin.name}" set locally. Sign in with a Microsoft account to sync skins to Minecraft servers.`
+    }
+  } catch (error) {
+    return {
+      success: false,
+      uploadedToMojang: false,
+      message: error instanceof Error ? error.message : 'Failed to sync skin with Mojang.'
+    }
+  }
 }
 
 export async function deleteSkin(skinId: string): Promise<boolean> {
-  // Preset skins cannot be deleted
   if (skinId.startsWith('preset_')) {
     return false
   }
@@ -72,12 +132,10 @@ export async function deleteSkin(skinId: string): Promise<boolean> {
 
   await saveConfig(cfg)
 
-  // Try to remove local png file if it was custom
   const skinFilePath = join(getSkinsDirectory(), `${skinId}.png`)
   try {
     await fs.unlink(skinFilePath)
   } catch {
-    // File might not exist
   }
 
   return true
@@ -85,7 +143,7 @@ export async function deleteSkin(skinId: string): Promise<boolean> {
 
 export interface SaveSkinParams {
   name: string
-  textureData: string // file path, base64 dataUrl, or remote URL
+  textureData: string
   model: SkinModelType
   source: 'custom' | 'player'
   author?: string
@@ -96,11 +154,9 @@ export async function saveSkin(params: SaveSkinParams): Promise<SkinEntry> {
   let imageBuffer: Buffer
 
   if (params.textureData.startsWith('data:image/')) {
-    // Base64 data URL
     const base64Content = params.textureData.split(',')[1] || ''
     imageBuffer = Buffer.from(base64Content, 'base64')
   } else if (params.textureData.startsWith('http://') || params.textureData.startsWith('https://')) {
-    // Remote URL download
     const response = await fetch(params.textureData)
     if (!response.ok) {
       throw new Error(`Failed to download skin texture: HTTP ${response.status}`)
@@ -108,7 +164,6 @@ export async function saveSkin(params: SaveSkinParams): Promise<SkinEntry> {
     const arrayBuffer = await response.arrayBuffer()
     imageBuffer = Buffer.from(arrayBuffer)
   } else {
-    // Local file path
     imageBuffer = await fs.readFile(params.textureData)
   }
 
@@ -140,7 +195,6 @@ export async function searchPlayerSkin(username: string): Promise<PlayerSkinSear
     throw new Error('Please enter a valid Minecraft player username.')
   }
 
-  // 1. Fetch Mojang profile (UUID)
   const profileRes = await fetch(`https://api.mojang.com/users/profiles/minecraft/${encodeURIComponent(trimmed)}`)
   if (profileRes.status === 404 || profileRes.status === 204) {
     throw new Error(`Player "${trimmed}" not found.`)
@@ -151,7 +205,6 @@ export async function searchPlayerSkin(username: string): Promise<PlayerSkinSear
 
   const profile = (await profileRes.json()) as { id: string; name: string }
 
-  // 2. Fetch session profile with textures
   const sessionRes = await fetch(`https://sessionserver.mojang.com/session/minecraft/profile/${profile.id}`)
   if (!sessionRes.ok) {
     throw new Error(`Could not load player skin profile: HTTP ${sessionRes.status}`)
@@ -193,7 +246,6 @@ export async function searchPlayerSkin(username: string): Promise<PlayerSkinSear
       finalSkinUrl = `data:image/png;base64,${buf.toString('base64')}`
     }
   } catch {
-    // Fallback to raw URL
   }
 
   const model: SkinModelType = texturesObj.textures?.SKIN?.metadata?.model === 'slim' ? 'slim' : 'classic'
@@ -205,3 +257,4 @@ export async function searchPlayerSkin(username: string): Promise<PlayerSkinSear
     model
   }
 }
+
