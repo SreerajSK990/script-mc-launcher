@@ -27,5 +27,17 @@ export const IPC_CHANNELS = {
 
   SYSTEM_GET_ENVIRONMENT: 'system:get-environment',
   SYSTEM_OPEN_EXTERNAL: 'system:open-external',
-  SYSTEM_OPEN_DIRECTORY: 'system:open-directory'
+  SYSTEM_OPEN_DIRECTORY: 'system:open-directory',
+
+  MODS_SEARCH: 'mods:search',
+  MODS_GET_VERSIONS: 'mods:get-versions',
+  MODS_INSTALL: 'mods:install',
+  MODS_LIST_INSTALLED: 'mods:list-installed',
+  MODS_TOGGLE_INSTALLED: 'mods:toggle-installed',
+  MODS_DELETE_INSTALLED: 'mods:delete-installed',
+  MODS_SET_CURSEFORGE_KEY: 'mods:set-curseforge-key',
+  MODS_GET_CURSEFORGE_KEY: 'mods:get-curseforge-key',
+
+  JAVA_GET_RUNTIMES: 'java:get-runtimes',
+  JAVA_DOWNLOAD_RUNTIME: 'java:download-runtime'
 } as const

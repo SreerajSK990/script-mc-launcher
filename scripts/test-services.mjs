@@ -210,7 +210,88 @@ async function runTests() {
     throw new Error('Expected -Dforgewrapper.installer JVM argument!')
   }
 
-  console.log('--- All Phase 1, Phase 2, Phase 3, Phase 4 & Phase 5 Verifications Passed! ---')
+  console.log('--- Phase 6 Mojang Java Runtime Verification ---')
+  const { resolveJavaComponentForVersion, resolveMojangPlatform, fetchMojangJavaProducts } = await import(
+    '../src/main/core/java/runtime.ts'
+  )
+
+  const legacyComp = resolveJavaComponentForVersion(null, '1.16.5')
+  const java17Comp = resolveJavaComponentForVersion(null, '1.20.1')
+  const java21Comp = resolveJavaComponentForVersion(null, '1.21.1')
+
+  console.log(`Java component for 1.16.5: ${legacyComp}`)
+  console.log(`Java component for 1.20.1: ${java17Comp}`)
+  console.log(`Java component for 1.21.1: ${java21Comp}`)
+
+  if (legacyComp !== 'jre-legacy' || java17Comp !== 'java-runtime-gamma' || java21Comp !== 'java-runtime-delta') {
+    throw new Error('Java component version mapping mismatch!')
+  }
+
+  const mojangPlatform = resolveMojangPlatform()
+  console.log(`Detected Mojang platform identifier: ${mojangPlatform}`)
+
+  const javaProducts = await fetchMojangJavaProducts()
+  if (!javaProducts[mojangPlatform]) {
+    throw new Error(`Expected platform ${mojangPlatform} in Mojang products manifest`)
+  }
+  console.log(`Verified Mojang JRE products manifest for ${mojangPlatform}`)
+
+  console.log('--- Phase 7 Mod Browser & Manager Verification ---')
+  const { searchModrinth, getModrinthProjectVersions } = await import('../src/main/core/mods/modrinth.ts')
+  const { listInstalledMods, toggleModEnabled, deleteInstalledMod } = await import('../src/main/core/mods/manager.ts')
+
+  const modSearchResults = await searchModrinth({
+    query: 'sodium',
+    limit: 3
+  })
+  console.log(`Modrinth search for "sodium" returned ${modSearchResults.length} hits. First: ${modSearchResults[0]?.name}`)
+  if (modSearchResults.length === 0 || !modSearchResults[0]?.name.toLowerCase().includes('sodium')) {
+    throw new Error('Expected Sodium in Modrinth search results!')
+  }
+
+  const sodiumVersions = await getModrinthProjectVersions(modSearchResults[0].id, '1.20.1', 'fabric')
+  console.log(`Found ${sodiumVersions.length} Sodium versions matching Fabric 1.20.1`)
+  if (sodiumVersions.length === 0) {
+    throw new Error('Expected compatible Sodium versions for Fabric 1.20.1')
+  }
+
+  const targetTestInstance = await createNewInstance({
+    name: 'Modded Test World',
+    minecraftVersion: '1.20.1',
+    loaderType: 'fabric',
+    ramAllocationMegabytes: 4096
+  })
+
+  // Test manual mod registration in instance mods manager
+  const { writeJsonFileAtomic } = await import('../src/main/utils/filesystem.ts')
+  const { getModsMetadataPath } = await import('../src/main/core/mods/manager.ts')
+
+  const dummyModRecord = {
+    id: 'test-mod',
+    name: 'Test Mod',
+    version: '1.0.0',
+    filename: 'test-mod-1.0.0.jar',
+    source: 'modrinth',
+    installedAt: new Date().toISOString(),
+    enabled: true,
+    fileSizeBytes: 1024
+  }
+
+  await writeJsonFileAtomic(getModsMetadataPath(targetTestInstance.id), [dummyModRecord])
+  const initialMods = await listInstalledMods(targetTestInstance.id)
+  console.log(`Verified instance mods catalog read (${initialMods.length} mods)`)
+
+  await deleteInstalledMod(targetTestInstance.id, dummyModRecord.filename)
+  const remainingMods = await listInstalledMods(targetTestInstance.id)
+  if (remainingMods.length !== 0) {
+    throw new Error('Expected 0 mods after deletion!')
+  }
+  console.log('Verified mod deletion from instance.')
+
+  await deleteInstanceById(targetTestInstance.id)
+  console.log('Deleted temporary test instance.')
+
+  console.log('--- All Phase 1, Phase 2, Phase 3, Phase 4, Phase 5, Phase 6 & Phase 7 Verifications Passed! ---')
 }
 
 runTests()

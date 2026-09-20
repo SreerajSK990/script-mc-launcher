@@ -236,7 +236,13 @@ export const App: React.FC = () => {
               />
             )}
 
-            {activeTab === 'mods' && <ModBrowserPage />}
+            {activeTab === 'mods' && (
+              <ModBrowserPage
+                instances={instances}
+                onOpenFolder={handleOpenFolder}
+                onNotification={showNotification}
+              />
+            )}
 
             {activeTab === 'logs' && (
               <LogsPage

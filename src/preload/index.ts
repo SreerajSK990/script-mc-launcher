@@ -52,6 +52,24 @@ const launcherAPI: LauncherAPI = {
     getEnvironment: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_GET_ENVIRONMENT),
     openExternalUrl: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_OPEN_EXTERNAL, url),
     openDirectory: (directoryPath: string) => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_OPEN_DIRECTORY, directoryPath)
+  },
+  mods: {
+    search: (params) => ipcRenderer.invoke(IPC_CHANNELS.MODS_SEARCH, params),
+    getVersions: (projectId, source, minecraftVersion, loader) =>
+      ipcRenderer.invoke(IPC_CHANNELS.MODS_GET_VERSIONS, projectId, source, minecraftVersion, loader),
+    install: (payload) => ipcRenderer.invoke(IPC_CHANNELS.MODS_INSTALL, payload),
+    listInstalled: (instanceId) => ipcRenderer.invoke(IPC_CHANNELS.MODS_LIST_INSTALLED, instanceId),
+    toggleInstalled: (instanceId, filename, enable) =>
+      ipcRenderer.invoke(IPC_CHANNELS.MODS_TOGGLE_INSTALLED, instanceId, filename, enable),
+    deleteInstalled: (instanceId, filename) =>
+      ipcRenderer.invoke(IPC_CHANNELS.MODS_DELETE_INSTALLED, instanceId, filename),
+    setCurseForgeKey: (key) => ipcRenderer.invoke(IPC_CHANNELS.MODS_SET_CURSEFORGE_KEY, key),
+    getCurseForgeKey: () => ipcRenderer.invoke(IPC_CHANNELS.MODS_GET_CURSEFORGE_KEY)
+  },
+  java: {
+    getRuntimes: () => ipcRenderer.invoke(IPC_CHANNELS.JAVA_GET_RUNTIMES),
+    downloadRuntime: (componentOrVersion: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.JAVA_DOWNLOAD_RUNTIME, componentOrVersion)
   }
 }
 

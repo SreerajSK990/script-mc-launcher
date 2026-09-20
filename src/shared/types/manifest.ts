@@ -84,6 +84,10 @@ export interface VersionPackage {
   releaseTime: string
   time: string
   type: string
+  javaVersion?: {
+    component: string
+    majorVersion: number
+  }
 }
 
 export interface AssetObject {

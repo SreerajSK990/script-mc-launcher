@@ -10,6 +10,7 @@ import { prepareMinecraftAssets } from '@main/core/minecraft/assets'
 import { buildExecutionArguments } from '@main/core/minecraft/arguments'
 import { spawnMinecraftProcess, type RunningProcessHandle } from '@main/core/minecraft/launcher'
 import { resolveInstanceLaunchConfiguration } from '@main/core/loaders/resolver'
+import { ensureJavaRuntime } from '@main/core/java/runtime'
 
 const activeProcesses = new Map<string, RunningProcessHandle>()
 
@@ -122,7 +123,30 @@ export async function launchInstance(
     jvmArguments.push(...launchConfig.extraJvmArguments)
   }
 
-  const javaExecutable = instance.javaPath || (await detectSystemJavaPath()) || 'java'
+  let javaExecutable = instance.javaPath
+
+  if (!javaExecutable) {
+    try {
+      sendProgress('STARTING_JAVA', 'Resolving Java runtime for instance...')
+      javaExecutable = await ensureJavaRuntime(
+        resolvedVersionPackage,
+        instance.minecraftVersion,
+        (stepText, current, total, percentage) => {
+          sendProgress('DOWNLOADING_LIBRARIES', stepText, current, total, percentage)
+        }
+      )
+      sendLog(`Configured managed Java runtime: ${javaExecutable}`)
+    } catch (javaError) {
+      sendLog(
+        `Automatic Java setup encountered an issue: ${
+          javaError instanceof Error ? javaError.message : String(javaError)
+        }. Falling back to system Java.`,
+        'warn'
+      )
+      javaExecutable = (await detectSystemJavaPath()) || 'java'
+    }
+  }
+
   const workingDirectory = getInstanceMinecraftPath(instance.id)
 
   sendProgress('STARTING_JAVA', 'Spawning Java Virtual Machine...')

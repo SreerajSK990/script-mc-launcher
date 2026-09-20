@@ -12,17 +12,18 @@ export interface DownloadTask {
   size?: number
 }
 
-export async function downloadFileWithSha1(
+export async function downloadFileWithHash(
   url: string,
   destinationPath: string,
-  expectedSha1?: string
+  expectedHash?: string,
+  hashAlgorithm: 'sha1' | 'sha512' = 'sha1'
 ): Promise<void> {
   if (await doesPathExist(destinationPath)) {
-    if (expectedSha1) {
+    if (expectedHash) {
       try {
         const existingFileBuffer = await fs.readFile(destinationPath)
-        const existingSha1 = createHash('sha1').update(existingFileBuffer).digest('hex')
-        if (existingSha1.toLowerCase() === expectedSha1.toLowerCase()) {
+        const existingHash = createHash(hashAlgorithm).update(existingFileBuffer).digest('hex')
+        if (existingHash.toLowerCase() === expectedHash.toLowerCase()) {
           return
         }
       } catch {
@@ -50,7 +51,7 @@ export async function downloadFileWithSha1(
       throw new Error(`Failed to download ${url}: HTTP ${response.status}`)
     }
 
-    const hashCalculator = createHash('sha1')
+    const hashCalculator = createHash(hashAlgorithm)
     const fileWriteStream = createWriteStream(temporaryFilePath)
 
     const nodeReadable = Readable.fromWeb(response.body as import('stream/web').ReadableStream)
@@ -61,11 +62,11 @@ export async function downloadFileWithSha1(
 
     await pipeline(nodeReadable, fileWriteStream)
 
-    const computedSha1 = hashCalculator.digest('hex')
+    const computedHash = hashCalculator.digest('hex')
 
-    if (expectedSha1 && computedSha1.toLowerCase() !== expectedSha1.toLowerCase()) {
+    if (expectedHash && computedHash.toLowerCase() !== expectedHash.toLowerCase()) {
       throw new Error(
-        `SHA-1 mismatch for ${url}. Expected ${expectedSha1}, computed ${computedSha1}`
+        `${hashAlgorithm.toUpperCase()} mismatch for ${url}. Expected ${expectedHash}, computed ${computedHash}`
       )
     }
 
@@ -77,6 +78,14 @@ export async function downloadFileWithSha1(
   } finally {
     await fs.rm(temporaryFilePath, { force: true }).catch(() => {})
   }
+}
+
+export async function downloadFileWithSha1(
+  url: string,
+  destinationPath: string,
+  expectedSha1?: string
+): Promise<void> {
+  return await downloadFileWithHash(url, destinationPath, expectedSha1, 'sha1')
 }
 
 export async function downloadBatch(

@@ -1,5 +1,18 @@
-import React, { useState } from 'react'
-import { FolderOpen, HardDrive, Cpu, Terminal, Save } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import {
+  FolderOpen,
+  HardDrive,
+  Cpu,
+  Terminal,
+  Save,
+  Key,
+  Download,
+  Check,
+  ExternalLink,
+  ShieldCheck,
+  RefreshCw,
+  Coffee
+} from 'lucide-react'
 import type { SystemEnvironment } from '@shared/types/system'
 import { LAUNCHER_METADATA } from '@shared/constants/defaults'
 import { Button } from '@renderer/components/common/Button'
@@ -8,9 +21,43 @@ interface SettingsPageProps {
   systemEnv: SystemEnvironment | null
 }
 
+interface ManagedRuntimeItem {
+  component: string
+  versionName: string
+  majorVersion: number
+  isInstalled: boolean
+  executablePath: string
+}
+
 export const SettingsPage: React.FC<SettingsPageProps> = ({ systemEnv }) => {
   const [defaultRamMb, setDefaultRamMb] = useState(4096)
+  const [curseForgeApiKey, setCurseForgeApiKey] = useState('')
   const [savedNotification, setSavedNotification] = useState(false)
+  const [javaRuntimes, setJavaRuntimes] = useState<ManagedRuntimeItem[]>([])
+  const [downloadingComponent, setDownloadingComponent] = useState<string | null>(null)
+  const [isLoadingRuntimes, setIsLoadingRuntimes] = useState(false)
+
+  const loadSettingsAndRuntimes = async () => {
+    try {
+      if (window.launcherAPI?.mods) {
+        const key = await window.launcherAPI.mods.getCurseForgeKey()
+        if (key) setCurseForgeApiKey(key)
+      }
+      if (window.launcherAPI?.java) {
+        setIsLoadingRuntimes(true)
+        const list = await window.launcherAPI.java.getRuntimes()
+        setJavaRuntimes(list)
+      }
+    } catch (error) {
+      console.error('Failed to load settings:', error)
+    } finally {
+      setIsLoadingRuntimes(false)
+    }
+  }
+
+  useEffect(() => {
+    loadSettingsAndRuntimes()
+  }, [])
 
   const handleOpenFolder = () => {
     if (systemEnv?.appDataDirectory) {
@@ -18,7 +65,25 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ systemEnv }) => {
     }
   }
 
-  const handleSave = () => {
+  const handleDownloadJava = async (component: string) => {
+    if (!window.launcherAPI?.java) return
+    try {
+      setDownloadingComponent(component)
+      await window.launcherAPI.java.downloadRuntime(component)
+      await loadSettingsAndRuntimes()
+      setSavedNotification(true)
+      setTimeout(() => setSavedNotification(false), 2000)
+    } catch (error) {
+      console.error('Failed to download Java runtime:', error)
+    } finally {
+      setDownloadingComponent(null)
+    }
+  }
+
+  const handleSave = async () => {
+    if (window.launcherAPI?.mods) {
+      await window.launcherAPI.mods.setCurseForgeKey(curseForgeApiKey.trim() || null)
+    }
     setSavedNotification(true)
     setTimeout(() => setSavedNotification(false), 2000)
   }
@@ -28,7 +93,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ systemEnv }) => {
       <div>
         <h2 className="text-2xl font-bold text-white tracking-tight">Settings</h2>
         <p className="text-sm text-slate-400 mt-0.5">
-          Configure default performance settings, storage locations, and Java runtimes
+          Configure default performance settings, storage locations, Java runtimes, and mod APIs
         </p>
       </div>
 
@@ -94,19 +159,102 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ systemEnv }) => {
         </div>
 
         <div className="pt-6 border-t border-border-subtle/60">
-          <h3 className="text-sm font-semibold text-slate-200 uppercase tracking-wider mb-3">
-            Detected Java Runtime
-          </h3>
-          <div className="flex items-center gap-3 p-3.5 rounded-xl bg-background-darkest border border-border-subtle">
-            <Terminal size={18} className="text-slate-400 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <div className="text-xs font-mono text-slate-200 truncate">
-                {systemEnv?.defaultJavaPath || 'No default Java binary detected in PATH'}
-              </div>
-              <div className="text-[11px] text-slate-500 mt-0.5">
-                Mojang runtime manager will automatically download the correct Java version for each instance.
-              </div>
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-200 uppercase tracking-wider">
+                Managed Java Runtimes (Mojang Official)
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Mojang JREs auto-download when launching instances. You can also pre-download them here.
+              </p>
             </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={RefreshCw}
+              onClick={loadSettingsAndRuntimes}
+              isLoading={isLoadingRuntimes}
+            >
+              Refresh
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+            {javaRuntimes.map((runtime) => (
+              <div
+                key={runtime.component}
+                className="p-3.5 rounded-xl bg-background-darkest border border-border-subtle flex items-center justify-between gap-3"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                    <Coffee size={16} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-white truncate">
+                        {runtime.versionName}
+                      </span>
+                      {runtime.isInstalled ? (
+                        <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          Installed
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 border border-border-subtle">
+                          Available
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-mono block truncate mt-0.5">
+                      {runtime.component}
+                    </span>
+                  </div>
+                </div>
+
+                {!runtime.isInstalled && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={Download}
+                    isLoading={downloadingComponent === runtime.component}
+                    onClick={() => handleDownloadJava(runtime.component)}
+                  >
+                    Download
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="pt-6 border-t border-border-subtle/60">
+          <h3 className="text-sm font-semibold text-slate-200 uppercase tracking-wider mb-1">
+            CurseForge Integration
+          </h3>
+          <p className="text-xs text-slate-400 mb-3">
+            Modrinth works out-of-the-box with zero setup. To also search and download from CurseForge, enter your free CurseForge API key.
+          </p>
+
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+              <Key size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="password"
+                placeholder="Optional CurseForge API Key ($2a$10$...)"
+                value={curseForgeApiKey}
+                onChange={(e) => setCurseForgeApiKey(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-background-darkest rounded-xl text-xs text-slate-100 placeholder-slate-500 border border-border-subtle focus:border-emerald-500 focus:outline-none font-mono"
+              />
+            </div>
+            <Button
+              variant="ghost"
+              size="md"
+              icon={ExternalLink}
+              onClick={() =>
+                window.launcherAPI?.system.openExternalUrl('https://console.curseforge.com/')
+              }
+            >
+              Get API Key
+            </Button>
           </div>
         </div>
 

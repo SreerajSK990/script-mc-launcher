@@ -45,6 +45,44 @@ export interface SystemActions {
   openDirectory: (directoryPath: string) => Promise<void>
 }
 
+import type {
+  ModSearchResult,
+  ModVersionFile,
+  ModSearchParams,
+  InstallModPayload,
+  InstalledModRecord,
+  ModSource
+} from './mods'
+
+export interface ModActions {
+  search: (params: ModSearchParams) => Promise<ModSearchResult[]>
+  getVersions: (
+    projectId: string,
+    source: ModSource,
+    minecraftVersion?: string,
+    loader?: ModLoaderType
+  ) => Promise<ModVersionFile[]>
+  install: (payload: InstallModPayload) => Promise<InstalledModRecord>
+  listInstalled: (instanceId: string) => Promise<InstalledModRecord[]>
+  toggleInstalled: (instanceId: string, filename: string, enable: boolean) => Promise<boolean>
+  deleteInstalled: (instanceId: string, filename: string) => Promise<boolean>
+  setCurseForgeKey: (key: string | null) => Promise<boolean>
+  getCurseForgeKey: () => Promise<string | null>
+}
+
+export interface JavaActions {
+  getRuntimes: () => Promise<
+    Array<{
+      component: string
+      versionName: string
+      majorVersion: number
+      isInstalled: boolean
+      executablePath: string
+    }>
+  >
+  downloadRuntime: (componentOrVersion: string) => Promise<string>
+}
+
 export interface LauncherAPI {
   window: WindowControlActions
   instances: InstanceActions
@@ -52,4 +90,6 @@ export interface LauncherAPI {
   launch: LaunchActions
   meta: MetaActions
   system: SystemActions
+  mods: ModActions
+  java: JavaActions
 }
