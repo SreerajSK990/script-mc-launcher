@@ -17,6 +17,18 @@ function resolvePreloadPath(): string {
   return join(__dirname, '../preload/index.js')
 }
 
+function resolveAppIcon(): string | undefined {
+  const devPath = join(__dirname, '../../build/icon.png')
+  if (existsSync(devPath)) {
+    return devPath
+  }
+  const prodPath = join(process.resourcesPath, 'build/icon.png')
+  if (existsSync(prodPath)) {
+    return prodPath
+  }
+  return undefined
+}
+
 async function createMainWindow(): Promise<BrowserWindow> {
   const window = new BrowserWindow({
     width: 1280,
@@ -28,6 +40,7 @@ async function createMainWindow(): Promise<BrowserWindow> {
     titleBarStyle: 'hidden',
     backgroundColor: '#0B0D13',
     autoHideMenuBar: true,
+    icon: resolveAppIcon(),
     webPreferences: {
       preload: resolvePreloadPath(),
       sandbox: false,

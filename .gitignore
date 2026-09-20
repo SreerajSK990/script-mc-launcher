@@ -2,7 +2,9 @@ node_modules/
 dist/
 dist-electron/
 out/
-build/
+build/*
+!build/icon.ico
+!build/icon.png
 .cache/
 *.log
 *.tsbuildinfo

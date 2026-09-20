@@ -7,12 +7,18 @@
   },
   "files": [
     "out/**/*",
-    "package.json"
+    "package.json",
+    "build/**/*"
   ],
   "win": {
+    "icon": "build/icon.ico",
     "target": [
       {
         "target": "nsis",
+        "arch": ["x64"]
+      },
+      {
+        "target": "portable",
         "arch": ["x64"]
       }
     ]
@@ -21,6 +27,12 @@
     "oneClick": false,
     "perMachine": false,
     "allowToChangeInstallationDirectory": true,
-    "deleteAppDataOnUninstall": false
+    "deleteAppDataOnUninstall": false,
+    "installerIcon": "build/icon.ico",
+    "uninstallerIcon": "build/icon.ico",
+    "uninstallDisplayName": "${productName}",
+    "createDesktopShortcut": "always",
+    "createStartMenuShortcut": true,
+    "shortcutName": "Script Minecraft Launcher"
   }
 }
