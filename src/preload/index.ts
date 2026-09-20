@@ -157,6 +157,13 @@ const launcherAPI: LauncherAPI = {
     save: (params: any) => ipcRenderer.invoke(IPC_CHANNELS.SKINS_SAVE, params),
     delete: (skinId: string) => ipcRenderer.invoke(IPC_CHANNELS.SKINS_DELETE, skinId),
     searchPlayer: (username: string) => ipcRenderer.invoke(IPC_CHANNELS.SKINS_SEARCH_PLAYER, username)
+  },
+  gameSettings: {
+    get: (instanceId: string) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_GAME, instanceId),
+    save: (instanceId: string, payload: any) =>
+      ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SAVE_GAME, instanceId, payload),
+    openFile: (instanceId: string, fileType: 'options' | 'sodium' | 'optifine') =>
+      ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_OPEN_FILE, instanceId, fileType)
   }
 }
 

@@ -12,6 +12,7 @@ import { registerExternalLauncherIpcHandlers } from '@main/ipc/externalLaunchers
 import { registerFontsIpcHandlers } from '@main/ipc/fonts'
 import { registerServersIpcHandlers } from '@main/ipc/servers'
 import { registerSkinsIpcHandlers } from '@main/ipc/skins'
+import { registerGameSettingsIpcHandlers } from '@main/ipc/gameSettings'
 
 export function registerAllIpcHandlers(mainWindow: BrowserWindow): void {
   registerInstanceIpcHandlers()
@@ -27,5 +28,6 @@ export function registerAllIpcHandlers(mainWindow: BrowserWindow): void {
   registerFontsIpcHandlers()
   registerServersIpcHandlers()
   registerSkinsIpcHandlers()
+  registerGameSettingsIpcHandlers()
 }
 

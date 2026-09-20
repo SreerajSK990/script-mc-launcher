@@ -174,6 +174,18 @@ export interface SkinActions {
   searchPlayer: (username: string) => Promise<PlayerSkinSearchResult>
 }
 
+export interface GameSettingsActions {
+  get: (instanceId: string) => Promise<import('./settings').GameSettingsPayload>
+  save: (
+    instanceId: string,
+    payload: import('./settings').GameSettingsPayload
+  ) => Promise<boolean>
+  openFile: (
+    instanceId: string,
+    fileType: 'options' | 'sodium' | 'optifine'
+  ) => Promise<void>
+}
+
 export interface LauncherAPI {
   window: WindowControlActions
   instances: InstanceActions
@@ -189,4 +201,5 @@ export interface LauncherAPI {
   fonts: FontActions
   servers: ServerActions
   skins: SkinActions
+  gameSettings: GameSettingsActions
 }

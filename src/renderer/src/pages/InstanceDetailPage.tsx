@@ -4,6 +4,7 @@ import {
   Play,
   FolderOpen,
   SlidersHorizontal,
+  Sliders,
   Package,
   Camera,
   Save,
@@ -31,6 +32,7 @@ import type { ScreenshotEntry } from '@shared/types/screenshot'
 import { Button } from '@renderer/components/common/Button'
 import { ConfirmModal } from '@renderer/components/common/ConfirmModal'
 import { ChangeModVersionModal } from '@renderer/components/mods/ChangeModVersionModal'
+import { MinecraftSettingsEditor } from '@renderer/components/settings/MinecraftSettingsEditor'
 import {
   getMinecraftIconById,
   getRandomMinecraftIcon
@@ -46,7 +48,7 @@ interface InstanceDetailPageProps {
   onInstanceUpdated: (updated: InstanceConfiguration) => void
 }
 
-type DetailSubTab = 'config' | 'mods' | 'screenshots'
+type DetailSubTab = 'config' | 'mods' | 'screenshots' | 'mcSettings'
 
 const RAM_PRESETS = [
   { label: '2 GB', mb: 2048 },
@@ -111,7 +113,6 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<DetailSubTab>('config')
 
-  // Configuration state
   const [name, setName] = useState(instance.name)
   const [ramMb, setRamMb] = useState(instance.ramAllocationMegabytes)
   const [jvmArgsText, setJvmArgsText] = useState((instance.jvmArguments || []).join(' '))
@@ -122,8 +123,6 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
-
-  // Mods state
   const [installedMods, setInstalledMods] = useState<InstalledModRecord[]>([])
   const [modsSearch, setModsSearch] = useState('')
   const [isLoadingMods, setIsLoadingMods] = useState(false)
@@ -136,7 +135,6 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
   const [updateProgress, setUpdateProgress] = useState<{ message: string; current: number; total: number } | null>(null)
   const [isDraggingMods, setIsDraggingMods] = useState(false)
 
-  // Confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean
     title: string
@@ -155,13 +153,11 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
     setConfirmDialog((prev) => ({ ...prev, isOpen: false }))
   }
 
-  // Screenshots state
   const [screenshots, setScreenshots] = useState<ScreenshotEntry[]>([])
   const [isLoadingScreenshots, setIsLoadingScreenshots] = useState(false)
   const [selectedLightboxScreenshot, setSelectedLightboxScreenshot] = useState<ScreenshotEntry | null>(null)
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null)
 
-  // Sync state if instance prop changes
   useEffect(() => {
     setName(instance.name)
     setRamMb(instance.ramAllocationMegabytes)
@@ -169,7 +165,6 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
     setJavaPath(instance.javaPath || '')
   }, [instance])
 
-  // Load mods
   const loadMods = useCallback(async (silent = false) => {
     if (!window.launcherAPI?.mods) return
     if (!silent) setIsLoadingMods(true)
@@ -183,7 +178,6 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
     }
   }, [instance.id])
 
-  // Check for mod updates
   const checkForUpdates = useCallback(async () => {
     if (!window.launcherAPI?.mods) return
     setIsCheckingUpdates(true)
@@ -197,7 +191,6 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
     }
   }, [instance.id])
 
-  // Load screenshots
   const loadScreenshots = useCallback(async () => {
     if (!window.launcherAPI?.screenshots) return
     setIsLoadingScreenshots(true)
@@ -265,7 +258,6 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
   }
 
   const handleToggleMod = async (mod: InstalledModRecord) => {
-    // Optimistic toggle (0ms latency, zero screen flicker!)
     const nextEnabled = !mod.enabled
     setInstalledMods((prev) =>
       prev.map((m) => (m.filename === mod.filename ? { ...m, enabled: nextEnabled } : m))
@@ -276,7 +268,6 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
       await loadMods(true)
     } catch (err) {
       console.error('Failed to toggle mod:', err)
-      // Revert on error
       setInstalledMods((prev) =>
         prev.map((m) => (m.filename === mod.filename ? { ...m, enabled: !nextEnabled } : m))
       )
@@ -440,7 +431,6 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
 
   return (
     <div className="flex flex-col gap-6 w-full pb-10">
-      {/* Top Breadcrumb & Actions Bar */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-background-card border border-border-subtle p-5 rounded-2xl">
         <div className="flex items-center gap-4">
           <Button
@@ -495,7 +485,6 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
         </div>
       </div>
 
-      {/* Navigation Sub-Tabs */}
       <div className="flex items-center gap-2 border-b border-border-subtle pb-px">
         <button
           onClick={() => setActiveTab('config')}
@@ -542,16 +531,25 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
             </span>
           )}
         </button>
+
+        <button
+          onClick={() => setActiveTab('mcSettings')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+            activeTab === 'mcSettings'
+              ? 'bg-primary/10 text-primary border border-primary/20'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-background-card'
+          }`}
+        >
+          <Sliders size={16} />
+          <span>Minecraft Settings</span>
+        </button>
       </div>
 
-      {/* Tab 1: Configuration */}
       {activeTab === 'config' && (
         <div className="space-y-6">
-          {/* General & Name */}
           <div className="bg-background-card border border-border-subtle rounded-2xl p-6 space-y-4">
             <h3 className="text-base font-semibold text-white">General Information</h3>
             
-            {/* Instance Icon Customizer */}
             <div className="max-w-md">
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
                 Instance Icon
@@ -660,7 +658,6 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
 
           </div>
 
-          {/* Memory Allocation */}
           <div className="bg-background-card border border-border-subtle rounded-2xl p-6 space-y-5">
             <div className="flex items-center justify-between">
               <div>
@@ -704,7 +701,6 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
             </div>
           </div>
 
-          {/* Java Runtime Override */}
           <div className="bg-background-card border border-border-subtle rounded-2xl p-6 space-y-4">
             <div>
               <h3 className="text-base font-semibold text-white">Java Executable</h3>
@@ -744,7 +740,6 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
             </div>
           </div>
 
-          {/* Custom JVM Arguments */}
           <div className="bg-background-card border border-border-subtle rounded-2xl p-6 space-y-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div>
@@ -796,7 +791,6 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
             />
           </div>
 
-          {/* Save Action */}
           <div className="flex items-center justify-between bg-background-card border border-border-subtle rounded-2xl p-5">
             <div>
               {saveSuccess && (
@@ -820,7 +814,6 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
         </div>
       )}
 
-      {/* Tab 2: Installed Mods */}
       {activeTab === 'mods' && (
         <div
           onDragOver={(e) => {
@@ -828,7 +821,6 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
             setIsDraggingMods(true)
           }}
           onDragLeave={(e) => {
-            // Only deactivate if leaving the container
             if (!e.currentTarget.contains(e.relatedTarget as Node)) {
               setIsDraggingMods(false)
             }
@@ -1056,7 +1048,6 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
         </div>
       )}
 
-      {/* Tab 3: Screenshots Gallery */}
       {activeTab === 'screenshots' && (
         <div className="space-y-5">
           <div className="flex items-center justify-between bg-background-card border border-border-subtle p-3 rounded-2xl">
@@ -1163,7 +1154,13 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
         </div>
       )}
 
-      {/* Lightbox Modal */}
+      {activeTab === 'mcSettings' && (
+        <MinecraftSettingsEditor
+          instanceId={instance.id}
+          onOpenFolder={() => onOpenFolder(instance.id)}
+        />
+      )}
+
       {selectedLightboxScreenshot && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
@@ -1218,7 +1215,6 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
         </div>
       )}
 
-      {/* Change Mod Version Modal */}
       <ChangeModVersionModal
         isOpen={Boolean(selectedModForVersionChange)}
         onClose={() => setSelectedModForVersionChange(null)}
@@ -1231,7 +1227,6 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
         }}
       />
 
-      {/* Themed Confirmation Modal */}
       <ConfirmModal
         isOpen={confirmDialog.isOpen}
         title={confirmDialog.title}

@@ -83,5 +83,9 @@ export const IPC_CHANNELS = {
   SKINS_DELETE: 'skins:delete',
   SKINS_SEARCH_PLAYER: 'skins:search-player',
   SKINS_APPLY: 'skins:apply',
-  SKINS_GET_ACTIVE: 'skins:get-active'
+  SKINS_GET_ACTIVE: 'skins:get-active',
+
+  SETTINGS_GET_GAME: 'settings:get-game',
+  SETTINGS_SAVE_GAME: 'settings:save-game',
+  SETTINGS_OPEN_FILE: 'settings:open-file'
 } as const

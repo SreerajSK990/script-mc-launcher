@@ -14,6 +14,7 @@ import {
   switchActiveAccount,
   logoutAccount
 } from '../src/main/services/auth.ts'
+import { readGameSettings, saveGameSettings } from '../src/main/core/minecraft/options.ts'
 
 async function runTests() {
   console.log('--- Phase 1 Services Verification ---')
@@ -603,6 +604,73 @@ async function runTests() {
     throw new Error('Custom skin was not deleted!')
   }
   console.log('Verified skin deletion.')
+
+  const initialSettings = await readGameSettings(dropTestInstance.id)
+  if (initialSettings.vanilla.renderDistance !== 12 || initialSettings.hasOptionsTxt) {
+    throw new Error('Default game settings mismatch!')
+  }
+  console.log('Verified initial default game settings.')
+
+  await saveGameSettings(dropTestInstance.id, {
+    ...initialSettings,
+    vanilla: {
+      ...initialSettings.vanilla,
+      renderDistance: 16,
+      maxFps: 144,
+      fov: 90,
+      enableVsync: true
+    },
+    sodium: {
+      smooth_lighting: 'HIGH',
+      biome_blend: 5,
+      entity_distance_scaling: 150,
+      entity_shadows: false,
+      vignette: true,
+      leaves_quality: 'HIGH',
+      weather_quality: 'HIGH',
+      particle_quality: 'HIGH',
+      chunk_builder_threads: 4,
+      always_defer_chunk_updates: true,
+      use_block_face_culling: true,
+      use_fog_occlusion: true,
+      use_entity_culling: true,
+      use_compact_vertex_format: true,
+      animate_only_visible_textures: true,
+      cpu_render_ahead_limit: 2,
+      allow_direct_memory_access: true
+    },
+    optifine: {
+      ofSmoothFps: true,
+      ofSmoothWorld: true,
+      ofFastRender: true,
+      ofFastMath: true,
+      ofDynamicLights: 'fancy',
+      ofDynamicFov: true,
+      ofConnectedTextures: 'fancy',
+      ofCustomSky: true,
+      ofCustomFonts: true,
+      ofCustomColors: true,
+      ofBetterGrass: 'fast',
+      ofBetterSnow: true,
+      ofClearWater: true,
+      ofShowFps: true,
+      ofFogType: 'fancy'
+    }
+  })
+
+  const reloadedSettings = await readGameSettings(dropTestInstance.id)
+  if (
+    !reloadedSettings.hasOptionsTxt ||
+    reloadedSettings.vanilla.renderDistance !== 16 ||
+    reloadedSettings.vanilla.maxFps !== 144 ||
+    reloadedSettings.vanilla.fov !== 90 ||
+    reloadedSettings.vanilla.enableVsync !== true ||
+    reloadedSettings.sodium?.chunk_builder_threads !== 4 ||
+    reloadedSettings.optifine?.ofSmoothFps !== true
+  ) {
+    throw new Error('Saved game settings did not reload correctly!')
+  }
+  console.log('Verified game settings saved and reloaded successfully (options.txt, sodium, optifine).')
 
   await deleteInstanceById(dropTestInstance.id)
   console.log('--- All Launcher Cloner, Modpack, Screenshot, Dropped Mods, Servers, and Skins Verifications Passed! ---')
