@@ -5,6 +5,12 @@
     "buildResources": "build",
     "output": "dist"
   },
+  "publish": {
+    "provider": "github",
+    "owner": "SreerajSK990",
+    "repo": "script-mc-launcher",
+    "releaseType": "release"
+  },
   "files": [
     "out/**/*",
     "package.json",

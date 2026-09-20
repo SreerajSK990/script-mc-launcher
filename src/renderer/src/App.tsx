@@ -20,6 +20,8 @@ import { AccountModal } from '@renderer/components/auth/AccountModal'
 import { ConfirmModal } from '@renderer/components/common/ConfirmModal'
 import { ToastNotification } from '@renderer/components/common/ToastNotification'
 import { applyLauncherFont } from '@renderer/components/settings/FontSettingsSection'
+import { UpdateReadyModal } from '@renderer/components/updater/UpdateReadyModal'
+import type { UpdateInfo } from '@shared/types/updater'
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActivePageTab>('dashboard')
@@ -37,6 +39,7 @@ export const App: React.FC = () => {
   const [activeLaunchingInstance, setActiveLaunchingInstance] = useState<InstanceConfiguration | null>(null)
   const [launchProgress, setLaunchProgress] = useState<LaunchProgressEvent | null>(null)
   const [launchLogs, setLaunchLogs] = useState<LaunchLogEvent[]>([])
+  const [downloadedUpdate, setDownloadedUpdate] = useState<UpdateInfo | null>(null)
 
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean
@@ -180,6 +183,16 @@ export const App: React.FC = () => {
       unsubLogs()
     }
   }, [fetchInstances])
+
+  useEffect(() => {
+    if (!window.launcherAPI?.updater) return
+    const unsub = window.launcherAPI.updater.onDownloaded((info) => {
+      setDownloadedUpdate(info)
+    })
+    return () => {
+      unsub()
+    }
+  }, [])
 
   const handleCreateInstance = async (payload: CreateInstancePayload) => {
     if (window.launcherAPI?.instances) {
@@ -468,6 +481,13 @@ export const App: React.FC = () => {
         message={activeNotification}
         durationMs={5000}
         onClose={() => setActiveNotification(null)}
+      />
+
+      <UpdateReadyModal
+        isOpen={Boolean(downloadedUpdate)}
+        info={downloadedUpdate}
+        onClose={() => setDownloadedUpdate(null)}
+        onRestart={() => window.launcherAPI?.updater?.quitAndInstall()}
       />
     </div>
   )

@@ -186,6 +186,20 @@ export interface GameSettingsActions {
   ) => Promise<void>
 }
 
+export interface UpdaterActions {
+  checkForUpdates: () => Promise<import('./updater').UpdateCheckResult>
+  quitAndInstall: () => Promise<void>
+  onStatus: (
+    callback: (status: import('./updater').UpdateStatus, message?: string) => void
+  ) => () => void
+  onProgress: (
+    callback: (progress: import('./updater').UpdateProgressEvent) => void
+  ) => () => void
+  onDownloaded: (
+    callback: (info: import('./updater').UpdateInfo) => void
+  ) => () => void
+}
+
 export interface LauncherAPI {
   window: WindowControlActions
   instances: InstanceActions
@@ -202,4 +216,5 @@ export interface LauncherAPI {
   servers: ServerActions
   skins: SkinActions
   gameSettings: GameSettingsActions
+  updater: UpdaterActions
 }

@@ -164,6 +164,32 @@ const launcherAPI: LauncherAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SAVE_GAME, instanceId, payload),
     openFile: (instanceId: string, fileType: 'options' | 'sodium' | 'optifine') =>
       ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_OPEN_FILE, instanceId, fileType)
+  },
+  updater: {
+    checkForUpdates: () => ipcRenderer.invoke(IPC_CHANNELS.UPDATER_CHECK),
+    quitAndInstall: () => ipcRenderer.invoke(IPC_CHANNELS.UPDATER_QUIT_AND_INSTALL),
+    onStatus: (callback: any) => {
+      const handler = (_event: Electron.IpcRendererEvent, status: any, message?: string) =>
+        callback(status, message)
+      ipcRenderer.on(IPC_CHANNELS.UPDATER_STATUS_EVENT, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.UPDATER_STATUS_EVENT, handler)
+      }
+    },
+    onProgress: (callback: any) => {
+      const handler = (_event: Electron.IpcRendererEvent, progress: any) => callback(progress)
+      ipcRenderer.on(IPC_CHANNELS.UPDATER_PROGRESS_EVENT, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.UPDATER_PROGRESS_EVENT, handler)
+      }
+    },
+    onDownloaded: (callback: any) => {
+      const handler = (_event: Electron.IpcRendererEvent, info: any) => callback(info)
+      ipcRenderer.on(IPC_CHANNELS.UPDATER_DOWNLOADED_EVENT, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.UPDATER_DOWNLOADED_EVENT, handler)
+      }
+    }
   }
 }
 

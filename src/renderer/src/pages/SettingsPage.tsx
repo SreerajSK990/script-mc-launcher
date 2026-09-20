@@ -11,9 +11,13 @@ import {
   ExternalLink,
   ShieldCheck,
   RefreshCw,
-  Coffee
+  Coffee,
+  Sparkles,
+  RotateCcw,
+  Loader2
 } from 'lucide-react'
 import type { SystemEnvironment } from '@shared/types/system'
+import type { UpdateStatus, UpdateProgressEvent, UpdateInfo } from '@shared/types/updater'
 import { LAUNCHER_METADATA } from '@shared/constants/defaults'
 import { Button } from '@renderer/components/common/Button'
 import { FontSettingsSection } from '@renderer/components/settings/FontSettingsSection'
@@ -37,6 +41,60 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ systemEnv }) => {
   const [javaRuntimes, setJavaRuntimes] = useState<ManagedRuntimeItem[]>([])
   const [downloadingComponent, setDownloadingComponent] = useState<string | null>(null)
   const [isLoadingRuntimes, setIsLoadingRuntimes] = useState(false)
+
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle')
+  const [updateStatusMessage, setUpdateStatusMessage] = useState<string | null>(null)
+  const [updateProgress, setUpdateProgress] = useState<UpdateProgressEvent | null>(null)
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
+  const [downloadedUpdateInfo, setDownloadedUpdateInfo] = useState<UpdateInfo | null>(null)
+
+  useEffect(() => {
+    if (!window.launcherAPI?.updater) return
+    const unsubStatus = window.launcherAPI.updater.onStatus((status, msg) => {
+      setUpdateStatus(status)
+      if (msg) setUpdateStatusMessage(msg)
+      if (status === 'checking') setIsCheckingUpdate(true)
+      else setIsCheckingUpdate(false)
+    })
+    const unsubProgress = window.launcherAPI.updater.onProgress((p) => {
+      setUpdateProgress(p)
+      setUpdateStatus('downloading')
+    })
+    const unsubDownloaded = window.launcherAPI.updater.onDownloaded((info) => {
+      setUpdateStatus('downloaded')
+      setDownloadedUpdateInfo(info)
+    })
+    return () => {
+      unsubStatus()
+      unsubProgress()
+      unsubDownloaded()
+    }
+  }, [])
+
+  const handleCheckForUpdates = async () => {
+    if (!window.launcherAPI?.updater) return
+    setIsCheckingUpdate(true)
+    setUpdateStatus('checking')
+    setUpdateStatusMessage(null)
+    try {
+      const res = await window.launcherAPI.updater.checkForUpdates()
+      if (!res.hasUpdate) {
+        setUpdateStatus('not-available')
+      } else {
+        setUpdateStatus('available')
+        if (res.latestVersion) setUpdateStatusMessage(`v${res.latestVersion}`)
+      }
+    } catch (err: any) {
+      setUpdateStatus('error')
+      setUpdateStatusMessage(err?.message || 'Failed to check for updates')
+    } finally {
+      setIsCheckingUpdate(false)
+    }
+  }
+
+  const handleQuitAndInstall = () => {
+    window.launcherAPI?.updater?.quitAndInstall()
+  }
 
   const loadSettingsAndRuntimes = async () => {
     try {
@@ -260,6 +318,104 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ systemEnv }) => {
         </div>
 
         <FontSettingsSection />
+
+        <div className="pt-6 border-t border-border-subtle/60">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-200 uppercase tracking-wider">
+                Application Updates
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Automatically check GitHub Releases for launcher updates and improvements
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {updateStatus === 'downloaded' && (
+                <Button variant="primary" size="sm" icon={RotateCcw} onClick={handleQuitAndInstall}>
+                  Restart to Apply
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={isCheckingUpdate ? Loader2 : RefreshCw}
+                onClick={handleCheckForUpdates}
+                disabled={isCheckingUpdate || updateStatus === 'downloading'}
+              >
+                {isCheckingUpdate ? 'Checking...' : 'Check for Updates'}
+              </Button>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-background-darkest border border-border-subtle flex flex-col gap-3">
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400">Current Version:</span>
+                <span className="text-emerald-400 font-mono font-semibold">
+                  v{LAUNCHER_METADATA.VERSION}
+                </span>
+              </div>
+              <div>
+                {updateStatus === 'idle' && (
+                  <span className="text-slate-500 font-mono text-[11px]">Ready to check</span>
+                )}
+                {updateStatus === 'checking' && (
+                  <span className="text-sky-400 font-mono text-[11px] flex items-center gap-1.5">
+                    <Loader2 size={12} className="animate-spin" />
+                    Checking GitHub...
+                  </span>
+                )}
+                {updateStatus === 'available' && (
+                  <span className="text-amber-400 font-mono text-[11px]">
+                    New version found {updateStatusMessage || ''} — downloading...
+                  </span>
+                )}
+                {updateStatus === 'not-available' && (
+                  <span className="text-emerald-400 font-mono text-[11px] flex items-center gap-1">
+                    <Check size={12} />
+                    You are on the latest version
+                  </span>
+                )}
+                {updateStatus === 'downloading' && (
+                  <span className="text-sky-400 font-mono text-[11px] flex items-center gap-1.5">
+                    <Download size={12} className="animate-bounce" />
+                    Downloading update...
+                  </span>
+                )}
+                {updateStatus === 'downloaded' && (
+                  <span className="text-emerald-400 font-mono text-[11px] flex items-center gap-1">
+                    <Check size={12} />
+                    Update {downloadedUpdateInfo?.version ? `v${downloadedUpdateInfo.version}` : ''} ready to install
+                  </span>
+                )}
+                {updateStatus === 'error' && (
+                  <span className="text-rose-400 font-mono text-[11px]">
+                    {updateStatusMessage || 'Check failed'}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {updateStatus === 'downloading' && updateProgress && (
+              <div className="flex flex-col gap-1.5 pt-2 border-t border-border-subtle/50">
+                <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                  <span>Progress</span>
+                  <span>{updateProgress.percent.toFixed(1)}%</span>
+                </div>
+                <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 transition-all duration-200"
+                    style={{ width: `${Math.min(100, Math.max(0, updateProgress.percent))}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] font-mono text-slate-500">
+                  <span>{(updateProgress.transferred / 1024 / 1024).toFixed(1)} MB / {(updateProgress.total / 1024 / 1024).toFixed(1)} MB</span>
+                  <span>{(updateProgress.bytesPerSecond / 1024 / 1024).toFixed(2)} MB/s</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
 
         <div className="pt-6 border-t border-border-subtle/60">
           <h3 className="text-sm font-semibold text-slate-200 uppercase tracking-wider mb-3">

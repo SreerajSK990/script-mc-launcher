@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "adm-zip": "^0.6.1",
+    "electron-updater": "^6.8.9",
     "lucide-react": "^1.16.0",
     "marked": "^18.0.13",
     "react": "^19.0.0",

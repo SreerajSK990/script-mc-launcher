@@ -87,5 +87,11 @@ export const IPC_CHANNELS = {
 
   SETTINGS_GET_GAME: 'settings:get-game',
   SETTINGS_SAVE_GAME: 'settings:save-game',
-  SETTINGS_OPEN_FILE: 'settings:open-file'
+  SETTINGS_OPEN_FILE: 'settings:open-file',
+
+  UPDATER_CHECK: 'updater:check',
+  UPDATER_QUIT_AND_INSTALL: 'updater:quit-and-install',
+  UPDATER_STATUS_EVENT: 'updater:status',
+  UPDATER_PROGRESS_EVENT: 'updater:progress',
+  UPDATER_DOWNLOADED_EVENT: 'updater:downloaded'
 } as const

@@ -6,6 +6,7 @@ import { initializeAuthenticationState } from '@main/services/auth'
 import { initializeLauncherSettings } from '@main/services/settings'
 import { initCurseForgeApiKey } from '@main/services/mods'
 import { registerAllIpcHandlers } from '@main/ipc/register'
+import { initializeAutoUpdater } from '@main/services/updater'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -77,10 +78,12 @@ app.whenReady().then(async () => {
     initCurseForgeApiKey(settings.curseForgeApiKey)
   }
   mainWindow = await createMainWindow()
+  initializeAutoUpdater(mainWindow)
 
   app.on('activate', async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       mainWindow = await createMainWindow()
+      initializeAutoUpdater(mainWindow)
     }
   })
 })
