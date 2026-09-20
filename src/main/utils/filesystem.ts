@@ -19,16 +19,58 @@ export async function readJsonFile<T>(filePath: string): Promise<T | null> {
   }
 }
 
+const activeWriteQueues = new Map<string, Promise<void>>()
+
 export async function writeJsonFileAtomic<T>(filePath: string, data: T): Promise<void> {
-  const targetDirectory = dirname(filePath)
-  await ensureDirectoryExists(targetDirectory)
+  const previousQueue = activeWriteQueues.get(filePath) || Promise.resolve()
 
-  const temporaryFileName = `.${randomBytes(6).toString('hex')}.tmp`
-  const temporaryFilePath = join(targetDirectory, temporaryFileName)
+  const currentWrite = (async () => {
+    await previousQueue.catch(() => {})
 
-  const serializedContent = JSON.stringify(data, null, 2)
-  await fs.writeFile(temporaryFilePath, serializedContent, 'utf-8')
-  await fs.rename(temporaryFilePath, filePath)
+    const targetDirectory = dirname(filePath)
+    await ensureDirectoryExists(targetDirectory)
+
+    const temporaryFileName = `.${randomBytes(6).toString('hex')}.tmp`
+    const temporaryFilePath = join(targetDirectory, temporaryFileName)
+
+    const serializedContent = JSON.stringify(data, null, 2)
+    await fs.writeFile(temporaryFilePath, serializedContent, 'utf-8')
+
+    let renameSucceeded = false
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        await fs.rename(temporaryFilePath, filePath)
+        renameSucceeded = true
+        break
+      } catch (renameError) {
+        const errorWithCode = renameError as NodeJS.ErrnoException
+        if (
+          errorWithCode.code === 'EPERM' ||
+          errorWithCode.code === 'EBUSY' ||
+          errorWithCode.code === 'EEXIST'
+        ) {
+          await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)))
+        } else {
+          throw renameError
+        }
+      }
+    }
+
+    if (!renameSucceeded) {
+      await fs.copyFile(temporaryFilePath, filePath)
+      await fs.rm(temporaryFilePath, { force: true }).catch(() => {})
+    }
+  })()
+
+  activeWriteQueues.set(filePath, currentWrite)
+
+  try {
+    await currentWrite
+  } finally {
+    if (activeWriteQueues.get(filePath) === currentWrite) {
+      activeWriteQueues.delete(filePath)
+    }
+  }
 }
 
 export async function removeDirectorySafely(directoryPath: string): Promise<void> {

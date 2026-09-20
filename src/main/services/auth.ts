@@ -29,54 +29,76 @@ function generateOfflinePlayerUuid(playerName: string): string {
   return formattedUuid
 }
 
+let authenticationInitializationPromise: Promise<AuthState> | null = null
+
 export async function initializeAuthenticationState(): Promise<AuthState> {
-  const { activeAccountId, accounts } = await loadStoredAccounts()
-  const refreshedAccounts: StoredAccount[] = []
+  if (authenticationInitializationPromise) {
+    return await authenticationInitializationPromise
+  }
 
-  for (const account of accounts) {
-    if (account.accountType === 'microsoft' && account.refreshToken) {
-      const isExpired = Date.now() >= account.expiresAt - 5 * 60 * 1000
-      if (isExpired) {
-        try {
-          const msTokens = await refreshMicrosoftToken(account.refreshToken)
-          const xbl = await authenticateXboxLive(msTokens.access_token)
-          const xsts = await authorizeXsts(xbl.token)
-          const mcAuth = await loginWithMinecraftServices(xsts.userHash, xsts.token)
-          const profile = await fetchMinecraftProfile(mcAuth.accessToken)
+  authenticationInitializationPromise = (async () => {
+    const { activeAccountId, accounts } = await loadStoredAccounts()
+    const refreshedAccounts: StoredAccount[] = []
+    let hasTokensBeenRefreshed = false
 
-          refreshedAccounts.push({
-            ...account,
-            username: profile.username,
-            accessToken: mcAuth.accessToken,
-            refreshToken: msTokens.refresh_token || account.refreshToken,
-            expiresAt: Date.now() + mcAuth.expiresIn * 1000,
-            skinUrl: profile.skins.find((s) => s.state === 'ACTIVE')?.url
-          })
-          continue
-        } catch (refreshError) {
-          console.error(`Silent refresh failed for account ${account.username}:`, refreshError)
+    for (const account of accounts) {
+      if (account.accountType === 'microsoft' && account.refreshToken) {
+        const isExpired = Date.now() >= account.expiresAt - 5 * 60 * 1000
+        if (isExpired) {
+          try {
+            const msTokens = await refreshMicrosoftToken(account.refreshToken)
+            const xbl = await authenticateXboxLive(msTokens.access_token)
+            const xsts = await authorizeXsts(xbl.token)
+            const mcAuth = await loginWithMinecraftServices(xsts.userHash, xsts.token)
+            const profile = await fetchMinecraftProfile(mcAuth.accessToken)
+
+            refreshedAccounts.push({
+              ...account,
+              username: profile.username,
+              accessToken: mcAuth.accessToken,
+              refreshToken: msTokens.refresh_token || account.refreshToken,
+              expiresAt: Date.now() + mcAuth.expiresIn * 1000,
+              skinUrl: profile.skins.find((s) => s.state === 'ACTIVE')?.url
+            })
+            hasTokensBeenRefreshed = true
+            continue
+          } catch (refreshError) {
+            console.error(`Silent refresh failed for account ${account.username}:`, refreshError)
+          }
         }
       }
+
+      refreshedAccounts.push(account)
     }
 
-    refreshedAccounts.push(account)
+    const activeAccount =
+      refreshedAccounts.find((acc) => acc.id === activeAccountId) || refreshedAccounts[0] || null
+
+    cachedAuthState = {
+      activeAccount,
+      accounts: refreshedAccounts
+    }
+
+    if (hasTokensBeenRefreshed) {
+      await saveStoredAccounts(activeAccount?.id || null, refreshedAccounts)
+    }
+
+    return cachedAuthState
+  })()
+
+  try {
+    return await authenticationInitializationPromise
+  } finally {
+    authenticationInitializationPromise = null
   }
-
-  const activeAccount =
-    refreshedAccounts.find((acc) => acc.id === activeAccountId) || refreshedAccounts[0] || null
-
-  cachedAuthState = {
-    activeAccount,
-    accounts: refreshedAccounts
-  }
-
-  await saveStoredAccounts(activeAccount?.id || null, refreshedAccounts)
-  return cachedAuthState
 }
 
 export async function getCurrentAuthState(): Promise<AuthState> {
-  if (cachedAuthState.accounts.length === 0) {
+  if (cachedAuthState.accounts.length === 0 && !authenticationInitializationPromise) {
     return await initializeAuthenticationState()
+  }
+  if (authenticationInitializationPromise) {
+    return await authenticationInitializationPromise
   }
   return cachedAuthState
 }
