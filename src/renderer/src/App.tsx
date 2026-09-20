@@ -40,6 +40,7 @@ export const App: React.FC = () => {
   const [launchProgress, setLaunchProgress] = useState<LaunchProgressEvent | null>(null)
   const [launchLogs, setLaunchLogs] = useState<LaunchLogEvent[]>([])
   const [downloadedUpdate, setDownloadedUpdate] = useState<UpdateInfo | null>(null)
+  const [gameStartTime, setGameStartTime] = useState<number | null>(null)
 
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean
@@ -169,6 +170,11 @@ export const App: React.FC = () => {
 
     const unsubProgress = window.launcherAPI.launch.onProgress((event) => {
       setLaunchProgress(event)
+      if (event.step === 'RUNNING') {
+        setGameStartTime((prev) => prev || Date.now())
+      } else if (event.step === 'COMPLETED' || event.step === 'CRASHED' || event.step === 'CANCELLED') {
+        setGameStartTime(null)
+      }
       if (event.step === 'RUNNING' || event.step === 'STARTING_JAVA') {
         fetchInstances()
       }
@@ -193,6 +199,31 @@ export const App: React.FC = () => {
       unsub()
     }
   }, [])
+
+  useEffect(() => {
+    if (!window.launcherAPI?.discord) return
+
+    if (activeLaunchingInstance && launchProgress?.step === 'RUNNING') {
+      window.launcherAPI.discord.setActivity({
+        isPlaying: true,
+        instanceName: activeLaunchingInstance.name,
+        minecraftVersion: activeLaunchingInstance.minecraftVersion,
+        loaderType: activeLaunchingInstance.loaderType,
+        startTime: gameStartTime || Date.now()
+      })
+    } else if (activeTab === 'instances' && selectedDetailInstance) {
+      window.launcherAPI.discord.setActivity({
+        page: 'instance-detail',
+        instanceName: selectedDetailInstance.name,
+        minecraftVersion: selectedDetailInstance.minecraftVersion,
+        loaderType: selectedDetailInstance.loaderType
+      })
+    } else {
+      window.launcherAPI.discord.setActivity({
+        page: activeTab
+      })
+    }
+  }, [activeTab, selectedDetailInstance, activeLaunchingInstance, launchProgress?.step, gameStartTime])
 
   const handleCreateInstance = async (payload: CreateInstancePayload) => {
     if (window.launcherAPI?.instances) {

@@ -7,6 +7,7 @@ import { initializeLauncherSettings } from '@main/services/settings'
 import { initCurseForgeApiKey } from '@main/services/mods'
 import { registerAllIpcHandlers } from '@main/ipc/register'
 import { initializeAutoUpdater } from '@main/services/updater'
+import { initializeDiscordRpc, clearDiscordActivity } from '@main/services/discordRpc'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -79,6 +80,7 @@ app.whenReady().then(async () => {
   }
   mainWindow = await createMainWindow()
   initializeAutoUpdater(mainWindow)
+  initializeDiscordRpc()
 
   app.on('activate', async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -86,6 +88,10 @@ app.whenReady().then(async () => {
       initializeAutoUpdater(mainWindow)
     }
   })
+})
+
+app.on('before-quit', () => {
+  clearDiscordActivity()
 })
 
 app.on('window-all-closed', () => {

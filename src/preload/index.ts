@@ -194,6 +194,11 @@ const launcherAPI: LauncherAPI = {
         ipcRenderer.removeListener(IPC_CHANNELS.UPDATER_DOWNLOADED_EVENT, handler)
       }
     }
+  },
+  discord: {
+    setActivity: (payload: any) =>
+      ipcRenderer.invoke(IPC_CHANNELS.DISCORD_SET_ACTIVITY, payload),
+    clearActivity: () => ipcRenderer.invoke(IPC_CHANNELS.DISCORD_CLEAR_ACTIVITY)
   }
 }
 

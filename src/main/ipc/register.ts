@@ -14,6 +14,7 @@ import { registerServersIpcHandlers } from '@main/ipc/servers'
 import { registerSkinsIpcHandlers } from '@main/ipc/skins'
 import { registerGameSettingsIpcHandlers } from '@main/ipc/gameSettings'
 import { registerUpdaterIpcHandlers } from '@main/ipc/updater'
+import { registerDiscordIpcHandlers } from '@main/ipc/discordRpc'
 
 export function registerAllIpcHandlers(mainWindow: BrowserWindow): void {
   registerInstanceIpcHandlers()
@@ -31,5 +32,6 @@ export function registerAllIpcHandlers(mainWindow: BrowserWindow): void {
   registerSkinsIpcHandlers()
   registerGameSettingsIpcHandlers()
   registerUpdaterIpcHandlers()
+  registerDiscordIpcHandlers()
 }
 

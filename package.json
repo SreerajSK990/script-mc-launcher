@@ -1,6 +1,6 @@
 {
   "name": "script-mc-launcher",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "type": "module",
   "description": "Custom modern Minecraft launcher with instance isolation and mod loader support",
   "main": "./out/main/index.js",
@@ -15,6 +15,7 @@
     "preview": "electron-vite preview"
   },
   "dependencies": {
+    "@xhayper/discord-rpc": "^1.3.4",
     "adm-zip": "^0.6.1",
     "electron-updater": "^6.8.9",
     "lucide-react": "^1.16.0",

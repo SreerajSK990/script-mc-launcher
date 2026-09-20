@@ -33,6 +33,7 @@ import type {
   RemoveServerPayload
 } from './servers'
 import type { SkinEntry, SkinModelType, PlayerSkinSearchResult, ApplySkinResult } from './skins'
+import type { SetDiscordActivityPayload } from './discord'
 
 export interface WindowControlActions {
   minimize: () => Promise<void>
@@ -210,6 +211,11 @@ export interface UpdaterActions {
   ) => () => void
 }
 
+export interface DiscordActions {
+  setActivity: (payload: SetDiscordActivityPayload) => Promise<void>
+  clearActivity: () => Promise<void>
+}
+
 export interface LauncherAPI {
   window: WindowControlActions
   instances: InstanceActions
@@ -227,4 +233,5 @@ export interface LauncherAPI {
   skins: SkinActions
   gameSettings: GameSettingsActions
   updater: UpdaterActions
+  discord: DiscordActions
 }
