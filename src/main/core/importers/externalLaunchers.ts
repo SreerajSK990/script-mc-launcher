@@ -1,4 +1,4 @@
-import { join, basename } from 'node:path'
+import { join, basename, dirname } from 'node:path'
 import { promises as fs } from 'node:fs'
 import type {
   DiscoveredExternalInstance,
@@ -32,10 +32,14 @@ export function getLauncherDefaultPaths(): Record<ExternalLauncherType, string[]
       join(appData, 'MultiMC', 'instances')
     ],
     modrinth: [
-      join(appData, 'com.modrinth.theseus', 'profiles')
+      join(appData, 'ModrinthApp', 'profiles'),
+      join(appData, 'com.modrinth.theseus', 'profiles'),
+      join(localAppData, 'ModrinthApp', 'profiles'),
+      join(userProfile, '.modrinth', 'profiles')
     ],
     curseforge: [
-      join(userProfile, 'curseforge', 'minecraft', 'Instances')
+      join(userProfile, 'curseforge', 'minecraft', 'Instances'),
+      join(appData, 'CurseForge', 'minecraft', 'Instances')
     ],
     vanilla: [
       join(appData, '.minecraft')
@@ -169,57 +173,243 @@ export async function parsePrismInstance(instanceDir: string): Promise<Discovere
   }
 }
 
+async function detectMinecraftAndLoaderFromDirectory(dir: string): Promise<{
+  minecraftVersion: string
+  loaderType: ModLoaderType
+  loaderVersion: string | null
+}> {
+  let minecraftVersion = ''
+  let loaderType: ModLoaderType = 'vanilla'
+  let loaderVersion: string | null = null
+
+  // 1. Inspect logs/latest.log if available
+  const logPath = join(dir, 'logs', 'latest.log')
+  if (await doesPathExist(logPath)) {
+    try {
+      const handle = await fs.open(logPath, 'r')
+      const buffer = Buffer.alloc(16384)
+      const { bytesRead } = await handle.read(buffer, 0, 16384, 0)
+      await handle.close()
+      const logContent = buffer.toString('utf8', 0, bytesRead)
+
+      const fabricMatch = logContent.match(/Loading Minecraft ([0-9a-zA-Z._-]+) with Fabric Loader ([0-9a-zA-Z._-]+)/i)
+      if (fabricMatch) {
+        minecraftVersion = fabricMatch[1]
+        loaderType = 'fabric'
+        loaderVersion = fabricMatch[2]
+      } else {
+        const quiltMatch = logContent.match(/Loading Minecraft ([0-9a-zA-Z._-]+) with Quilt Loader ([0-9a-zA-Z._-]+)/i)
+        if (quiltMatch) {
+          minecraftVersion = quiltMatch[1]
+          loaderType = 'quilt'
+          loaderVersion = quiltMatch[2]
+        } else {
+          const neoMatch = logContent.match(/--fml\.neoForgeVersion[,\s]+([0-9a-zA-Z._-]+)/i)
+          const versionMatch = logContent.match(/--version[,\s]+([0-9a-zA-Z._-]+)/i)
+          if (versionMatch) minecraftVersion = versionMatch[1]
+          if (neoMatch) {
+            loaderType = 'neoforge'
+            loaderVersion = neoMatch[1]
+          } else if (logContent.includes('forge') || logContent.includes('Forge')) {
+            loaderType = 'forge'
+          }
+        }
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  // 2. If loader or version not yet known, inspect mods directory
+  const modsDir = join(dir, 'mods')
+  if (await doesPathExist(modsDir)) {
+    try {
+      const files = await fs.readdir(modsDir)
+      for (const file of files) {
+        const lower = file.toLowerCase()
+        if (loaderType === 'vanilla') {
+          if (lower.includes('neoforge')) loaderType = 'neoforge'
+          else if (lower.includes('fabric')) loaderType = 'fabric'
+          else if (lower.includes('quilt')) loaderType = 'quilt'
+          else if (lower.includes('forge')) loaderType = 'forge'
+        }
+
+        if (!minecraftVersion) {
+          const vMatch = file.match(/(?:\+|mc|minecraft-?)([0-9]{1,2}\.[0-9]+(?:\.[0-9]+)?(?:-snapshot-[0-9]+)?)/i)
+          if (vMatch && !['1.0', '2.0'].includes(vMatch[1])) {
+            minecraftVersion = vMatch[1]
+          }
+        }
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  // 3. Check for .fabric directory
+  if (loaderType === 'vanilla' && (await doesPathExist(join(dir, '.fabric')))) {
+    loaderType = 'fabric'
+  }
+
+  // 4. Check folder name hints
+  const folderName = basename(dir).toLowerCase()
+  if (loaderType === 'vanilla') {
+    if (folderName.includes('fabric')) loaderType = 'fabric'
+    else if (folderName.includes('neoforge')) loaderType = 'neoforge'
+    else if (folderName.includes('forge')) loaderType = 'forge'
+    else if (folderName.includes('quilt')) loaderType = 'quilt'
+  }
+
+  if (!minecraftVersion) {
+    const fv = basename(dir).match(/([0-9]{1,2}\.[0-9]+(?:\.[0-9]+)?(?:-snapshot-[0-9]+)?)/)
+    if (fv && !['1.0', '2.0'].includes(fv[1])) {
+      minecraftVersion = fv[1]
+    }
+  }
+
+  return { minecraftVersion: minecraftVersion || '1.20.1', loaderType, loaderVersion }
+}
+
 export async function parseModrinthProfile(profileDir: string): Promise<DiscoveredExternalInstance | null> {
+  // 1. Check profile.json (legacy Modrinth format)
   const profileJsonPath = join(profileDir, 'profile.json')
-  if (!(await doesPathExist(profileJsonPath))) {
+  if (await doesPathExist(profileJsonPath)) {
+    try {
+      const profileJson = await readJsonFile<{
+        name?: string
+        game_version?: string
+        loader?: string
+        loader_version?: string
+        memory?: number
+        java_arguments?: string | string[]
+      }>(profileJsonPath)
+
+      if (profileJson) {
+        let loaderType: ModLoaderType = 'vanilla'
+        const l = (profileJson.loader || '').toLowerCase()
+        if (l === 'fabric' || l === 'forge' || l === 'neoforge' || l === 'quilt') {
+          loaderType = l as ModLoaderType
+        }
+
+        let jvmArgs: string[] | undefined = undefined
+        if (typeof profileJson.java_arguments === 'string') {
+          jvmArgs = profileJson.java_arguments.split(/\s+/).filter(Boolean)
+        } else if (Array.isArray(profileJson.java_arguments)) {
+          jvmArgs = profileJson.java_arguments
+        }
+
+        const { modCount, hasSaves, savesCount } = await countFilesAndCheckSaves(profileDir)
+
+        return {
+          id: `modrinth-${basename(profileDir)}`,
+          name: profileJson.name || basename(profileDir),
+          launcherType: 'modrinth',
+          launcherName: 'Modrinth App',
+          minecraftVersion: profileJson.game_version || '1.20.1',
+          loaderType,
+          loaderVersion: profileJson.loader_version || null,
+          sourcePath: profileDir,
+          gameDirectory: profileDir,
+          totalModCount: modCount,
+          hasSaves,
+          savesCount,
+          ramAllocationMegabytes: profileJson.memory,
+          jvmArguments: jvmArgs
+        }
+      }
+    } catch {
+      // Continue
+    }
+  }
+
+  // 2. Check app.db in parent or grandparent (modern Modrinth Theseus format)
+  const candidateDbs = [
+    join(profileDir, '..', 'app.db'),
+    join(profileDir, '..', '..', 'app.db')
+  ]
+
+  for (const appDbPath of candidateDbs) {
+    if (await doesPathExist(appDbPath)) {
+      try {
+        const { DatabaseSync } = await import('node:sqlite')
+        const db = new DatabaseSync(appDbPath, { readOnly: true, open: true })
+        const folderName = basename(profileDir)
+        const row = db.prepare(`
+          SELECT i.id, i.path, i.name, i.icon_path, ics.game_version, ics.loader, ics.loader_version
+          FROM instances i
+          LEFT JOIN instance_content_sets ics ON i.id = ics.instance_id
+          WHERE LOWER(i.path) = LOWER(?) OR LOWER(i.name) = LOWER(?)
+          LIMIT 1
+        `).get(folderName, folderName) as {
+          id: string
+          path: string
+          name: string
+          icon_path?: string
+          game_version?: string
+          loader?: string
+          loader_version?: string
+        } | undefined
+
+        if (row) {
+          let loaderType: ModLoaderType = 'vanilla'
+          const l = (row.loader || '').toLowerCase()
+          if (l === 'fabric' || l === 'forge' || l === 'neoforge' || l === 'quilt') {
+            loaderType = l as ModLoaderType
+          }
+
+          const { modCount, hasSaves, savesCount } = await countFilesAndCheckSaves(profileDir)
+
+          return {
+            id: `modrinth-${row.path || folderName}`,
+            name: row.name || folderName,
+            launcherType: 'modrinth',
+            launcherName: 'Modrinth App',
+            minecraftVersion: row.game_version || '1.20.1',
+            loaderType,
+            loaderVersion: row.loader_version || null,
+            sourcePath: profileDir,
+            gameDirectory: profileDir,
+            iconPath: row.icon_path && (await doesPathExist(row.icon_path)) ? row.icon_path : undefined,
+            totalModCount: modCount,
+            hasSaves,
+            savesCount
+          }
+        }
+      } catch {
+        // Continue
+      }
+    }
+  }
+
+  // 3. Inspect directory structure for Minecraft indicators
+  const hasMods = await doesPathExist(join(profileDir, 'mods'))
+  const hasConfig = await doesPathExist(join(profileDir, 'config'))
+  const hasSaves = await doesPathExist(join(profileDir, 'saves'))
+  const hasOptions = await doesPathExist(join(profileDir, 'options.txt'))
+  const hasFabric = await doesPathExist(join(profileDir, '.fabric'))
+  const hasLog = await doesPathExist(join(profileDir, 'logs', 'latest.log'))
+
+  // Must have at least one Minecraft indicator to be an instance
+  if (!hasMods && !hasConfig && !hasSaves && !hasOptions && !hasFabric && !hasLog) {
     return null
   }
 
-  try {
-    const profileJson = await readJsonFile<{
-      name?: string
-      game_version?: string
-      loader?: string
-      loader_version?: string
-      memory?: number
-      java_arguments?: string | string[]
-    }>(profileJsonPath)
+  const { minecraftVersion, loaderType, loaderVersion } = await detectMinecraftAndLoaderFromDirectory(profileDir)
+  const { modCount, hasSaves: savesExist, savesCount } = await countFilesAndCheckSaves(profileDir)
 
-    if (!profileJson) return null
-
-    let loaderType: ModLoaderType = 'vanilla'
-    const l = (profileJson.loader || '').toLowerCase()
-    if (l === 'fabric' || l === 'forge' || l === 'neoforge' || l === 'quilt') {
-      loaderType = l as ModLoaderType
-    }
-
-    let jvmArgs: string[] | undefined = undefined
-    if (typeof profileJson.java_arguments === 'string') {
-      jvmArgs = profileJson.java_arguments.split(/\s+/).filter(Boolean)
-    } else if (Array.isArray(profileJson.java_arguments)) {
-      jvmArgs = profileJson.java_arguments
-    }
-
-    const { modCount, hasSaves, savesCount } = await countFilesAndCheckSaves(profileDir)
-
-    return {
-      id: `modrinth-${basename(profileDir)}`,
-      name: profileJson.name || basename(profileDir),
-      launcherType: 'modrinth',
-      launcherName: 'Modrinth App',
-      minecraftVersion: profileJson.game_version || '1.20.1',
-      loaderType,
-      loaderVersion: profileJson.loader_version || null,
-      sourcePath: profileDir,
-      gameDirectory: profileDir,
-      totalModCount: modCount,
-      hasSaves,
-      savesCount,
-      ramAllocationMegabytes: profileJson.memory,
-      jvmArguments: jvmArgs
-    }
-  } catch {
-    return null
+  return {
+    id: `modrinth-${basename(profileDir)}`,
+    name: basename(profileDir),
+    launcherType: 'modrinth',
+    launcherName: 'Modrinth App',
+    minecraftVersion,
+    loaderType,
+    loaderVersion,
+    sourcePath: profileDir,
+    gameDirectory: profileDir,
+    totalModCount: modCount,
+    hasSaves: savesExist,
+    savesCount
   }
 }
 
@@ -402,14 +592,80 @@ export async function scanExternalInstances(): Promise<DiscoveredExternalInstanc
   }
 
   // 3. Scan Modrinth App
+  const seenModrinthPaths = new Set<string>()
   for (const path of launcherPaths.modrinth) {
     if (await doesPathExist(path)) {
+      // 3a. Try reading app.db if available
+      try {
+        const candidateDbPaths = [
+          join(path, '..', 'app.db'),
+          join(path, '..', '..', 'app.db')
+        ]
+        for (const appDbPath of candidateDbPaths) {
+          if (await doesPathExist(appDbPath)) {
+            const { DatabaseSync } = await import('node:sqlite')
+            const db = new DatabaseSync(appDbPath, { readOnly: true, open: true })
+            const rows = db.prepare(`
+              SELECT i.id, i.path, i.name, i.icon_path, ics.game_version, ics.loader, ics.loader_version
+              FROM instances i
+              LEFT JOIN instance_content_sets ics ON i.id = ics.instance_id
+            `).all() as Array<{
+              id: string
+              path: string
+              name: string
+              icon_path?: string
+              game_version?: string
+              loader?: string
+              loader_version?: string
+            }>
+
+            for (const r of rows) {
+              const folder = join(path, r.path)
+              if (await doesPathExist(folder)) {
+                seenModrinthPaths.add(folder.toLowerCase())
+                const { modCount, hasSaves, savesCount } = await countFilesAndCheckSaves(folder)
+                let loaderType: ModLoaderType = 'vanilla'
+                const l = (r.loader || '').toLowerCase()
+                if (l === 'fabric' || l === 'forge' || l === 'neoforge' || l === 'quilt') {
+                  loaderType = l as ModLoaderType
+                }
+                instances.push({
+                  id: `modrinth-${r.path}`,
+                  name: r.name || r.path,
+                  launcherType: 'modrinth',
+                  launcherName: 'Modrinth App',
+                  minecraftVersion: r.game_version || '1.20.1',
+                  loaderType,
+                  loaderVersion: r.loader_version || null,
+                  sourcePath: folder,
+                  gameDirectory: folder,
+                  iconPath: r.icon_path && (await doesPathExist(r.icon_path)) ? r.icon_path : undefined,
+                  totalModCount: modCount,
+                  hasSaves,
+                  savesCount
+                })
+              }
+            }
+            break
+          }
+        }
+      } catch {
+        // Continue if SQLite fails or is unavailable
+      }
+
+      // 3b. Scan remaining profile directories in this path
       try {
         const entries = await fs.readdir(path, { withFileTypes: true })
         for (const entry of entries) {
           if (entry.isDirectory()) {
-            const parsed = await parseModrinthProfile(join(path, entry.name))
-            if (parsed) instances.push(parsed)
+            const fullDir = join(path, entry.name)
+            if (!seenModrinthPaths.has(fullDir.toLowerCase())) {
+              const parsed = await parseModrinthProfile(fullDir)
+              if (parsed) {
+                seenModrinthPaths.add(fullDir.toLowerCase())
+                instances.push(parsed)
+              }
+            }
           }
         }
       } catch {
@@ -541,7 +797,17 @@ export async function cloneExternalInstance(
     percentage: 15
   })
 
-  const configDirsToCopy = ['config', 'defaultconfigs', 'resourcepacks', 'shaderpacks']
+  const configDirsToCopy = [
+    'config',
+    'defaultconfigs',
+    'resourcepacks',
+    'shaderpacks',
+    'datapacks',
+    'kubejs',
+    'fancymenu_data',
+    'schematics',
+    'openloader'
+  ]
   for (const dirName of configDirsToCopy) {
     const srcDir = join(sourceGameDir, dirName)
     if (await doesPathExist(srcDir)) {
@@ -552,7 +818,14 @@ export async function cloneExternalInstance(
   }
 
   // Copy individual config files if present
-  const singleFilesToCopy = ['options.txt', 'optionsof.txt', 'servers.dat']
+  const singleFilesToCopy = [
+    'options.txt',
+    'optionsof.txt',
+    'servers.dat',
+    'servers.dat_old',
+    'hotbar.nbt',
+    'usercache.json'
+  ]
   for (const file of singleFilesToCopy) {
     const srcFile = join(sourceGameDir, file)
     if (await doesPathExist(srcFile)) {

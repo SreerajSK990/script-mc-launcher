@@ -470,6 +470,28 @@ async function runTests() {
   }
   console.log('Parsed CurseForge Instance successfully:', parsedCurse.name)
 
+  // 3. Create mock Modrinth profile (with disk inference from logs and mods)
+  const mockModrinthDir = join(testSandboxDir, 'mock-modrinth-profile')
+  await fs.mkdir(join(mockModrinthDir, 'logs'), { recursive: true })
+  await fs.mkdir(join(mockModrinthDir, 'mods'), { recursive: true })
+  await fs.writeFile(
+    join(mockModrinthDir, 'logs', 'latest.log'),
+    '[10:00:00] [main/INFO]: Loading Minecraft 1.20.1 with Fabric Loader 0.16.9\n'
+  )
+  await fs.writeFile(join(mockModrinthDir, 'mods', 'sodium-fabric-0.5.8+mc1.20.1.jar'), Buffer.from('mock-sodium'))
+
+  const { parseModrinthProfile } = await import('../src/main/core/importers/externalLaunchers.ts')
+  const parsedModrinth = await parseModrinthProfile(mockModrinthDir)
+  if (
+    !parsedModrinth ||
+    parsedModrinth.minecraftVersion !== '1.20.1' ||
+    parsedModrinth.loaderType !== 'fabric' ||
+    parsedModrinth.loaderVersion !== '0.16.9'
+  ) {
+    throw new Error('Failed to parse mock Modrinth profile!')
+  }
+  console.log('Parsed Modrinth Profile successfully:', parsedModrinth.name, `(${parsedModrinth.minecraftVersion} ${parsedModrinth.loaderType})`)
+
   // 3. Test scanCustomDirectory
   const customScanned = await scanCustomDirectory(mockPrismDir)
   if (customScanned.length === 0 || customScanned[0].name !== 'Prism Epic Pack') {

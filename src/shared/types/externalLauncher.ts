@@ -18,6 +18,7 @@ export interface DiscoveredExternalInstance {
   loaderVersion?: string | null
   sourcePath: string
   gameDirectory: string
+  iconPath?: string
   iconDataUrl?: string
   totalModCount: number
   hasSaves: boolean
