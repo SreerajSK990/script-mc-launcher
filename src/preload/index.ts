@@ -44,7 +44,9 @@ const launcherAPI: LauncherAPI = {
     }
   },
   meta: {
-    getVersions: () => ipcRenderer.invoke(IPC_CHANNELS.META_GET_VERSIONS)
+    getVersions: () => ipcRenderer.invoke(IPC_CHANNELS.META_GET_VERSIONS),
+    getLoaderVersions: (loaderType, minecraftVersion) =>
+      ipcRenderer.invoke(IPC_CHANNELS.META_GET_LOADER_VERSIONS, loaderType, minecraftVersion)
   },
   system: {
     getEnvironment: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_GET_ENVIRONMENT),

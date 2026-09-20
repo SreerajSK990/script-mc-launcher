@@ -9,6 +9,7 @@ import { prepareMinecraftLibraries } from '@main/core/minecraft/libraries'
 import { prepareMinecraftAssets } from '@main/core/minecraft/assets'
 import { buildExecutionArguments } from '@main/core/minecraft/arguments'
 import { spawnMinecraftProcess, type RunningProcessHandle } from '@main/core/minecraft/launcher'
+import { resolveInstanceLaunchConfiguration } from '@main/core/loaders/resolver'
 
 const activeProcesses = new Map<string, RunningProcessHandle>()
 
@@ -56,12 +57,11 @@ export async function launchInstance(
     })
   }
 
-  sendProgress('FETCHING_METADATA', 'Fetching version information...')
-  sendLog(`Initializing launch pipeline for instance: ${instanceId}`)
-
+  sendProgress('FETCHING_METADATA', 'Preparing instance environment...')
   const instance = await getInstanceById(instanceId)
+
   if (!instance) {
-    throw new Error(`Instance "${instanceId}" was not found.`)
+    throw new Error(`Instance ${instanceId} does not exist.`)
   }
 
   let authState = await getCurrentAuthState()
@@ -74,24 +74,30 @@ export async function launchInstance(
 
   sendLog(`Authenticated as: ${activeAccount.username} (${activeAccount.accountType})`)
 
-  const versionPackage = await fetchVersionPackage(instance.minecraftVersion)
-  sendLog(`Loaded version metadata for Minecraft ${versionPackage.id}`)
+  const baseVersionPackage = await fetchVersionPackage(instance.minecraftVersion)
+  sendLog(`Loaded version metadata for Minecraft ${baseVersionPackage.id}`)
+
+  sendProgress('PREPARING_LOADER', `Resolving ${instance.loaderType} configuration...`)
+  const launchConfig = await resolveInstanceLaunchConfiguration(instance, baseVersionPackage)
+  const resolvedVersionPackage = launchConfig.versionPackage
+  sendLog(`Configured runtime for loader: ${instance.loaderType}`)
 
   const nativesDirectory = join(getInstancePath(instance.id), 'natives')
 
   sendProgress('VERIFYING_LIBRARIES', 'Verifying libraries and client jar...')
   const classpathJars = await prepareMinecraftLibraries(
-    versionPackage,
+    resolvedVersionPackage,
     nativesDirectory,
     (completed, total, currentItem) => {
       const percentage = Math.round((completed / total) * 100)
       sendProgress('DOWNLOADING_LIBRARIES', `Downloading libraries: ${completed}/${total}`, completed, total, percentage)
-    }
+    },
+    launchConfig.extraDownloadTasks
   )
   sendLog(`Verified ${classpathJars.length} libraries on classpath`)
 
   sendProgress('VERIFYING_ASSETS', 'Verifying game assets...')
-  await prepareMinecraftAssets(versionPackage, (completed, total, currentItem) => {
+  await prepareMinecraftAssets(resolvedVersionPackage, (completed, total, currentItem) => {
     const percentage = Math.round((completed / total) * 100)
     sendProgress('DOWNLOADING_ASSETS', `Downloading assets: ${completed}/${total}`, completed, total, percentage)
   })
@@ -102,11 +108,15 @@ export async function launchInstance(
 
   const { jvmArguments, gameArguments, mainClass } = buildExecutionArguments({
     instance,
-    versionPackage,
+    versionPackage: resolvedVersionPackage,
     account: activeAccount,
     nativesDirectory,
     classpathString
   })
+
+  if (launchConfig.extraJvmArguments.length > 0) {
+    jvmArguments.push(...launchConfig.extraJvmArguments)
+  }
 
   const javaExecutable = instance.javaPath || (await detectSystemJavaPath()) || 'java'
   const workingDirectory = getInstanceMinecraftPath(instance.id)

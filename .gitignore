@@ -11,13 +11,13 @@ Thumbs.db
 
 # User data & credentials during development
 auth.json
-.launcher/
-instances/
-meta-cache/
-libraries/
-assets/
-java/
-natives/
+/.launcher/
+/instances/
+/meta-cache/
+/libraries/
+/assets/
+/java/
+/natives/
 
 # Environment files
 .env

@@ -23,6 +23,7 @@ export const IPC_CHANNELS = {
   LAUNCH_LOG_EVENT: 'launch:log',
 
   META_GET_VERSIONS: 'meta:get-versions',
+  META_GET_LOADER_VERSIONS: 'meta:get-loader-versions',
 
   SYSTEM_GET_ENVIRONMENT: 'system:get-environment',
   SYSTEM_OPEN_EXTERNAL: 'system:open-external',

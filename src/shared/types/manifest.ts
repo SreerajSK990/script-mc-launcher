@@ -37,6 +37,7 @@ export interface LibraryRule {
 
 export interface LibraryDownload {
   name: string
+  url?: string
   downloads?: {
     artifact?: DownloadArtifact
     classifiers?: Record<string, DownloadArtifact>

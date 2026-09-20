@@ -1,4 +1,4 @@
-import type { InstanceConfiguration, CreateInstancePayload, UpdateInstancePayload } from './instance'
+import type { InstanceConfiguration, CreateInstancePayload, UpdateInstancePayload, ModLoaderType } from './instance'
 import type { SystemEnvironment } from './system'
 import type { AuthState, StoredAccount } from './auth'
 import type { LaunchProgressEvent, LaunchLogEvent } from './launch'
@@ -36,6 +36,7 @@ export interface LaunchActions {
 
 export interface MetaActions {
   getVersions: () => Promise<string[]>
+  getLoaderVersions: (loaderType: ModLoaderType, minecraftVersion: string) => Promise<string[]>
 }
 
 export interface SystemActions {

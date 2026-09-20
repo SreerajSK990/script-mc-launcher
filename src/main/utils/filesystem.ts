@@ -85,3 +85,13 @@ export async function doesPathExist(targetPath: string): Promise<boolean> {
     return false
   }
 }
+
+export async function getFileAgeMilliseconds(targetPath: string): Promise<number | null> {
+  try {
+    const stats = await fs.stat(targetPath)
+    return Date.now() - stats.mtimeMs
+  } catch {
+    return null
+  }
+}
+

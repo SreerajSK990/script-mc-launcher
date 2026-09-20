@@ -142,10 +142,72 @@ async function runTests() {
   }
   console.log('Verified execution arguments builder.')
 
-  console.log('--- All Phase 1, Phase 2 & Phase 3 Verifications Passed! ---')
+  console.log('--- Phase 4 Prism Meta Verification ---')
+  const { getCompatibleLoaderVersions } = await import('../src/main/core/meta/prism.ts')
+  const fabricVersions = await getCompatibleLoaderVersions('fabric', '1.20.1')
+  console.log(`Fabric versions count for 1.20.1: ${fabricVersions.length} (Latest: ${fabricVersions[0]})`)
+  if (fabricVersions.length === 0) {
+    throw new Error('Expected at least one Fabric version!')
+  }
+
+  const quiltVersions = await getCompatibleLoaderVersions('quilt', '1.20.1')
+  console.log(`Quilt versions count for 1.20.1: ${quiltVersions.length} (Latest: ${quiltVersions[0]})`)
+  if (quiltVersions.length === 0) {
+    throw new Error('Expected at least one Quilt version!')
+  }
+
+  const forgeVersions = await getCompatibleLoaderVersions('forge', '1.20.1')
+  console.log(`Forge versions count for 1.20.1: ${forgeVersions.length} (Latest: ${forgeVersions[0]})`)
+  if (forgeVersions.length === 0) {
+    throw new Error('Expected Forge versions for 1.20.1!')
+  }
+
+  const neoForgeVersions = await getCompatibleLoaderVersions('neoforge', '1.20.4')
+  console.log(`NeoForge versions count for 1.20.4: ${neoForgeVersions.length} (Latest: ${neoForgeVersions[0]})`)
+  if (neoForgeVersions.length === 0) {
+    throw new Error('Expected NeoForge versions for 1.20.4!')
+  }
+
+  console.log('--- Phase 5 Mod Loader Launch Config Verification ---')
+  const { resolveInstanceLaunchConfiguration } = await import('../src/main/core/loaders/resolver.ts')
+
+  const fabricInstance = {
+    ...sampleInstance,
+    id: 'test-fabric-instance',
+    minecraftVersion: '1.20.1',
+    loaderType: 'fabric',
+    loaderVersion: fabricVersions[0]
+  }
+  const fabricConfig = await resolveInstanceLaunchConfiguration(fabricInstance, versionPackage)
+  console.log(`Fabric mainClass: ${fabricConfig.versionPackage.mainClass}`)
+  if (fabricConfig.versionPackage.mainClass !== 'net.fabricmc.loader.impl.launch.knot.KnotClient') {
+    throw new Error(`Expected Fabric KnotClient main class, got: ${fabricConfig.versionPackage.mainClass}`)
+  }
+
+  const forgeInstance = {
+    ...sampleInstance,
+    id: 'test-forge-instance',
+    minecraftVersion: '1.20.1',
+    loaderType: 'forge',
+    loaderVersion: forgeVersions[0]
+  }
+  const forgeConfig = await resolveInstanceLaunchConfiguration(forgeInstance, versionPackage)
+  console.log(`Forge mainClass: ${forgeConfig.versionPackage.mainClass}`)
+  console.log(`Forge extra download tasks: ${forgeConfig.extraDownloadTasks.length}`)
+  console.log(`Forge extra JVM arguments: ${forgeConfig.extraJvmArguments.join(' ')}`)
+
+  if (forgeConfig.versionPackage.mainClass !== 'io.github.zekerzhayard.forgewrapper.installer.Main') {
+    throw new Error(`Expected ForgeWrapper main class, got: ${forgeConfig.versionPackage.mainClass}`)
+  }
+  if (!forgeConfig.extraJvmArguments.some((arg) => arg.startsWith('-Dforgewrapper.installer='))) {
+    throw new Error('Expected -Dforgewrapper.installer JVM argument!')
+  }
+
+  console.log('--- All Phase 1, Phase 2, Phase 3, Phase 4 & Phase 5 Verifications Passed! ---')
 }
 
 runTests().catch((err) => {
   console.error('Test failed:', err)
   process.exit(1)
 })
+

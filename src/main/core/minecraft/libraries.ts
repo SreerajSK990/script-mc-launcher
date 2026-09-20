@@ -13,14 +13,26 @@ export function convertMavenCoordinateToPath(coordinate: string, classifier?: st
   }
 
   const [groupId, artifactId, version, inlineClassifier] = parts
-  const resolvedClassifier = classifier || inlineClassifier
+  let resolvedClassifier = classifier || inlineClassifier
+  let resolvedExtension = extension
+  let resolvedVersion = version
+
+  if (resolvedClassifier && resolvedClassifier.includes('@')) {
+    const [c, ext] = resolvedClassifier.split('@')
+    resolvedClassifier = c
+    resolvedExtension = ext
+  } else if (resolvedVersion && resolvedVersion.includes('@')) {
+    const [v, ext] = resolvedVersion.split('@')
+    resolvedVersion = v
+    resolvedExtension = ext
+  }
+
   const groupDirectory = groupId.replace(/\./g, '/')
-
   const fileName = resolvedClassifier
-    ? `${artifactId}-${version}-${resolvedClassifier}.${extension}`
-    : `${artifactId}-${version}.${extension}`
+    ? `${artifactId}-${resolvedVersion}-${resolvedClassifier}.${resolvedExtension}`
+    : `${artifactId}-${resolvedVersion}.${resolvedExtension}`
 
-  return `${groupDirectory}/${artifactId}/${version}/${fileName}`
+  return `${groupDirectory}/${artifactId}/${resolvedVersion}/${fileName}`
 }
 
 function resolveNativeClassifierKey(
@@ -44,7 +56,8 @@ function resolveNativeClassifierKey(
 export async function prepareMinecraftLibraries(
   versionPackage: VersionPackage,
   nativesDirectory: string,
-  onProgress?: (completed: number, total: number, currentItem: string) => void
+  onProgress?: (completed: number, total: number, currentItem: string) => void,
+  extraDownloadTasks?: DownloadTask[]
 ): Promise<string[]> {
   const librariesRoot = getLibrariesDirectory()
   await ensureDirectoryExists(librariesRoot)
@@ -74,6 +87,16 @@ export async function prepareMinecraftLibraries(
         size: artifact.size
       })
       classpathJars.push(destination)
+    } else if (library.url && library.name) {
+      const relativePath = convertMavenCoordinateToPath(library.name)
+      const destination = join(librariesRoot, relativePath)
+      const baseUrl = library.url.endsWith('/') ? library.url : `${library.url}/`
+
+      downloadTasks.push({
+        url: `${baseUrl}${relativePath}`,
+        destination
+      })
+      classpathJars.push(destination)
     } else if (library.name && !library.natives) {
       const relativePath = convertMavenCoordinateToPath(library.name)
       const destination = join(librariesRoot, relativePath)
@@ -96,6 +119,10 @@ export async function prepareMinecraftLibraries(
         nativeJarPathsToExtract.push(destination)
       }
     }
+  }
+
+  if (extraDownloadTasks && extraDownloadTasks.length > 0) {
+    downloadTasks.push(...extraDownloadTasks)
   }
 
   const clientDownload = versionPackage.downloads.client
