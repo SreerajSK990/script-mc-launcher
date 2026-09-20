@@ -27,6 +27,8 @@ const launcherAPI: LauncherAPI = {
   },
   launch: {
     start: (instanceId: string) => ipcRenderer.invoke(IPC_CHANNELS.LAUNCH_START, instanceId),
+    quickPlay: (instanceId: string, options) =>
+      ipcRenderer.invoke(IPC_CHANNELS.LAUNCH_QUICK_PLAY, instanceId, options),
     stop: (instanceId: string) => ipcRenderer.invoke(IPC_CHANNELS.LAUNCH_STOP, instanceId),
     onProgress: (callback) => {
       const handler = (_event: Electron.IpcRendererEvent, data: any) => callback(data)
@@ -77,6 +79,8 @@ const launcherAPI: LauncherAPI = {
     checkUpdates: (instanceId) => ipcRenderer.invoke(IPC_CHANNELS.MODS_CHECK_UPDATES, instanceId),
     updateAll: (instanceId, updates) =>
       ipcRenderer.invoke(IPC_CHANNELS.MODS_UPDATE_ALL, instanceId, updates),
+    installDropped: (instanceId, filePaths) =>
+      ipcRenderer.invoke(IPC_CHANNELS.MODS_INSTALL_DROPPED, instanceId, filePaths),
     onUpdateProgress: (callback) => {
       const handler = (_event: Electron.IpcRendererEvent, data: any) => callback(data)
       ipcRenderer.on(IPC_CHANNELS.MODS_UPDATE_PROGRESS_EVENT, handler)
@@ -126,6 +130,18 @@ const launcherAPI: LauncherAPI = {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.FONTS_LIST),
     install: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.FONTS_INSTALL, filePath),
     delete: (fileName: string) => ipcRenderer.invoke(IPC_CHANNELS.FONTS_DELETE, fileName)
+  },
+  servers: {
+    listAll: () => ipcRenderer.invoke(IPC_CHANNELS.SERVERS_LIST_ALL),
+    ping: (host: string, port?: number) => ipcRenderer.invoke(IPC_CHANNELS.SERVERS_PING, host, port)
+  },
+  skins: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.SKINS_LIST),
+    getActive: () => ipcRenderer.invoke(IPC_CHANNELS.SKINS_GET_ACTIVE),
+    apply: (skinId: string) => ipcRenderer.invoke(IPC_CHANNELS.SKINS_APPLY, skinId),
+    save: (params: any) => ipcRenderer.invoke(IPC_CHANNELS.SKINS_SAVE, params),
+    delete: (skinId: string) => ipcRenderer.invoke(IPC_CHANNELS.SKINS_DELETE, skinId),
+    searchPlayer: (username: string) => ipcRenderer.invoke(IPC_CHANNELS.SKINS_SEARCH_PLAYER, username)
   }
 }
 

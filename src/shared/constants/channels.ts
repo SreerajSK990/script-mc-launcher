@@ -64,5 +64,17 @@ export const IPC_CHANNELS = {
 
   MODS_CHECK_UPDATES: 'mods:check-updates',
   MODS_UPDATE_ALL: 'mods:update-all',
-  MODS_UPDATE_PROGRESS_EVENT: 'mods:update-progress'
+  MODS_UPDATE_PROGRESS_EVENT: 'mods:update-progress',
+  MODS_INSTALL_DROPPED: 'mods:install-dropped',
+
+  SERVERS_LIST_ALL: 'servers:list-all',
+  SERVERS_PING: 'servers:ping',
+  LAUNCH_QUICK_PLAY: 'launch:quick-play',
+
+  SKINS_LIST: 'skins:list',
+  SKINS_SAVE: 'skins:save',
+  SKINS_DELETE: 'skins:delete',
+  SKINS_SEARCH_PLAYER: 'skins:search-player',
+  SKINS_APPLY: 'skins:apply',
+  SKINS_GET_ACTIVE: 'skins:get-active'
 } as const

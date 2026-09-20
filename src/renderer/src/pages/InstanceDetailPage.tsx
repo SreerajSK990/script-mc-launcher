@@ -123,6 +123,7 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
   const [isUpdatingAll, setIsUpdatingAll] = useState(false)
   const [updatingModId, setUpdatingModId] = useState<string | null>(null)
   const [updateProgress, setUpdateProgress] = useState<{ message: string; current: number; total: number } | null>(null)
+  const [isDraggingMods, setIsDraggingMods] = useState(false)
 
   // Confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -344,6 +345,41 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
         }
       }
     })
+  }
+
+  const handleModFilesDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDraggingMods(false)
+
+    const files = Array.from(e.dataTransfer.files)
+    const validPaths = files
+      .map((f) => (f as any).path)
+      .filter((p): p is string => Boolean(p && (p.toLowerCase().endsWith('.jar') || p.toLowerCase().endsWith('.zip'))))
+
+    if (validPaths.length === 0) {
+      setModsFeedbackMessage('Please drop valid .jar or .zip Minecraft mod files.')
+      setTimeout(() => setModsFeedbackMessage(null), 4000)
+      return
+    }
+
+    try {
+      if (window.launcherAPI?.mods?.installDropped) {
+        const res = await window.launcherAPI.mods.installDropped(instance.id, validPaths)
+        if (res.success) {
+          setModsFeedbackMessage(`Successfully installed ${res.installedMods.length} dropped mod(s)!`)
+          setTimeout(() => setModsFeedbackMessage(null), 4000)
+          await loadMods(true)
+        } else {
+          setModsFeedbackMessage('No valid mod files could be installed.')
+          setTimeout(() => setModsFeedbackMessage(null), 4000)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to install dropped mods:', err)
+      setModsFeedbackMessage('Failed to install dropped mods.')
+      setTimeout(() => setModsFeedbackMessage(null), 4000)
+    }
   }
 
   const handleDeleteScreenshot = (filename: string) => {
@@ -676,7 +712,30 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
 
       {/* Tab 2: Installed Mods */}
       {activeTab === 'mods' && (
-        <div className="space-y-5">
+        <div
+          onDragOver={(e) => {
+            e.preventDefault()
+            setIsDraggingMods(true)
+          }}
+          onDragLeave={(e) => {
+            // Only deactivate if leaving the container
+            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+              setIsDraggingMods(false)
+            }
+          }}
+          onDrop={handleModFilesDrop}
+          className="space-y-5 relative min-h-[300px]"
+        >
+          {isDraggingMods && (
+            <div className="absolute inset-0 z-50 bg-background-dark/85 backdrop-blur-sm border-2 border-dashed border-primary rounded-2xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-150 pointer-events-none">
+              <Package size={48} className="text-primary animate-bounce mb-3" />
+              <h3 className="text-lg font-bold text-white">Drop Minecraft Mods Here</h3>
+              <p className="text-xs text-slate-300 mt-1">
+                Release .jar or .zip files to automatically install them into {instance.name}
+              </p>
+            </div>
+          )}
+
           {modsFeedbackMessage && (
             <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-200">
               <Check size={16} className="shrink-0" />

@@ -23,6 +23,8 @@ import type {
   CloneProgressEvent
 } from './externalLauncher'
 import type { CustomFontEntry } from './fonts'
+import type { QuickPlayTarget, ServerPingStatus, QuickPlayLaunchOptions } from './servers'
+import type { SkinEntry, SkinModelType, PlayerSkinSearchResult } from './skins'
 
 export interface WindowControlActions {
   minimize: () => Promise<void>
@@ -50,6 +52,7 @@ export interface AuthActions {
 
 export interface LaunchActions {
   start: (instanceId: string) => Promise<void>
+  quickPlay: (instanceId: string, options: QuickPlayLaunchOptions) => Promise<boolean>
   stop: (instanceId: string) => Promise<void>
   onProgress: (callback: (event: LaunchProgressEvent) => void) => () => void
   onStatus: (callback: (event: LaunchProgressEvent) => void) => () => void
@@ -91,6 +94,10 @@ export interface ModActions {
     instanceId: string,
     updates: ModUpdateInfo[]
   ) => Promise<{ success: boolean; updatedCount: number }>
+  installDropped: (
+    instanceId: string,
+    filePaths: string[]
+  ) => Promise<{ success: boolean; installedMods: InstalledModRecord[] }>
   onUpdateProgress: (
     callback: (event: { message: string; current: number; total: number }) => void
   ) => () => void
@@ -137,6 +144,26 @@ export interface FontActions {
   delete: (fileName: string) => Promise<boolean>
 }
 
+export interface ServerActions {
+  listAll: () => Promise<QuickPlayTarget[]>
+  ping: (host: string, port?: number) => Promise<ServerPingStatus>
+}
+
+export interface SkinActions {
+  list: () => Promise<{ activeSkinId: string | null; skins: SkinEntry[] }>
+  getActive: () => Promise<string | null>
+  apply: (skinId: string) => Promise<boolean>
+  save: (params: {
+    name: string
+    textureData: string
+    model: SkinModelType
+    source: 'custom' | 'player'
+    author?: string
+  }) => Promise<SkinEntry>
+  delete: (skinId: string) => Promise<boolean>
+  searchPlayer: (username: string) => Promise<PlayerSkinSearchResult>
+}
+
 export interface LauncherAPI {
   window: WindowControlActions
   instances: InstanceActions
@@ -150,4 +177,6 @@ export interface LauncherAPI {
   externalLaunchers: ExternalLauncherActions
   java: JavaActions
   fonts: FontActions
+  servers: ServerActions
+  skins: SkinActions
 }

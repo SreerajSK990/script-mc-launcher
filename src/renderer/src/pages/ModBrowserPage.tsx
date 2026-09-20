@@ -111,7 +111,45 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
     setConfirmDialog((prev) => ({ ...prev, isOpen: false }))
   }
 
+  const [isDraggingMods, setIsDraggingMods] = useState(false)
+
   const currentInstance = instances.find((i) => i.id === selectedInstanceId)
+
+  const handleModFilesDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDraggingMods(false)
+
+    if (!currentInstance) {
+      onNotification('Please select a target instance first.')
+      return
+    }
+
+    const files = Array.from(e.dataTransfer.files)
+    const validPaths = files
+      .map((f) => (f as any).path)
+      .filter((p): p is string => Boolean(p && (p.toLowerCase().endsWith('.jar') || p.toLowerCase().endsWith('.zip'))))
+
+    if (validPaths.length === 0) {
+      onNotification('Please drop valid .jar or .zip Minecraft mod files.')
+      return
+    }
+
+    try {
+      if (window.launcherAPI?.mods?.installDropped) {
+        const res = await window.launcherAPI.mods.installDropped(currentInstance.id, validPaths)
+        if (res.success) {
+          onNotification(`Successfully installed ${res.installedMods.length} dropped mod(s) into "${currentInstance.name}"!`)
+          fetchInstalledMods()
+        } else {
+          onNotification('No valid mod files found in dropped items.')
+        }
+      }
+    } catch (err) {
+      console.error('Failed to install dropped mods:', err)
+      onNotification('Failed to install dropped mods.')
+    }
+  }
 
   useEffect(() => {
     if (initialInstanceId) {
@@ -393,7 +431,31 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
   }
 
   return (
-    <div className="flex flex-col w-full h-full overflow-hidden">
+    <div
+      onDragOver={(e) => {
+        e.preventDefault()
+        setIsDraggingMods(true)
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+          setIsDraggingMods(false)
+        }
+      }}
+      onDrop={handleModFilesDrop}
+      className="flex flex-col w-full h-full overflow-hidden relative"
+    >
+      {isDraggingMods && (
+        <div className="absolute inset-0 z-50 bg-background-dark/85 backdrop-blur-sm border-2 border-dashed border-primary rounded-2xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-150 pointer-events-none">
+          <Package size={48} className="text-primary animate-bounce mb-3" />
+          <h3 className="text-lg font-bold text-white">Drop Minecraft Mods Here</h3>
+          <p className="text-xs text-slate-300 mt-1">
+            {currentInstance
+              ? `Release .jar or .zip files to install them directly into "${currentInstance.name}"`
+              : 'Select an instance first to install dropped mods'}
+          </p>
+        </div>
+      )}
+
       {/* Header bar (Pinned) */}
       <div className="shrink-0 flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3 border-b border-border-subtle">
         <div>

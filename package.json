@@ -1,6 +1,6 @@
 {
   "name": "script-mc-launcher",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "type": "module",
   "description": "Custom modern Minecraft launcher with instance isolation and mod loader support",
   "main": "./out/main/index.js",
@@ -18,7 +18,8 @@
     "adm-zip": "^0.6.1",
     "lucide-react": "^1.16.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "skinview3d": "^3.4.2"
   },
   "devDependencies": {
     "@types/adm-zip": "^0.5.8",

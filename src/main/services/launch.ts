@@ -1,5 +1,6 @@
 import { delimiter, join } from 'node:path'
 import type { LaunchProgressStep, LaunchProgressEvent, LaunchLogEvent } from '@shared/types/launch'
+import type { QuickPlayLaunchOptions } from '@shared/types/servers'
 import { getInstanceById, updateExistingInstance } from '@main/services/instances'
 import { getCurrentAuthState, loginWithOfflineAccount } from '@main/services/auth'
 import { detectSystemJavaPath } from '@main/services/system'
@@ -13,6 +14,14 @@ import { resolveInstanceLaunchConfiguration } from '@main/core/loaders/resolver'
 import { ensureJavaRuntime } from '@main/core/java/runtime'
 
 const activeProcesses = new Map<string, RunningProcessHandle>()
+
+function isVersionAtLeast(version: string, targetMajor: number, targetMinor: number): boolean {
+  const parts = version.split('.').map(p => parseInt(p, 10))
+  if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) return false
+  if (parts[0] > targetMajor) return true
+  if (parts[0] === targetMajor) return parts[1] >= targetMinor
+  return false
+}
 
 export function isInstanceRunning(instanceId: string): boolean {
   return activeProcesses.has(instanceId)
@@ -32,7 +41,8 @@ export function stopRunningInstance(instanceId: string): boolean {
 export async function launchInstance(
   instanceId: string,
   onProgress: (event: LaunchProgressEvent) => void,
-  onLog: (event: LaunchLogEvent) => void
+  onLog: (event: LaunchLogEvent) => void,
+  quickPlay?: QuickPlayLaunchOptions
 ): Promise<boolean> {
   if (isInstanceRunning(instanceId)) {
     throw new Error('This instance is already running.')
@@ -121,6 +131,29 @@ export async function launchInstance(
 
   if (launchConfig.extraJvmArguments.length > 0) {
     jvmArguments.push(...launchConfig.extraJvmArguments)
+  }
+
+  if (quickPlay) {
+    if (quickPlay.type === 'server' && quickPlay.host) {
+      if (isVersionAtLeast(instance.minecraftVersion, 1, 20)) {
+        const address = quickPlay.port ? `${quickPlay.host}:${quickPlay.port}` : quickPlay.host
+        sendLog(`Quick-play joining server via modern argument: ${address}`)
+        gameArguments.push('--quickPlayMultiplayer', address)
+      } else {
+        sendLog(`Quick-play joining server via standard arguments: ${quickPlay.host}:${quickPlay.port || 25565}`)
+        gameArguments.push('--server', quickPlay.host)
+        if (quickPlay.port) {
+          gameArguments.push('--port', String(quickPlay.port))
+        }
+      }
+    } else if (quickPlay.type === 'world' && quickPlay.worldFolder) {
+      if (isVersionAtLeast(instance.minecraftVersion, 1, 20)) {
+        sendLog(`Quick-play loading singleplayer world: ${quickPlay.worldFolder}`)
+        gameArguments.push('--quickPlaySingleplayer', quickPlay.worldFolder)
+      } else {
+        sendLog('Quick-play singleplayer is only natively supported on Minecraft 1.20+; launching instance normally.', 'warn')
+      }
+    }
   }
 
   let javaExecutable = instance.javaPath

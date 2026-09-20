@@ -11,6 +11,8 @@ import { InstanceDetailPage } from '@renderer/pages/InstanceDetailPage'
 import { ModBrowserPage } from '@renderer/pages/ModBrowserPage'
 import { LogsPage } from '@renderer/pages/LogsPage'
 import { SettingsPage } from '@renderer/pages/SettingsPage'
+import { SkinSelectorPage } from '@renderer/pages/SkinSelectorPage'
+import type { QuickPlayTarget, QuickPlayLaunchOptions } from '@shared/types/servers'
 import { CreateInstanceModal } from '@renderer/components/instances/CreateInstanceModal'
 import { ImportModpackModal } from '@renderer/components/instances/ImportModpackModal'
 import { ImportFromLauncherModal } from '@renderer/components/instances/ImportFromLauncherModal'
@@ -219,6 +221,37 @@ export const App: React.FC = () => {
     }
   }
 
+  const handleQuickPlay = async (target: QuickPlayTarget) => {
+    const instance = instances.find((i) => i.id === target.instanceId)
+    if (!instance) {
+      showNotification(`Associated instance "${target.instanceName}" not found.`)
+      return
+    }
+
+    if (!window.launcherAPI?.launch) return
+
+    const options: QuickPlayLaunchOptions =
+      target.type === 'server'
+        ? { type: 'server', host: target.ip, port: target.port }
+        : { type: 'world', worldFolder: target.folderName }
+
+    setActiveLaunchingInstance(instance)
+    setLaunchLogs([])
+    setActiveTab('logs')
+
+    try {
+      await window.launcherAPI.launch.quickPlay(instance.id, options)
+    } catch (launchError) {
+      const message = launchError instanceof Error ? launchError.message : 'Quick play launch failed'
+      showNotification(message)
+      setLaunchProgress({
+        instanceId: instance.id,
+        step: 'CRASHED',
+        statusText: message
+      })
+    }
+  }
+
   const handleStopGame = async () => {
     if (activeLaunchingInstance && window.launcherAPI?.launch) {
       await window.launcherAPI.launch.stop(activeLaunchingInstance.id)
@@ -299,6 +332,7 @@ export const App: React.FC = () => {
                 instances={instances}
                 systemEnv={systemEnv}
                 onPlay={handlePlayInstance}
+                onQuickPlay={handleQuickPlay}
                 onOpenFolder={handleOpenFolder}
                 onDelete={handleDeleteInstance}
                 onCreateClick={() => setIsCreateModalOpen(true)}
@@ -348,6 +382,8 @@ export const App: React.FC = () => {
                 }}
               />
             )}
+
+            {activeTab === 'skins' && <SkinSelectorPage onNotification={showNotification} />}
 
             {activeTab === 'logs' && (
               <LogsPage

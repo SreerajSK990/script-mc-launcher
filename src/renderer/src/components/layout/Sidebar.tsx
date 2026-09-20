@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   Layers,
   Boxes,
+  Shirt,
   Terminal,
   Settings,
   Plus,
@@ -13,7 +14,7 @@ import {
 import type { StoredAccount } from '@shared/types/auth'
 import { Button } from '@renderer/components/common/Button'
 
-export type ActivePageTab = 'dashboard' | 'instances' | 'mods' | 'logs' | 'settings'
+export type ActivePageTab = 'dashboard' | 'instances' | 'mods' | 'skins' | 'logs' | 'settings'
 
 interface SidebarProps {
   activeTab: ActivePageTab
@@ -53,6 +54,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'mods' as const,
       label: 'Mod Browser',
       icon: Boxes,
+      badge: null,
+      badgeStyle: undefined
+    },
+    {
+      id: 'skins' as const,
+      label: 'Skins',
+      icon: Shirt,
       badge: null,
       badgeStyle: undefined
     },

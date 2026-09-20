@@ -10,6 +10,8 @@ import { registerScreenshotIpcHandlers } from '@main/ipc/screenshots'
 import { registerJavaIpcHandlers } from '@main/ipc/java'
 import { registerExternalLauncherIpcHandlers } from '@main/ipc/externalLaunchers'
 import { registerFontsIpcHandlers } from '@main/ipc/fonts'
+import { registerServersIpcHandlers } from '@main/ipc/servers'
+import { registerSkinsIpcHandlers } from '@main/ipc/skins'
 
 export function registerAllIpcHandlers(mainWindow: BrowserWindow): void {
   registerInstanceIpcHandlers()
@@ -23,5 +25,7 @@ export function registerAllIpcHandlers(mainWindow: BrowserWindow): void {
   registerJavaIpcHandlers()
   registerExternalLauncherIpcHandlers(mainWindow)
   registerFontsIpcHandlers()
+  registerServersIpcHandlers()
+  registerSkinsIpcHandlers()
 }
 

@@ -21,4 +21,24 @@ export function registerLaunchIpcHandlers(mainWindow?: BrowserWindow): void {
   ipcMain.handle(IPC_CHANNELS.LAUNCH_STOP, async (_event, instanceId: string) => {
     return stopRunningInstance(instanceId)
   })
+
+  ipcMain.handle(
+    IPC_CHANNELS.LAUNCH_QUICK_PLAY,
+    async (_event, instanceId: string, options: import('@shared/types/servers').QuickPlayLaunchOptions) => {
+      return await launchInstance(
+        instanceId,
+        (progressEvent) => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send(IPC_CHANNELS.LAUNCH_STATUS_EVENT, progressEvent)
+          }
+        },
+        (logEvent) => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send(IPC_CHANNELS.LAUNCH_LOG_EVENT, logEvent)
+          }
+        },
+        options
+      )
+    }
+  )
 }

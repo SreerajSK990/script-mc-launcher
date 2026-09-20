@@ -92,5 +92,18 @@ export function registerModsIpcHandlers(mainWindow?: BrowserWindow): void {
       }
     }
   )
+
+  ipcMain.handle(
+    IPC_CHANNELS.MODS_INSTALL_DROPPED,
+    async (_event, instanceId: string, filePaths: string[]) => {
+      try {
+        const { installDroppedModFiles } = await import('@main/core/mods/drop')
+        return await installDroppedModFiles(instanceId, filePaths)
+      } catch (err) {
+        console.error('Failed to install dropped mods:', err)
+        return { success: false, installedMods: [] }
+      }
+    }
+  )
 }
 

@@ -58,6 +58,10 @@ export function getFontsDirectory(): string {
   return join(getLauncherRootDirectory(), 'fonts')
 }
 
+export function getSkinsDirectory(): string {
+  return join(getLauncherRootDirectory(), 'skins')
+}
+
 export async function initializeLauncherDirectories(): Promise<void> {
   const root = getLauncherRootDirectory()
   await ensureDirectoryExists(root)
@@ -67,5 +71,6 @@ export async function initializeLauncherDirectories(): Promise<void> {
   await ensureDirectoryExists(getJavaRuntimesDirectory())
   await ensureDirectoryExists(getMetaCacheDirectory())
   await ensureDirectoryExists(getFontsDirectory())
+  await ensureDirectoryExists(getSkinsDirectory())
 }
 

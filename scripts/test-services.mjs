@@ -525,9 +525,87 @@ async function runTests() {
   console.log('Verified cloned instance mods and world saves isolation.')
 
   await deleteInstanceById(clonedInstance.id)
-  console.log('Deleted cloned test instance.')
+  console.log('--- Dropped Mods, Quick-Play Servers & Worlds, and Skins Verification ---')
 
-  console.log('--- All Launcher Cloner, Modpack, Screenshot, and Mod Verifications Passed! ---')
+  const { installDroppedModFiles } = await import('../src/main/core/mods/drop.ts')
+  const { getInstanceServers, getInstanceWorlds } = await import('../src/main/core/minecraft/servers.ts')
+  const { listAllSkins, saveSkin, setActiveSkin, deleteSkin } = await import('../src/main/core/system/skins.ts')
+
+  // 1. Dropped mod test
+  const dropTestInstance = await createNewInstance({
+    name: 'Drop Mod Test Instance',
+    minecraftVersion: '1.20.1',
+    loaderType: 'fabric'
+  })
+
+  const mockModZip = new AdmZip()
+  mockModZip.addFile(
+    'fabric.mod.json',
+    Buffer.from(
+      JSON.stringify({
+        id: 'coolmod',
+        name: 'Cool Mod',
+        version: '1.0.0',
+        description: 'A dropped mod for testing'
+      })
+    )
+  )
+  const droppedJarPath = join(testSandboxDir, 'coolmod-1.0.0.jar')
+  mockModZip.writeZip(droppedJarPath)
+
+  const dropResult = await installDroppedModFiles(dropTestInstance.id, [droppedJarPath])
+  if (!dropResult.success || dropResult.installedMods.length !== 1 || dropResult.installedMods[0].name !== 'Cool Mod') {
+    throw new Error('Dropped mod installation failed!')
+  }
+  console.log('Installed dropped mod successfully:', dropResult.installedMods[0].name)
+
+  // 2. Server & World Scanner Test
+  const testWorldDir = join(testSandboxDir, 'instances', dropTestInstance.id, 'minecraft', 'saves', 'SurvivalWorld')
+  await fs.mkdir(testWorldDir, { recursive: true })
+  await fs.writeFile(join(testWorldDir, 'level.dat'), Buffer.from('mock-level-dat'))
+  await fs.writeFile(join(testWorldDir, 'icon.png'), Buffer.from('mock-icon-bytes'))
+
+  const worlds = await getInstanceWorlds(dropTestInstance)
+  if (worlds.length !== 1 || worlds[0].folderName !== 'SurvivalWorld' || !worlds[0].icon) {
+    throw new Error('Failed to discover singleplayer world with icon!')
+  }
+  console.log('Discovered singleplayer world with icon:', worlds[0].name)
+
+  // 3. Skins System Test
+  const initialSkins = await listAllSkins()
+  if (initialSkins.skins.length < 9) {
+    throw new Error('Expected at least 9 official preset skins!')
+  }
+  console.log('Verified official preset skins:', initialSkins.skins.length)
+
+  const savedSkin = await saveSkin({
+    name: 'Hero Skin',
+    textureData: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    model: 'slim',
+    source: 'custom',
+    author: 'Tester'
+  })
+  if (savedSkin.name !== 'Hero Skin' || savedSkin.model !== 'slim') {
+    throw new Error('Failed to save custom skin!')
+  }
+  console.log('Saved custom skin successfully:', savedSkin.id)
+
+  await setActiveSkin(savedSkin.id)
+  const skinsAfterSet = await listAllSkins()
+  if (skinsAfterSet.activeSkinId !== savedSkin.id) {
+    throw new Error('Active skin ID was not updated!')
+  }
+  console.log('Verified active skin update.')
+
+  await deleteSkin(savedSkin.id)
+  const skinsAfterDelete = await listAllSkins()
+  if (skinsAfterDelete.skins.some((s) => s.id === savedSkin.id)) {
+    throw new Error('Custom skin was not deleted!')
+  }
+  console.log('Verified skin deletion.')
+
+  await deleteInstanceById(dropTestInstance.id)
+  console.log('--- All Launcher Cloner, Modpack, Screenshot, Dropped Mods, Servers, and Skins Verifications Passed! ---')
 }
 
 runTests()
