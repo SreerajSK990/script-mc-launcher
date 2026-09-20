@@ -56,10 +56,9 @@ export const App: React.FC = () => {
     setConfirmDialog((prev) => ({ ...prev, isOpen: false }))
   }
 
-  const showNotification = (message: string) => {
+  const showNotification = useCallback((message: string) => {
     setActiveNotification(message)
-  }
-
+  }, [])
 
   const fetchInstances = useCallback(async () => {
     if (window.launcherAPI?.instances) {
@@ -71,6 +70,25 @@ export const App: React.FC = () => {
       }
     }
   }, [])
+
+  const handleToggleFavorite = useCallback(async (instanceId: string) => {
+    setInstances((prev) =>
+      prev.map((inst) =>
+        inst.id === instanceId ? { ...inst, isFavorite: !Boolean(inst.isFavorite) } : inst
+      )
+    )
+    if (window.launcherAPI?.instances?.toggleFavorite) {
+      try {
+        const updated = await window.launcherAPI.instances.toggleFavorite(instanceId)
+        setInstances((prev) =>
+          prev.map((inst) => (inst.id === updated.id ? updated : inst))
+        )
+      } catch (error) {
+        console.error('Failed to toggle favorite:', error)
+        fetchInstances()
+      }
+    }
+  }, [fetchInstances])
 
   const fetchEnvironment = useCallback(async () => {
     if (window.launcherAPI?.system) {
@@ -329,6 +347,7 @@ export const App: React.FC = () => {
                   setActiveTab('instances')
                 }}
                 onRefreshInstances={fetchInstances}
+                onToggleFavorite={handleToggleFavorite}
               />
             )}
 
@@ -359,6 +378,7 @@ export const App: React.FC = () => {
                   onCloneLauncherClick={() => setIsImportLauncherModalOpen(true)}
                   onManage={(inst) => setSelectedDetailInstance(inst)}
                   onRefreshInstances={fetchInstances}
+                  onToggleFavorite={handleToggleFavorite}
                 />
               )
             )}

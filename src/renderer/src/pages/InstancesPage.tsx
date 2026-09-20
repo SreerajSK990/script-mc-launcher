@@ -14,6 +14,7 @@ interface InstancesPageProps {
   onCloneLauncherClick?: () => void
   onManage?: (instance: InstanceConfiguration) => void
   onRefreshInstances?: () => void
+  onToggleFavorite?: (instanceId: string) => void
 }
 
 type LoaderFilter = 'all' | ModLoaderType
@@ -36,7 +37,8 @@ export const InstancesPage: React.FC<InstancesPageProps> = ({
   onImportClick,
   onCloneLauncherClick,
   onManage,
-  onRefreshInstances
+  onRefreshInstances,
+  onToggleFavorite
 }) => {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedLoader, setSelectedLoader] = useState<LoaderFilter>('all')
@@ -86,6 +88,10 @@ export const InstancesPage: React.FC<InstancesPageProps> = ({
   }
 
   const handleToggleFavorite = async (instanceId: string) => {
+    if (onToggleFavorite) {
+      onToggleFavorite(instanceId)
+      return
+    }
     try {
       if (window.launcherAPI?.instances?.toggleFavorite) {
         await window.launcherAPI.instances.toggleFavorite(instanceId)

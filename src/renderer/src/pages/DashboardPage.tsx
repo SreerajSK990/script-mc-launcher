@@ -24,6 +24,7 @@ interface DashboardPageProps {
   onCreateClick: () => void
   onManage?: (instance: InstanceConfiguration) => void
   onRefreshInstances?: () => void
+  onToggleFavorite?: (instanceId: string) => void
 }
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({
@@ -34,7 +35,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onDelete,
   onCreateClick,
   onManage,
-  onRefreshInstances
+  onRefreshInstances,
+  onToggleFavorite
 }) => {
   const [quickPlayTargets, setQuickPlayTargets] = useState<QuickPlayTarget[]>([])
   const [pingStatuses, setPingStatuses] = useState<Record<string, ServerPingStatus>>({})
@@ -119,6 +121,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   }
 
   const handleToggleFavorite = async (instanceId: string) => {
+    if (onToggleFavorite) {
+      onToggleFavorite(instanceId)
+      return
+    }
     try {
       if (window.launcherAPI?.instances?.toggleFavorite) {
         await window.launcherAPI.instances.toggleFavorite(instanceId)

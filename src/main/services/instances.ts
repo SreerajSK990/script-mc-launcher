@@ -89,6 +89,7 @@ export async function createNewInstance(payload: CreateInstancePayload): Promise
     ramAllocationMegabytes: payload.ramAllocationMegabytes ?? DEFAULT_INSTANCE_SETTINGS.RAM_ALLOCATION_MB,
     icon: payload.icon || 'minecraft_grass',
     group: payload.group ? payload.group.trim() : null,
+    isFavorite: Boolean(payload.isFavorite),
     createdAt: now,
     lastPlayedAt: null,
     totalPlayTimeMinutes: 0
@@ -117,6 +118,7 @@ export async function updateExistingInstance(payload: UpdateInstancePayload): Pr
     ramAllocationMegabytes: payload.ramAllocationMegabytes ?? existing.ramAllocationMegabytes,
     icon: payload.icon !== undefined ? payload.icon : existing.icon,
     group: payload.group !== undefined ? (payload.group ? payload.group.trim() : null) : existing.group,
+    isFavorite: payload.isFavorite !== undefined ? payload.isFavorite : existing.isFavorite,
     lastPlayedAt: payload.lastPlayedAt !== undefined ? payload.lastPlayedAt : existing.lastPlayedAt,
     totalPlayTimeMinutes: payload.totalPlayTimeMinutes ?? existing.totalPlayTimeMinutes
   }

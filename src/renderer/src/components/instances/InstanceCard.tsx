@@ -101,8 +101,11 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
 
           <button
             type="button"
+            draggable={false}
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation()
+              e.preventDefault()
               onToggleFavorite?.(instance.id)
             }}
             className={`absolute top-2.5 right-2.5 p-1.5 rounded-lg bg-black/40 backdrop-blur-md transition-all cursor-pointer z-10 ${
@@ -178,7 +181,10 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => {
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    e.preventDefault()
                     setIsMenuOpen(false)
                     onToggleFavorite?.(instance.id)
                   }}
