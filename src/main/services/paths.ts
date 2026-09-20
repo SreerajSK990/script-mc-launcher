@@ -4,6 +4,10 @@ import { LAUNCHER_METADATA } from '@shared/constants/defaults'
 import { ensureDirectoryExists } from '@main/utils/filesystem'
 
 export function getLauncherRootDirectory(): string {
+  if (process.env.LAUNCHER_DATA_DIR) {
+    return process.env.LAUNCHER_DATA_DIR
+  }
+
   const userHome = homedir()
 
   if (process.platform === 'win32') {

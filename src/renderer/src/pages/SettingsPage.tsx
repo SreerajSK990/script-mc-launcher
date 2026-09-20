@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { FolderOpen, HardDrive, Cpu, Terminal, Save } from 'lucide-react'
 import type { SystemEnvironment } from '@shared/types/system'
+import { LAUNCHER_METADATA } from '@shared/constants/defaults'
 import { Button } from '@renderer/components/common/Button'
 
 interface SettingsPageProps {
@@ -111,9 +112,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ systemEnv }) => {
 
         <div className="pt-6 border-t border-border-subtle/60">
           <h3 className="text-sm font-semibold text-slate-200 uppercase tracking-wider mb-3">
-            Hardware Summary
+            Hardware & Application Summary
           </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
+            <div className="p-3 rounded-xl bg-background-darkest border border-border-subtle flex items-center justify-between">
+              <span className="text-slate-400">Launcher Version</span>
+              <span className="text-emerald-400 font-semibold">
+                v{LAUNCHER_METADATA.VERSION}
+              </span>
+            </div>
             <div className="p-3 rounded-xl bg-background-darkest border border-border-subtle flex items-center justify-between">
               <span className="text-slate-400">Total System RAM</span>
               <span className="text-slate-200">

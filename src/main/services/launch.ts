@@ -68,8 +68,12 @@ export async function launchInstance(
   let activeAccount = authState.activeAccount
 
   if (!activeAccount) {
-    sendLog('No active player detected. Creating default "Player" offline account.')
-    activeAccount = await loginWithOfflineAccount('Player')
+    if (authState.accounts.length > 0) {
+      activeAccount = authState.accounts[0]
+    } else {
+      sendLog('No player account connected. Creating default "Player" offline profile.')
+      activeAccount = await loginWithOfflineAccount('Player')
+    }
   }
 
   sendLog(`Authenticated as: ${activeAccount.username} (${activeAccount.accountType})`)

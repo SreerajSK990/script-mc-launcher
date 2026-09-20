@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   Layers,
   Boxes,
+  Terminal,
   Settings,
   Plus,
   User,
@@ -12,7 +13,7 @@ import {
 import type { StoredAccount } from '@shared/types/auth'
 import { Button } from '@renderer/components/common/Button'
 
-export type ActivePageTab = 'dashboard' | 'instances' | 'mods' | 'settings'
+export type ActivePageTab = 'dashboard' | 'instances' | 'mods' | 'logs' | 'settings'
 
 interface SidebarProps {
   activeTab: ActivePageTab
@@ -21,6 +22,7 @@ interface SidebarProps {
   onOpenAccountModal: () => void
   activeAccount: StoredAccount | null
   instanceCount: number
+  isProcessRunning?: boolean
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -29,32 +31,44 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenCreateModal,
   onOpenAccountModal,
   activeAccount,
-  instanceCount
+  instanceCount,
+  isProcessRunning
 }) => {
   const navigationItems = [
     {
       id: 'dashboard' as const,
       label: 'Dashboard',
       icon: LayoutDashboard,
-      badge: null
+      badge: null,
+      badgeStyle: undefined
     },
     {
       id: 'instances' as const,
       label: 'Instances',
       icon: Layers,
-      badge: instanceCount > 0 ? instanceCount.toString() : null
+      badge: instanceCount > 0 ? instanceCount.toString() : null,
+      badgeStyle: undefined
     },
     {
       id: 'mods' as const,
       label: 'Mod Browser',
       icon: Boxes,
-      badge: null
+      badge: null,
+      badgeStyle: undefined
+    },
+    {
+      id: 'logs' as const,
+      label: 'Logs',
+      icon: Terminal,
+      badge: isProcessRunning ? 'Live' : null,
+      badgeStyle: isProcessRunning ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold animate-pulse' : undefined
     },
     {
       id: 'settings' as const,
       label: 'Settings',
       icon: Settings,
-      badge: null
+      badge: null,
+      badgeStyle: undefined
     }
   ]
 
@@ -96,7 +110,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <span>{item.label}</span>
                 </div>
                 {item.badge && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-background-darkest text-slate-400 font-mono">
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-mono ${item.badgeStyle || 'bg-background-darkest text-slate-400'}`}>
                     {item.badge}
                   </span>
                 )}

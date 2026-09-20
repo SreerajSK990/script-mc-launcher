@@ -30,6 +30,7 @@ function generateOfflinePlayerUuid(playerName: string): string {
 }
 
 let authenticationInitializationPromise: Promise<AuthState> | null = null
+let isAuthInitialized = false
 
 export async function initializeAuthenticationState(): Promise<AuthState> {
   if (authenticationInitializationPromise) {
@@ -87,14 +88,16 @@ export async function initializeAuthenticationState(): Promise<AuthState> {
   })()
 
   try {
-    return await authenticationInitializationPromise
+    const result = await authenticationInitializationPromise
+    isAuthInitialized = true
+    return result
   } finally {
     authenticationInitializationPromise = null
   }
 }
 
 export async function getCurrentAuthState(): Promise<AuthState> {
-  if (cachedAuthState.accounts.length === 0 && !authenticationInitializationPromise) {
+  if (!isAuthInitialized && !authenticationInitializationPromise) {
     return await initializeAuthenticationState()
   }
   if (authenticationInitializationPromise) {

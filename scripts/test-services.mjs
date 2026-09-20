@@ -1,3 +1,10 @@
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { rmSync } from 'node:fs'
+
+const testSandboxDir = join(tmpdir(), `.scriptlauncher-test-${Date.now()}`)
+process.env.LAUNCHER_DATA_DIR = testSandboxDir
+
 import { getLauncherRootDirectory, initializeLauncherDirectories } from '../src/main/services/paths.ts'
 import { createNewInstance, listAllInstances, getInstanceById, deleteInstanceById } from '../src/main/services/instances.ts'
 import { getSystemEnvironment } from '../src/main/services/system.ts'
@@ -206,8 +213,21 @@ async function runTests() {
   console.log('--- All Phase 1, Phase 2, Phase 3, Phase 4 & Phase 5 Verifications Passed! ---')
 }
 
-runTests().catch((err) => {
-  console.error('Test failed:', err)
-  process.exit(1)
-})
+runTests()
+  .then(() => {
+    try {
+      rmSync(testSandboxDir, { recursive: true, force: true })
+    } catch {
+      // Ignore cleanup error
+    }
+  })
+  .catch((err) => {
+    try {
+      rmSync(testSandboxDir, { recursive: true, force: true })
+    } catch {
+      // Ignore cleanup error
+    }
+    console.error('Test failed:', err)
+    process.exit(1)
+  })
 

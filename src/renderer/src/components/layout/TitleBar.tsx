@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Minus, Square, Copy, X, Terminal } from 'lucide-react'
+import { LAUNCHER_METADATA } from '@shared/constants/defaults'
 
 export const TitleBar: React.FC = () => {
   const [isMaximized, setIsMaximized] = useState(false)
@@ -38,7 +39,7 @@ export const TitleBar: React.FC = () => {
         </div>
         <div className="flex items-baseline gap-2">
           <span className="text-xs font-semibold tracking-wide text-slate-200">SCRIPT LAUNCHER</span>
-          <span className="text-[10px] text-slate-500 font-mono">v0.1.0</span>
+          <span className="text-[10px] text-slate-500 font-mono">v{LAUNCHER_METADATA.VERSION}</span>
         </div>
       </div>
 

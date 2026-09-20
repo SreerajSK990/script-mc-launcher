@@ -8,10 +8,10 @@ import { Sidebar, type ActivePageTab } from '@renderer/components/layout/Sidebar
 import { DashboardPage } from '@renderer/pages/DashboardPage'
 import { InstancesPage } from '@renderer/pages/InstancesPage'
 import { ModBrowserPage } from '@renderer/pages/ModBrowserPage'
+import { LogsPage } from '@renderer/pages/LogsPage'
 import { SettingsPage } from '@renderer/pages/SettingsPage'
 import { CreateInstanceModal } from '@renderer/components/instances/CreateInstanceModal'
 import { AccountModal } from '@renderer/components/auth/AccountModal'
-import { ConsoleLogDrawer } from '@renderer/components/launch/ConsoleLogDrawer'
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActivePageTab>('dashboard')
@@ -23,7 +23,6 @@ export const App: React.FC = () => {
   const [activeNotification, setActiveNotification] = useState<string | null>(null)
 
   const [activeLaunchingInstance, setActiveLaunchingInstance] = useState<InstanceConfiguration | null>(null)
-  const [isConsoleDrawerOpen, setIsConsoleDrawerOpen] = useState(false)
   const [launchProgress, setLaunchProgress] = useState<LaunchProgressEvent | null>(null)
   const [launchLogs, setLaunchLogs] = useState<LaunchLogEvent[]>([])
 
@@ -126,7 +125,7 @@ export const App: React.FC = () => {
 
     try {
       setActiveLaunchingInstance(instance)
-      setIsConsoleDrawerOpen(true)
+      setActiveTab('logs')
       setLaunchLogs([])
       setLaunchProgress({
         instanceId: instance.id,
@@ -199,10 +198,11 @@ export const App: React.FC = () => {
           onOpenAccountModal={() => setIsAccountModalOpen(true)}
           activeAccount={authState.activeAccount}
           instanceCount={instances.length}
+          isProcessRunning={launchProgress?.step === 'RUNNING'}
         />
 
         <main className="flex-1 overflow-y-auto p-6 md:p-8 bg-background-dark/50">
-          <div className="w-full max-w-[1600px] mx-auto">
+          <div className="w-full max-w-[1600px] h-full mx-auto">
             {activeNotification && (
               <div className="mb-6 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-center justify-between shadow-lg">
                 <span>{activeNotification}</span>
@@ -238,6 +238,17 @@ export const App: React.FC = () => {
 
             {activeTab === 'mods' && <ModBrowserPage />}
 
+            {activeTab === 'logs' && (
+              <LogsPage
+                instanceName={activeLaunchingInstance?.name}
+                progress={launchProgress}
+                logs={launchLogs}
+                onClearLogs={() => setLaunchLogs([])}
+                onStopGame={handleStopGame}
+                isGameRunning={launchProgress?.step === 'RUNNING'}
+              />
+            )}
+
             {activeTab === 'settings' && <SettingsPage systemEnv={systemEnv} />}
           </div>
         </main>
@@ -257,16 +268,6 @@ export const App: React.FC = () => {
         onLoginOffline={handleLoginOffline}
         onSwitchAccount={handleSwitchAccount}
         onLogout={handleLogout}
-      />
-
-      <ConsoleLogDrawer
-        isOpen={isConsoleDrawerOpen}
-        onClose={() => setIsConsoleDrawerOpen(false)}
-        onStop={handleStopGame}
-        instanceName={activeLaunchingInstance?.name || 'Minecraft'}
-        progress={launchProgress}
-        logs={launchLogs}
-        onClearLogs={() => setLaunchLogs([])}
       />
     </div>
   )
