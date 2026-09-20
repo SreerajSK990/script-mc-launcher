@@ -15,11 +15,13 @@
     "preview": "electron-vite preview"
   },
   "dependencies": {
+    "adm-zip": "^0.6.1",
     "lucide-react": "^1.16.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.8",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

@@ -1,6 +1,7 @@
 import type { InstanceConfiguration, CreateInstancePayload, UpdateInstancePayload } from './instance'
 import type { SystemEnvironment } from './system'
 import type { AuthState, StoredAccount } from './auth'
+import type { LaunchProgressEvent, LaunchLogEvent } from './launch'
 
 export interface WindowControlActions {
   minimize: () => Promise<void>
@@ -26,6 +27,17 @@ export interface AuthActions {
   switchAccount: (accountId: string) => Promise<StoredAccount | null>
 }
 
+export interface LaunchActions {
+  start: (instanceId: string) => Promise<boolean>
+  stop: (instanceId: string) => Promise<boolean>
+  onProgress: (callback: (event: LaunchProgressEvent) => void) => () => void
+  onLog: (callback: (event: LaunchLogEvent) => void) => () => void
+}
+
+export interface MetaActions {
+  getVersions: () => Promise<string[]>
+}
+
 export interface SystemActions {
   getEnvironment: () => Promise<SystemEnvironment>
   openExternalUrl: (url: string) => Promise<void>
@@ -36,5 +48,7 @@ export interface LauncherAPI {
   window: WindowControlActions
   instances: InstanceActions
   auth: AuthActions
+  launch: LaunchActions
+  meta: MetaActions
   system: SystemActions
 }

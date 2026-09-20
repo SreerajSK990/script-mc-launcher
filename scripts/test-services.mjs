@@ -73,7 +73,76 @@ async function runTests() {
   authState = await getCurrentAuthState()
   console.log(`Remaining accounts after logout: ${authState.accounts.length}`)
 
-  console.log('--- All Phase 1 & Phase 2 Verifications Passed! ---')
+  console.log('--- Phase 3 Launch Engine & Metadata Verification ---')
+
+  const { fetchMojangVersionManifest, getAvailableReleaseVersions, fetchVersionPackage } = await import('../src/main/core/minecraft/meta.ts')
+  const { convertMavenCoordinateToPath } = await import('../src/main/core/minecraft/libraries.ts')
+  const { isRuleAllowed } = await import('../src/main/core/minecraft/rules.ts')
+  const { buildExecutionArguments } = await import('../src/main/core/minecraft/arguments.ts')
+
+  const manifest = await fetchMojangVersionManifest()
+  console.log(`Loaded Manifest: ${manifest.versions.length} versions. Latest release: ${manifest.latest.release}`)
+
+  const releases = await getAvailableReleaseVersions()
+  console.log(`Available Releases: ${releases.length}. Latest: ${releases[0]}`)
+
+  const testVersion = releases[0] || '1.21.1'
+  const versionPackage = await fetchVersionPackage(testVersion)
+  console.log(`Loaded Version Package for ${versionPackage.id}: MainClass = ${versionPackage.mainClass}`)
+
+  const mavenPath = convertMavenCoordinateToPath('com.google.guava:guava:31.1-jre')
+  if (mavenPath !== 'com/google/guava/guava/31.1-jre/guava-31.1-jre.jar') {
+    throw new Error(`Maven path conversion failed: ${mavenPath}`)
+  }
+  console.log(`Verified Maven Coordinate conversion: ${mavenPath}`)
+
+  const testRuleAllow = isRuleAllowed([{ action: 'allow', os: { name: 'windows' } }], 'windows', 'x64')
+  const testRuleDisallow = isRuleAllowed([{ action: 'allow', os: { name: 'osx' } }], 'windows', 'x64')
+  if (!testRuleAllow || testRuleDisallow) {
+    throw new Error('OS Rule evaluation failed!')
+  }
+  console.log('Verified OS Rules evaluation.')
+
+  const sampleAccount = {
+    id: 'test-user',
+    username: 'TestSteve',
+    uuid: '11111111-2222-3333-4444-555555555555',
+    accountType: 'offline',
+    accessToken: '0',
+    refreshToken: null,
+    expiresAt: Infinity,
+    createdAt: new Date().toISOString()
+  }
+
+  const sampleInstance = {
+    id: 'test-instance',
+    name: 'Test Instance',
+    minecraftVersion: testVersion,
+    loaderType: 'vanilla',
+    loaderVersion: null,
+    javaPath: null,
+    jvmArguments: ['-XX:+UseG1GC'],
+    ramAllocationMegabytes: 4096,
+    createdAt: new Date().toISOString(),
+    lastPlayedAt: null,
+    totalPlayTimeMinutes: 0
+  }
+
+  const execArgs = buildExecutionArguments({
+    instance: sampleInstance,
+    versionPackage,
+    account: sampleAccount,
+    nativesDirectory: 'C:/fake/natives',
+    classpathString: 'C:/fake/lib1.jar;C:/fake/lib2.jar'
+  })
+
+  console.log(`Constructed ${execArgs.jvmArguments.length} JVM arguments & ${execArgs.gameArguments.length} game arguments`)
+  if (!execArgs.gameArguments.includes('TestSteve')) {
+    throw new Error('Expected player username in game arguments!')
+  }
+  console.log('Verified execution arguments builder.')
+
+  console.log('--- All Phase 1, Phase 2 & Phase 3 Verifications Passed! ---')
 }
 
 runTests().catch((err) => {

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import type { InstanceConfiguration, CreateInstancePayload } from '@shared/types/instance'
 import type { SystemEnvironment } from '@shared/types/system'
 import type { AuthState } from '@shared/types/auth'
+import type { LaunchProgressEvent, LaunchLogEvent } from '@shared/types/launch'
 import { TitleBar } from '@renderer/components/layout/TitleBar'
 import { Sidebar, type ActivePageTab } from '@renderer/components/layout/Sidebar'
 import { DashboardPage } from '@renderer/pages/DashboardPage'
@@ -10,6 +11,7 @@ import { ModBrowserPage } from '@renderer/pages/ModBrowserPage'
 import { SettingsPage } from '@renderer/pages/SettingsPage'
 import { CreateInstanceModal } from '@renderer/components/instances/CreateInstanceModal'
 import { AccountModal } from '@renderer/components/auth/AccountModal'
+import { ConsoleLogDrawer } from '@renderer/components/launch/ConsoleLogDrawer'
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActivePageTab>('dashboard')
@@ -19,6 +21,11 @@ export const App: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false)
   const [activeNotification, setActiveNotification] = useState<string | null>(null)
+
+  const [activeLaunchingInstance, setActiveLaunchingInstance] = useState<InstanceConfiguration | null>(null)
+  const [isConsoleDrawerOpen, setIsConsoleDrawerOpen] = useState(false)
+  const [launchProgress, setLaunchProgress] = useState<LaunchProgressEvent | null>(null)
+  const [launchLogs, setLaunchLogs] = useState<LaunchLogEvent[]>([])
 
   const showNotification = (message: string) => {
     setActiveNotification(message)
@@ -64,6 +71,28 @@ export const App: React.FC = () => {
     fetchAuthState()
   }, [fetchInstances, fetchEnvironment, fetchAuthState])
 
+  useEffect(() => {
+    if (!window.launcherAPI?.launch) {
+      return
+    }
+
+    const unsubProgress = window.launcherAPI.launch.onProgress((event) => {
+      setLaunchProgress(event)
+      if (event.step === 'RUNNING' || event.step === 'STARTING_JAVA') {
+        fetchInstances()
+      }
+    })
+
+    const unsubLogs = window.launcherAPI.launch.onLog((log) => {
+      setLaunchLogs((prev) => [...prev.slice(-1000), log])
+    })
+
+    return () => {
+      unsubProgress()
+      unsubLogs()
+    }
+  }, [fetchInstances])
+
   const handleCreateInstance = async (payload: CreateInstancePayload) => {
     if (window.launcherAPI?.instances) {
       await window.launcherAPI.instances.create(payload)
@@ -92,9 +121,36 @@ export const App: React.FC = () => {
     }
   }
 
-  const handlePlayInstance = (instance: InstanceConfiguration) => {
-    const playerName = authState.activeAccount?.username || 'Player'
-    showNotification(`Launching ${instance.name} as ${playerName} (Launch engine in Phase 3)`)
+  const handlePlayInstance = async (instance: InstanceConfiguration) => {
+    if (!window.launcherAPI?.launch) return
+
+    try {
+      setActiveLaunchingInstance(instance)
+      setIsConsoleDrawerOpen(true)
+      setLaunchLogs([])
+      setLaunchProgress({
+        instanceId: instance.id,
+        step: 'FETCHING_METADATA',
+        statusText: 'Preparing to launch...'
+      })
+
+      await window.launcherAPI.launch.start(instance.id)
+    } catch (launchError) {
+      const message = launchError instanceof Error ? launchError.message : 'Launch failed'
+      showNotification(message)
+      setLaunchProgress({
+        instanceId: instance.id,
+        step: 'CRASHED',
+        statusText: message
+      })
+    }
+  }
+
+  const handleStopGame = async () => {
+    if (activeLaunchingInstance && window.launcherAPI?.launch) {
+      await window.launcherAPI.launch.stop(activeLaunchingInstance.id)
+      showNotification('Stopping game process...')
+    }
   }
 
   const handleLoginMicrosoft = async () => {
@@ -201,6 +257,16 @@ export const App: React.FC = () => {
         onLoginOffline={handleLoginOffline}
         onSwitchAccount={handleSwitchAccount}
         onLogout={handleLogout}
+      />
+
+      <ConsoleLogDrawer
+        isOpen={isConsoleDrawerOpen}
+        onClose={() => setIsConsoleDrawerOpen(false)}
+        onStop={handleStopGame}
+        instanceName={activeLaunchingInstance?.name || 'Minecraft'}
+        progress={launchProgress}
+        logs={launchLogs}
+        onClearLogs={() => setLaunchLogs([])}
       />
     </div>
   )

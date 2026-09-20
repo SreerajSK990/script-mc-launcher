@@ -17,6 +17,13 @@ export const IPC_CHANNELS = {
   AUTH_LOGOUT: 'auth:logout',
   AUTH_SWITCH_ACCOUNT: 'auth:switch-account',
 
+  LAUNCH_START: 'launch:start',
+  LAUNCH_STOP: 'launch:stop',
+  LAUNCH_STATUS_EVENT: 'launch:status',
+  LAUNCH_LOG_EVENT: 'launch:log',
+
+  META_GET_VERSIONS: 'meta:get-versions',
+
   SYSTEM_GET_ENVIRONMENT: 'system:get-environment',
   SYSTEM_OPEN_EXTERNAL: 'system:open-external',
   SYSTEM_OPEN_DIRECTORY: 'system:open-directory'

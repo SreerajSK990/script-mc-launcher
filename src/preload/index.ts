@@ -25,6 +25,27 @@ const launcherAPI: LauncherAPI = {
     logout: (accountId: string) => ipcRenderer.invoke(IPC_CHANNELS.AUTH_LOGOUT, accountId),
     switchAccount: (accountId: string) => ipcRenderer.invoke(IPC_CHANNELS.AUTH_SWITCH_ACCOUNT, accountId)
   },
+  launch: {
+    start: (instanceId: string) => ipcRenderer.invoke(IPC_CHANNELS.LAUNCH_START, instanceId),
+    stop: (instanceId: string) => ipcRenderer.invoke(IPC_CHANNELS.LAUNCH_STOP, instanceId),
+    onProgress: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: any) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.LAUNCH_STATUS_EVENT, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.LAUNCH_STATUS_EVENT, handler)
+      }
+    },
+    onLog: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: any) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.LAUNCH_LOG_EVENT, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.LAUNCH_LOG_EVENT, handler)
+      }
+    }
+  },
+  meta: {
+    getVersions: () => ipcRenderer.invoke(IPC_CHANNELS.META_GET_VERSIONS)
+  },
   system: {
     getEnvironment: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_GET_ENVIRONMENT),
     openExternalUrl: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_OPEN_EXTERNAL, url),

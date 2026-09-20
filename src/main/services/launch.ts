@@ -1,0 +1,152 @@
+import { delimiter, join } from 'node:path'
+import type { LaunchProgressStep, LaunchProgressEvent, LaunchLogEvent } from '@shared/types/launch'
+import { getInstanceById, updateExistingInstance } from '@main/services/instances'
+import { getCurrentAuthState, loginWithOfflineAccount } from '@main/services/auth'
+import { detectSystemJavaPath } from '@main/services/system'
+import { getInstancePath, getInstanceMinecraftPath } from '@main/services/paths'
+import { fetchVersionPackage } from '@main/core/minecraft/meta'
+import { prepareMinecraftLibraries } from '@main/core/minecraft/libraries'
+import { prepareMinecraftAssets } from '@main/core/minecraft/assets'
+import { buildExecutionArguments } from '@main/core/minecraft/arguments'
+import { spawnMinecraftProcess, type RunningProcessHandle } from '@main/core/minecraft/launcher'
+
+const activeProcesses = new Map<string, RunningProcessHandle>()
+
+export function isInstanceRunning(instanceId: string): boolean {
+  return activeProcesses.has(instanceId)
+}
+
+export function stopRunningInstance(instanceId: string): boolean {
+  const handle = activeProcesses.get(instanceId)
+  if (!handle) {
+    return false
+  }
+
+  handle.kill()
+  activeProcesses.delete(instanceId)
+  return true
+}
+
+export async function launchInstance(
+  instanceId: string,
+  onProgress: (event: LaunchProgressEvent) => void,
+  onLog: (event: LaunchLogEvent) => void
+): Promise<boolean> {
+  if (isInstanceRunning(instanceId)) {
+    throw new Error('This instance is already running.')
+  }
+
+  const sendProgress = (step: LaunchProgressStep, statusText: string, currentItems?: number, totalItems?: number, percentage?: number) => {
+    onProgress({
+      instanceId,
+      step,
+      statusText,
+      currentItems,
+      totalItems,
+      percentage
+    })
+  }
+
+  const sendLog = (text: string, level: 'info' | 'warn' | 'error' = 'info') => {
+    onLog({
+      instanceId,
+      text,
+      level,
+      timestamp: new Date().toLocaleTimeString()
+    })
+  }
+
+  sendProgress('FETCHING_METADATA', 'Fetching version information...')
+  sendLog(`Initializing launch pipeline for instance: ${instanceId}`)
+
+  const instance = await getInstanceById(instanceId)
+  if (!instance) {
+    throw new Error(`Instance "${instanceId}" was not found.`)
+  }
+
+  let authState = await getCurrentAuthState()
+  let activeAccount = authState.activeAccount
+
+  if (!activeAccount) {
+    sendLog('No active player detected. Creating default "Player" offline account.')
+    activeAccount = await loginWithOfflineAccount('Player')
+  }
+
+  sendLog(`Authenticated as: ${activeAccount.username} (${activeAccount.accountType})`)
+
+  const versionPackage = await fetchVersionPackage(instance.minecraftVersion)
+  sendLog(`Loaded version metadata for Minecraft ${versionPackage.id}`)
+
+  const nativesDirectory = join(getInstancePath(instance.id), 'natives')
+
+  sendProgress('VERIFYING_LIBRARIES', 'Verifying libraries and client jar...')
+  const classpathJars = await prepareMinecraftLibraries(
+    versionPackage,
+    nativesDirectory,
+    (completed, total, currentItem) => {
+      const percentage = Math.round((completed / total) * 100)
+      sendProgress('DOWNLOADING_LIBRARIES', `Downloading libraries: ${completed}/${total}`, completed, total, percentage)
+    }
+  )
+  sendLog(`Verified ${classpathJars.length} libraries on classpath`)
+
+  sendProgress('VERIFYING_ASSETS', 'Verifying game assets...')
+  await prepareMinecraftAssets(versionPackage, (completed, total, currentItem) => {
+    const percentage = Math.round((completed / total) * 100)
+    sendProgress('DOWNLOADING_ASSETS', `Downloading assets: ${completed}/${total}`, completed, total, percentage)
+  })
+  sendLog('All game assets verified successfully')
+
+  sendProgress('BUILDING_ARGUMENTS', 'Constructing JVM parameters...')
+  const classpathString = classpathJars.join(delimiter)
+
+  const { jvmArguments, gameArguments, mainClass } = buildExecutionArguments({
+    instance,
+    versionPackage,
+    account: activeAccount,
+    nativesDirectory,
+    classpathString
+  })
+
+  const javaExecutable = instance.javaPath || (await detectSystemJavaPath()) || 'java'
+  const workingDirectory = getInstanceMinecraftPath(instance.id)
+
+  sendProgress('STARTING_JAVA', 'Spawning Java Virtual Machine...')
+  sendLog(`Executing Java: ${javaExecutable}`)
+  sendLog(`Main class: ${mainClass}`)
+  sendLog(`Working directory: ${workingDirectory}`)
+
+  const processStartTime = Date.now()
+
+  const handle = spawnMinecraftProcess({
+    javaExecutable,
+    workingDirectory,
+    jvmArguments,
+    mainClass,
+    gameArguments,
+    onLog: (line, level) => {
+      sendLog(line, level)
+    },
+    onExit: (exitCode) => {
+      activeProcesses.delete(instanceId)
+      const durationSeconds = Math.round((Date.now() - processStartTime) / 1000)
+
+      if (exitCode === 0) {
+        sendLog(`Minecraft process completed cleanly (Duration: ${durationSeconds}s)`)
+        sendProgress('COMPLETED', 'Game closed')
+      } else {
+        sendLog(`Minecraft process exited with code ${exitCode}`, 'error')
+        sendProgress('CRASHED', `Game closed with code ${exitCode}`)
+      }
+
+      updateExistingInstance({
+        id: instance.id,
+        lastPlayedAt: new Date().toISOString()
+      }).catch(() => {})
+    }
+  })
+
+  activeProcesses.set(instanceId, handle)
+  sendProgress('RUNNING', 'Minecraft is running')
+  return true
+}
