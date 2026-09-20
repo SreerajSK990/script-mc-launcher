@@ -7,7 +7,7 @@ export interface MinecraftServerEntry {
   name: string
   ip: string
   port: number
-  icon?: string // base64 dataUrl or favicon
+  icon?: string
   type: 'server'
 }
 
@@ -21,7 +21,7 @@ export interface SingleplayerWorldEntry {
   folderName: string
   gameMode: string
   lastPlayed: number
-  icon?: string // base64 dataUrl
+  icon?: string
   type: 'world'
 }
 
@@ -46,4 +46,15 @@ export interface QuickPlayLaunchOptions {
   host?: string
   port?: number
   worldFolder?: string
+}
+
+export interface AddServerPayload {
+  instanceId: string
+  name: string
+  ip: string
+}
+
+export interface RemoveServerPayload {
+  instanceId: string
+  serverIp: string
 }

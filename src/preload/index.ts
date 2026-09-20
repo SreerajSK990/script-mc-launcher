@@ -148,6 +148,10 @@ const launcherAPI: LauncherAPI = {
   },
   servers: {
     listAll: () => ipcRenderer.invoke(IPC_CHANNELS.SERVERS_LIST_ALL),
+    listForInstance: (instanceId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.SERVERS_LIST_INSTANCE, instanceId),
+    add: (payload: any) => ipcRenderer.invoke(IPC_CHANNELS.SERVERS_ADD, payload),
+    remove: (payload: any) => ipcRenderer.invoke(IPC_CHANNELS.SERVERS_REMOVE, payload),
     ping: (host: string, port?: number) => ipcRenderer.invoke(IPC_CHANNELS.SERVERS_PING, host, port)
   },
   skins: {

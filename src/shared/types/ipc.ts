@@ -24,7 +24,14 @@ import type {
   CloneProgressEvent
 } from './externalLauncher'
 import type { CustomFontEntry } from './fonts'
-import type { QuickPlayTarget, ServerPingStatus, QuickPlayLaunchOptions } from './servers'
+import type {
+  QuickPlayTarget,
+  ServerPingStatus,
+  QuickPlayLaunchOptions,
+  MinecraftServerEntry,
+  AddServerPayload,
+  RemoveServerPayload
+} from './servers'
 import type { SkinEntry, SkinModelType, PlayerSkinSearchResult, ApplySkinResult } from './skins'
 
 export interface WindowControlActions {
@@ -156,6 +163,9 @@ export interface FontActions {
 
 export interface ServerActions {
   listAll: () => Promise<QuickPlayTarget[]>
+  listForInstance: (instanceId: string) => Promise<MinecraftServerEntry[]>
+  add: (payload: AddServerPayload) => Promise<MinecraftServerEntry[]>
+  remove: (payload: RemoveServerPayload) => Promise<MinecraftServerEntry[]>
   ping: (host: string, port?: number) => Promise<ServerPingStatus>
 }
 

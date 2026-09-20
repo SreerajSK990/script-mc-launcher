@@ -15,6 +15,7 @@ import {
   logoutAccount
 } from '../src/main/services/auth.ts'
 import { readGameSettings, saveGameSettings } from '../src/main/core/minecraft/options.ts'
+import { addInstanceServer, removeInstanceServer, listInstanceServers } from '../src/main/core/minecraft/servers.ts'
 
 async function runTests() {
   console.log('--- Phase 1 Services Verification ---')
@@ -671,6 +672,30 @@ async function runTests() {
     throw new Error('Saved game settings did not reload correctly!')
   }
   console.log('Verified game settings saved and reloaded successfully (options.txt, sodium, optifine).')
+
+  const addedServers = await addInstanceServer(dropTestInstance.id, {
+    name: 'Hypixel Network',
+    ip: 'mc.hypixel.net'
+  })
+  if (addedServers.length !== 1 || addedServers[0].ip !== 'mc.hypixel.net') {
+    throw new Error('Failed to add server to instance!')
+  }
+
+  await addInstanceServer(dropTestInstance.id, {
+    name: 'Test Local',
+    ip: '127.0.0.1:25565'
+  })
+
+  const listed = await listInstanceServers(dropTestInstance.id)
+  if (listed.length !== 2) {
+    throw new Error('Server count mismatch in instance!')
+  }
+
+  const remaining = await removeInstanceServer(dropTestInstance.id, 'mc.hypixel.net')
+  if (remaining.length !== 1 || remaining[0].name !== 'Test Local') {
+    throw new Error('Failed to remove server from instance!')
+  }
+  console.log('Verified instance servers.dat management (add, list, remove).')
 
   await deleteInstanceById(dropTestInstance.id)
   console.log('--- All Launcher Cloner, Modpack, Screenshot, Dropped Mods, Servers, and Skins Verifications Passed! ---')

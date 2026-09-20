@@ -370,6 +370,7 @@ export const App: React.FC = () => {
                   instance={selectedDetailInstance}
                   onBack={() => setSelectedDetailInstance(null)}
                   onLaunch={handlePlayInstance}
+                  onQuickPlay={handleQuickPlay}
                   onOpenFolder={handleOpenFolder}
                   onBrowseMods={(inst) => {
                     setModBrowserTargetInstanceId(inst.id)

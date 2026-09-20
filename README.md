@@ -33,6 +33,12 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
   - **JVM Arguments Editor:** Quick-apply presets for Aikar's high-performance G1GC flags, ultra-low-latency Shenandoah GC, or custom arguments.
   - **Custom Java Override:** Browse and select any external `java.exe` binary with file picker, or let the launcher auto-manage it.
   - **Embedded Mod Manager:** Direct mod list table with search filtering, on/off toggles (`.jar.disabled`), one-click version switching, and quick deletion.
+- **Direct Multiplayer Server Management:**
+  - Add, edit, and remove Minecraft multiplayer servers directly inside any instance without launching the game.
+  - Built-in NBT engine reads and writes directly to each instance's `.minecraft/servers.dat`.
+  - Built-in server pinger displays real-time latency (ms), online player counts, version requirements, and MOTD.
+  - One-click "Join Server" boots Minecraft with `--quickPlayMultiplayer` and connects you straight to the server immediately.
+  - Test server ping connection in real-time inside the "Add Server" modal before saving.
 - **In-App Screenshots Gallery:**
   - Visual gallery scanning each instance's `screenshots/` directory automatically.
   - High-resolution Lightbox modal viewer for full-screen inspection.

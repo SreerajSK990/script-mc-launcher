@@ -143,6 +143,43 @@ class NbtReader {
   }
 }
 
+class NbtWriter {
+  private chunks: Buffer[] = []
+
+  writeByte(val: number): void {
+    const b = Buffer.alloc(1)
+    b.writeInt8(val, 0)
+    this.chunks.push(b)
+  }
+
+  writeShort(val: number): void {
+    const b = Buffer.alloc(2)
+    b.writeInt16BE(val, 0)
+    this.chunks.push(b)
+  }
+
+  writeInt(val: number): void {
+    const b = Buffer.alloc(4)
+    b.writeInt32BE(val, 0)
+    this.chunks.push(b)
+  }
+
+  writeString(str: string): void {
+    const buf = Buffer.from(str, 'utf8')
+    this.writeShort(buf.length)
+    this.chunks.push(buf)
+  }
+
+  writeNamedTag(type: number, name: string): void {
+    this.writeByte(type)
+    this.writeString(name)
+  }
+
+  toBuffer(): Buffer {
+    return Buffer.concat(this.chunks)
+  }
+}
+
 
 
 function writeVarInt(value: number): Buffer {
@@ -466,4 +503,116 @@ export async function getAllQuickPlayTargets(): Promise<QuickPlayTarget[]> {
   } catch {
     return []
   }
+}
+
+export async function writeServersDat(
+  mcDir: string,
+  servers: Array<{ name: string; ip: string; icon?: string; acceptTextures?: number }>
+): Promise<void> {
+  const writer = new NbtWriter()
+  writer.writeNamedTag(10, '')
+  writer.writeNamedTag(9, 'servers')
+  writer.writeByte(10)
+  writer.writeInt(servers.length)
+
+  for (const s of servers) {
+    writer.writeNamedTag(8, 'name')
+    writer.writeString(s.name)
+    writer.writeNamedTag(8, 'ip')
+    writer.writeString(s.ip)
+    if (s.icon) {
+      const cleanIcon = s.icon.replace(/^data:image\/[a-z]+;base64,/, '')
+      writer.writeNamedTag(8, 'icon')
+      writer.writeString(cleanIcon)
+    }
+    if (typeof s.acceptTextures === 'number') {
+      writer.writeNamedTag(1, 'acceptTextures')
+      writer.writeByte(s.acceptTextures)
+    }
+    writer.writeByte(0)
+  }
+
+  writer.writeByte(0)
+  const buffer = writer.toBuffer()
+
+  await fs.mkdir(mcDir, { recursive: true })
+  const serversDatPath = join(mcDir, 'servers.dat')
+  await fs.writeFile(serversDatPath, buffer)
+}
+
+export async function addInstanceServer(
+  instanceId: string,
+  server: { name: string; ip: string }
+): Promise<MinecraftServerEntry[]> {
+  const configPath = getInstanceConfigPath(instanceId)
+  const config = await readJsonFile<InstanceConfiguration>(configPath)
+  if (!config) {
+    throw new Error(`Instance ${instanceId} not found`)
+  }
+
+  const mcDir = getInstanceMinecraftPath(instanceId)
+  const existing = await getInstanceServers(config)
+
+  const normalizedIp = server.ip.trim()
+  const normalizedName = server.name.trim() || normalizedIp
+
+  const filtered = existing.filter(
+    (s) =>
+      s.ip.toLowerCase() !== normalizedIp.toLowerCase() &&
+      `${s.ip}:${s.port}`.toLowerCase() !== normalizedIp.toLowerCase()
+  )
+
+  const updatedServers = [
+    ...filtered.map((s) => ({
+      name: s.name,
+      ip: s.port && s.port !== 25565 ? `${s.ip}:${s.port}` : s.ip,
+      icon: s.icon
+    })),
+    {
+      name: normalizedName,
+      ip: normalizedIp
+    }
+  ]
+
+  await writeServersDat(mcDir, updatedServers)
+  return await getInstanceServers(config)
+}
+
+export async function removeInstanceServer(
+  instanceId: string,
+  serverIp: string
+): Promise<MinecraftServerEntry[]> {
+  const configPath = getInstanceConfigPath(instanceId)
+  const config = await readJsonFile<InstanceConfiguration>(configPath)
+  if (!config) {
+    throw new Error(`Instance ${instanceId} not found`)
+  }
+
+  const mcDir = getInstanceMinecraftPath(instanceId)
+  const existing = await getInstanceServers(config)
+
+  const normalizedTarget = serverIp.trim().toLowerCase()
+  const remaining = existing.filter((s) => {
+    const full = `${s.ip}:${s.port}`.toLowerCase()
+    const single = s.ip.toLowerCase()
+    return single !== normalizedTarget && full !== normalizedTarget
+  })
+
+  const updatedServers = remaining.map((s) => ({
+    name: s.name,
+    ip: s.port && s.port !== 25565 ? `${s.ip}:${s.port}` : s.ip,
+    icon: s.icon
+  }))
+
+  await writeServersDat(mcDir, updatedServers)
+  return await getInstanceServers(config)
+}
+
+export async function listInstanceServers(
+  instanceId: string
+): Promise<MinecraftServerEntry[]> {
+  const configPath = getInstanceConfigPath(instanceId)
+  const config = await readJsonFile<InstanceConfiguration>(configPath)
+  if (!config) return []
+  return await getInstanceServers(config)
 }

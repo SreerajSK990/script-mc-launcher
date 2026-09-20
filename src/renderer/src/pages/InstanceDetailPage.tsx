@@ -24,31 +24,34 @@ import {
   RefreshCw,
   Loader2,
   Dices,
-  Upload
+  Upload,
+  Server
 } from 'lucide-react'
 import type { InstanceConfiguration, ModLoaderType } from '@shared/types/instance'
 import type { InstalledModRecord, ModUpdateInfo } from '@shared/types/mods'
 import type { ScreenshotEntry } from '@shared/types/screenshot'
+import type { QuickPlayTarget } from '@shared/types/servers'
 import { Button } from '@renderer/components/common/Button'
 import { ConfirmModal } from '@renderer/components/common/ConfirmModal'
 import { ChangeModVersionModal } from '@renderer/components/mods/ChangeModVersionModal'
 import { MinecraftSettingsEditor } from '@renderer/components/settings/MinecraftSettingsEditor'
+import { InstanceServersSection } from '@renderer/components/servers/InstanceServersSection'
 import {
   getMinecraftIconById,
   getRandomMinecraftIcon
 } from '@shared/constants/minecraftIcons'
 
-
 interface InstanceDetailPageProps {
   instance: InstanceConfiguration
   onBack: () => void
   onLaunch: (instance: InstanceConfiguration) => void
+  onQuickPlay?: (target: QuickPlayTarget) => void
   onOpenFolder: (instanceId: string) => void
   onBrowseMods: (instance: InstanceConfiguration) => void
   onInstanceUpdated: (updated: InstanceConfiguration) => void
 }
 
-type DetailSubTab = 'config' | 'mods' | 'screenshots' | 'mcSettings'
+type DetailSubTab = 'config' | 'mods' | 'servers' | 'screenshots' | 'mcSettings'
 
 const RAM_PRESETS = [
   { label: '2 GB', mb: 2048 },
@@ -107,6 +110,7 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
   instance,
   onBack,
   onLaunch,
+  onQuickPlay,
   onOpenFolder,
   onBrowseMods,
   onInstanceUpdated
@@ -513,6 +517,18 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
               {installedMods.length}
             </span>
           )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('servers')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+            activeTab === 'servers'
+              ? 'bg-primary/10 text-primary border border-primary/20'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-background-card'
+          }`}
+        >
+          <Server size={16} />
+          <span>Multiplayer Servers</span>
         </button>
 
         <button
@@ -1046,6 +1062,19 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
             </div>
           )}
         </div>
+      )}
+
+      {activeTab === 'servers' && (
+        <InstanceServersSection
+          instance={instance}
+          onLaunchServer={(server) => {
+            if (onQuickPlay) {
+              onQuickPlay(server)
+            } else {
+              onLaunch(instance)
+            }
+          }}
+        />
       )}
 
       {activeTab === 'screenshots' && (

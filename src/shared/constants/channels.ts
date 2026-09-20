@@ -75,6 +75,9 @@ export const IPC_CHANNELS = {
   MODS_INSTALL_DROPPED: 'mods:install-dropped',
 
   SERVERS_LIST_ALL: 'servers:list-all',
+  SERVERS_LIST_INSTANCE: 'servers:list-instance',
+  SERVERS_ADD: 'servers:add',
+  SERVERS_REMOVE: 'servers:remove',
   SERVERS_PING: 'servers:ping',
   LAUNCH_QUICK_PLAY: 'launch:quick-play',
 
