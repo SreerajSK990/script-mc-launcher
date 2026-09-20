@@ -16,7 +16,9 @@ import {
   ShieldCheck,
   AlertCircle,
   Loader2,
-  ArrowUpDown
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import type { InstanceConfiguration, ModLoaderType } from '@shared/types/instance'
 import type {
@@ -70,6 +72,10 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
   const [selectedSource, setSelectedSource] = useState<'all' | 'modrinth' | 'curseforge'>('modrinth')
   const [searchResults, setSearchResults] = useState<ModSearchResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
+  const [currentPage, setCurrentPage] = useState(0)
+  const [hasMoreResults, setHasMoreResults] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const PAGE_SIZE = 24
 
   const [selectedModForVersions, setSelectedModForVersions] = useState<ModSearchResult | null>(null)
   const [availableVersions, setAvailableVersions] = useState<ModVersionFile[]>([])
@@ -166,35 +172,75 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
     }
   }, [selectedInstanceId, fetchInstalledMods, projectType])
 
-  const executeSearch = useCallback(async () => {
-    if (!window.launcherAPI?.mods) return
+  const executeSearch = useCallback(
+    async (page = 0, isAppend = false) => {
+      if (!window.launcherAPI?.mods) return
 
-    try {
-      setIsSearching(true)
-      const results = await window.launcherAPI.mods.search({
-        query: searchQuery.trim(),
-        category: selectedCategory !== 'all' ? selectedCategory : undefined,
-        source: selectedSource,
-        projectType,
-        minecraftVersion: projectType === 'mod' ? currentInstance?.minecraftVersion : undefined,
-        loader: projectType === 'mod' && currentInstance?.loaderType !== 'vanilla' ? currentInstance?.loaderType : undefined,
-        limit: 24
-      })
-      setSearchResults(results)
-    } catch (error) {
-      console.error('Search error:', error)
-      setSearchResults([])
-    } finally {
-      setIsSearching(false)
-    }
-  }, [searchQuery, selectedCategory, selectedSource, projectType, currentInstance])
+      try {
+        if (isAppend) {
+          setIsLoadingMore(true)
+        } else {
+          setIsSearching(true)
+          if (page === 0) {
+            setSearchResults([])
+          }
+        }
+
+        const results = await window.launcherAPI.mods.search({
+          query: searchQuery.trim(),
+          category: selectedCategory !== 'all' ? selectedCategory : undefined,
+          source: selectedSource,
+          projectType,
+          minecraftVersion: projectType === 'mod' ? currentInstance?.minecraftVersion : undefined,
+          loader:
+            projectType === 'mod' && currentInstance?.loaderType !== 'vanilla'
+              ? currentInstance?.loaderType
+              : undefined,
+          limit: PAGE_SIZE,
+          offset: page * PAGE_SIZE
+        })
+
+        if (isAppend) {
+          setSearchResults((prev) => [...prev, ...results])
+        } else {
+          setSearchResults(results)
+        }
+
+        setHasMoreResults(results.length >= PAGE_SIZE)
+        setCurrentPage(page)
+      } catch (error) {
+        console.error('Search error:', error)
+        if (!isAppend) setSearchResults([])
+      } finally {
+        setIsSearching(false)
+        setIsLoadingMore(false)
+      }
+    },
+    [searchQuery, selectedCategory, selectedSource, projectType, currentInstance]
+  )
 
   useEffect(() => {
+    setCurrentPage(0)
     const timer = setTimeout(() => {
-      executeSearch()
+      executeSearch(0, false)
     }, 300)
     return () => clearTimeout(timer)
   }, [executeSearch])
+
+  const handleLoadMore = () => {
+    if (isLoadingMore || !hasMoreResults) return
+    executeSearch(currentPage + 1, true)
+  }
+
+  const handleNextPage = () => {
+    if (isSearching || !hasMoreResults) return
+    executeSearch(currentPage + 1, false)
+  }
+
+  const handlePrevPage = () => {
+    if (isSearching || currentPage <= 0) return
+    executeSearch(currentPage - 1, false)
+  }
 
   const handleOpenInstallModal = async (mod: ModSearchResult) => {
     setSelectedModForVersions(mod)
@@ -313,9 +359,9 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
   }
 
   return (
-    <div className="flex flex-col gap-5 w-full h-full pb-8">
-      {/* Header bar */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3 border-b border-border-subtle">
+    <div className="flex flex-col w-full h-full overflow-hidden">
+      {/* Header bar (Pinned) */}
+      <div className="shrink-0 flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3 border-b border-border-subtle">
         <div>
           <h2 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
             {projectType === 'modpack' ? (
@@ -424,212 +470,268 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
       </div>
 
       {activeSubTab === 'browse' ? (
-        <div className="flex flex-col gap-4 flex-1">
-          {/* Search Toolbar */}
-          <div className="flex flex-col md:flex-row items-center gap-3 bg-background-card border border-border-subtle p-3 rounded-2xl">
-            <div className="relative flex-1 w-full">
-              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input
-                type="text"
-                placeholder={
-                  projectType === 'modpack'
-                    ? 'Search modpacks on Modrinth / CurseForge...'
-                    : 'Search mods on Modrinth...'
-                }
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-8 py-2 bg-background-darkest rounded-xl text-xs text-slate-100 placeholder-slate-500 border border-border-subtle focus:border-primary focus:outline-none"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                >
-                  <X size={13} />
-                </button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2 w-full md:w-auto">
-              {projectType === 'mod' && (
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="bg-background-darkest text-slate-200 text-xs px-3 py-2 rounded-xl border border-border-subtle focus:outline-none focus:border-primary"
-                >
-                  {CATEGORIES.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.label}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              <div className="flex items-center gap-1 bg-background-darkest border border-border-subtle p-1 rounded-xl">
-                <button
-                  onClick={() => setSelectedSource('modrinth')}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                    selectedSource === 'modrinth'
-                      ? 'bg-background-surface text-primary border border-primary/20'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  Modrinth
-                </button>
-                <button
-                  onClick={() => setSelectedSource('curseforge')}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                    selectedSource === 'curseforge'
-                      ? 'bg-background-surface text-amber-400 border border-amber-500/20'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  CurseForge
-                </button>
+        <div className="flex flex-col flex-1 min-h-0 pt-3">
+          {/* Search Toolbar (Pinned) */}
+          <div className="shrink-0 flex flex-col gap-2.5 pb-3">
+            <div className="flex flex-col md:flex-row items-center gap-3 bg-background-card border border-border-subtle p-3 rounded-2xl">
+              <div className="relative flex-1 w-full">
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder={
+                    projectType === 'modpack'
+                      ? 'Search modpacks on Modrinth / CurseForge...'
+                      : 'Search mods on Modrinth...'
+                  }
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-8 py-2 bg-background-darkest rounded-xl text-xs text-slate-100 placeholder-slate-500 border border-border-subtle focus:border-primary focus:outline-none"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
               </div>
 
-              <Button variant="ghost" size="sm" icon={RefreshCw} onClick={executeSearch} disabled={isSearching} />
+              <div className="flex items-center gap-2 w-full md:w-auto">
+                {projectType === 'mod' && (
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="bg-background-darkest text-slate-200 text-xs px-3 py-2 rounded-xl border border-border-subtle focus:outline-none focus:border-primary"
+                  >
+                    {CATEGORIES.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                <div className="flex items-center gap-1 bg-background-darkest border border-border-subtle p-1 rounded-xl">
+                  <button
+                    onClick={() => setSelectedSource('modrinth')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                      selectedSource === 'modrinth'
+                        ? 'bg-background-surface text-primary border border-primary/20'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Modrinth
+                  </button>
+                  <button
+                    onClick={() => setSelectedSource('curseforge')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                      selectedSource === 'curseforge'
+                        ? 'bg-background-surface text-amber-400 border border-amber-500/20'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    CurseForge
+                  </button>
+                </div>
+
+                <Button variant="ghost" size="sm" icon={RefreshCw} onClick={() => executeSearch(0, false)} disabled={isSearching} />
+              </div>
             </div>
+
+            {/* Search Result Count */}
+            {!isSearching && searchResults.length > 0 && (
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[11px] text-slate-400 font-mono">
+                  Showing {searchResults.length} {projectType === 'modpack' ? 'modpacks' : 'mods'} (Page {currentPage + 1})
+                </span>
+                {hasMoreResults && (
+                  <span className="text-[11px] text-primary/80 font-medium">
+                    More results available below
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Search Result Count */}
-          {!isSearching && searchResults.length > 0 && (
-            <div className="flex items-center justify-between px-1">
-              <span className="text-[11px] text-slate-400 font-mono">
-                {searchResults.length} {projectType === 'modpack' ? 'modpacks' : 'mods'} found
-              </span>
-            </div>
-          )}
+          {/* Results Area (Scrolls independently) */}
+          <div className="flex-1 min-h-0 overflow-y-auto pr-1.5 flex flex-col gap-4">
+            {isSearching ? (
+              <div className="flex-1 flex flex-col items-center justify-center py-24 text-slate-500 gap-3">
+                <RefreshCw size={28} className="animate-spin text-primary" />
+                <p className="text-xs">
+                  {projectType === 'modpack' ? 'Searching modpacks...' : 'Searching mods...'}
+                </p>
+              </div>
+            ) : searchResults.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center py-20 text-slate-500 gap-2 border border-dashed border-border-subtle rounded-2xl">
+                <Package size={32} className="text-slate-600 mb-1" />
+                <p className="text-sm font-medium text-slate-400">
+                  {projectType === 'modpack' ? 'No modpacks found' : 'No mods found'}
+                </p>
+                <p className="text-xs text-slate-600">
+                  Try refining your search query or selecting a different source
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                  {searchResults.map((item) => (
+                    <div
+                      key={`${item.source}-${item.id}`}
+                      className="bg-background-card hover:bg-background-surface/80 border border-border-subtle hover:border-border-strong rounded-2xl p-4 flex flex-col justify-between transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 group"
+                    >
+                      <div>
+                        <div className="flex items-start gap-3 mb-2.5">
+                          {item.iconUrl ? (
+                            <img
+                              src={item.iconUrl}
+                              alt={item.name}
+                              className="w-10 h-10 rounded-xl bg-background-darkest object-cover border border-border-subtle shrink-0"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none'
+                              }}
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shrink-0">
+                              {projectType === 'modpack' ? <Package size={18} /> : <Boxes size={18} />}
+                            </div>
+                          )}
 
-          {/* Results Grid */}
-          {isSearching ? (
-            <div className="flex-1 flex flex-col items-center justify-center py-20 text-slate-500 gap-3">
-              <RefreshCw size={28} className="animate-spin text-primary" />
-              <p className="text-xs">
-                {projectType === 'modpack' ? 'Searching modpacks...' : 'Searching mods...'}
-              </p>
-            </div>
-          ) : searchResults.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center py-20 text-slate-500 gap-2 border border-dashed border-border-subtle rounded-2xl">
-              <Package size={32} className="text-slate-600 mb-1" />
-              <p className="text-sm font-medium text-slate-400">
-                {projectType === 'modpack' ? 'No modpacks found' : 'No mods found'}
-              </p>
-              <p className="text-xs text-slate-600">
-                Try refining your search query or selecting a different source
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 overflow-y-auto pr-1">
-              {searchResults.map((item) => (
-                <div
-                  key={`${item.source}-${item.id}`}
-                  className="bg-background-card hover:bg-background-surface/70 border border-border-subtle hover:border-border-strong rounded-2xl p-4 flex flex-col justify-between transition-all group shadow-sm"
-                >
-                  <div>
-                    <div className="flex items-start gap-3 mb-2.5">
-                      {item.iconUrl ? (
-                        <img
-                          src={item.iconUrl}
-                          alt={item.name}
-                          className="w-10 h-10 rounded-xl bg-background-darkest object-cover border border-border-subtle shrink-0"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none'
-                          }}
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shrink-0">
-                          {projectType === 'modpack' ? <Package size={18} /> : <Boxes size={18} />}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-1">
+                              <h3 className="text-sm font-bold text-white truncate group-hover:text-primary transition-colors">
+                                {item.name}
+                              </h3>
+                              <span
+                                className={`text-[9px] uppercase font-mono px-1.5 py-0.5 rounded border shrink-0 ${
+                                  item.source === 'modrinth'
+                                    ? 'bg-primary/15 text-primary border-primary/30'
+                                    : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                }`}
+                              >
+                                {item.source}
+                              </span>
+                            </div>
+                            <span className="text-[11px] text-slate-400 block truncate">
+                              by {item.author}
+                            </span>
+                          </div>
                         </div>
-                      )}
 
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-1">
-                          <h3 className="text-sm font-bold text-white truncate group-hover:text-primary transition-colors">
-                            {item.name}
-                          </h3>
-                          <span
-                            className={`text-[9px] uppercase font-mono px-1.5 py-0.5 rounded border shrink-0 ${
-                              item.source === 'modrinth'
-                                ? 'bg-primary/15 text-primary border-primary/30'
-                                : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                            }`}
-                          >
-                            {item.source}
-                          </span>
+                        <p className="text-xs text-slate-300 leading-relaxed mb-3 line-clamp-2">
+                          {item.description}
+                        </p>
+
+                        <div className="flex flex-wrap gap-1 mb-3">
+                          {item.loaders.slice(0, 3).map((loader) => (
+                            <span
+                              key={loader}
+                              className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-background-darkest text-slate-400 border border-border-subtle"
+                            >
+                              {loader}
+                            </span>
+                          ))}
+                          {item.categories.slice(0, 2).map((cat) => (
+                            <span
+                              key={cat}
+                              className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-background-darkest text-slate-500 border border-border-subtle"
+                            >
+                              {cat}
+                            </span>
+                          ))}
                         </div>
-                        <span className="text-[11px] text-slate-400 block truncate">
-                          by {item.author}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2.5 border-t border-border-subtle/50 text-xs">
+                        <span className="text-slate-500 font-mono text-[11px]">
+                          {formatDownloads(item.downloads)} downloads
                         </span>
+
+                        {(() => {
+                          const installedRecord = getInstalledModForProject(item)
+                          if (installedRecord) {
+                            return (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                icon={Check}
+                                className="border-emerald-500/30 text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20"
+                                onClick={() => handleOpenInstallModal(item)}
+                                title={`Installed (${installedRecord.version || 'installed'}). Click to change version.`}
+                              >
+                                Installed
+                              </Button>
+                            )
+                          }
+                          return (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              icon={Download}
+                              onClick={() => handleOpenInstallModal(item)}
+                            >
+                              {projectType === 'modpack' ? 'Install Modpack' : 'Install'}
+                            </Button>
+                          )
+                        })()}
                       </div>
                     </div>
+                  ))}
+                </div>
 
-                    <p className="text-xs text-slate-300 leading-relaxed mb-3 line-clamp-2">
-                      {item.description}
-                    </p>
+                {/* Pagination Controls */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 pb-8 border-t border-border-subtle/50 mt-2">
+                  <div className="text-xs text-slate-400">
+                    Page <span className="font-semibold text-white">{currentPage + 1}</span> • Showing{' '}
+                    <span className="font-semibold text-white">{searchResults.length}</span> items
+                  </div>
 
-                    <div className="flex flex-wrap gap-1 mb-3">
-                      {item.loaders.slice(0, 3).map((loader) => (
-                        <span
-                          key={loader}
-                          className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-background-darkest text-slate-400 border border-border-subtle"
-                        >
-                          {loader}
-                        </span>
-                      ))}
-                      {item.categories.slice(0, 2).map((cat) => (
-                        <span
-                          key={cat}
-                          className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-background-darkest text-slate-500 border border-border-subtle"
-                        >
-                          {cat}
-                        </span>
-                      ))}
+                  <div className="flex items-center gap-2">
+                    {hasMoreResults && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        icon={isLoadingMore ? Loader2 : Download}
+                        isLoading={isLoadingMore}
+                        onClick={handleLoadMore}
+                        className="text-xs font-semibold"
+                      >
+                        Load More
+                      </Button>
+                    )}
+
+                    <div className="flex items-center gap-1 bg-background-darkest border border-border-subtle p-1 rounded-xl">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={ChevronLeft}
+                        disabled={currentPage <= 0 || isSearching}
+                        onClick={handlePrevPage}
+                        title="Previous Page"
+                      />
+                      <span className="text-xs font-mono px-2.5 text-slate-300 font-semibold">
+                        {currentPage + 1}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={ChevronRight}
+                        disabled={!hasMoreResults || isSearching}
+                        onClick={handleNextPage}
+                        title="Next Page"
+                      />
                     </div>
                   </div>
-
-                  <div className="flex items-center justify-between pt-2.5 border-t border-border-subtle/50 text-xs">
-                    <span className="text-slate-500 font-mono text-[11px]">
-                      {formatDownloads(item.downloads)} downloads
-                    </span>
-
-                    {(() => {
-                      const installedRecord = getInstalledModForProject(item)
-                      if (installedRecord) {
-                        return (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            icon={Check}
-                            className="border-emerald-500/30 text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20"
-                            onClick={() => handleOpenInstallModal(item)}
-                            title={`Installed (${installedRecord.version || 'installed'}). Click to change version.`}
-                          >
-                            Installed
-                          </Button>
-                        )
-                      }
-                      return (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          icon={Download}
-                          onClick={() => handleOpenInstallModal(item)}
-                        >
-                          {projectType === 'modpack' ? 'Install Modpack' : 'Install'}
-                        </Button>
-                      )
-                    })()}
-                  </div>
                 </div>
-              ))}
-            </div>
-          )}
+              </>
+            )}
+          </div>
         </div>
       ) : (
         /* Installed Mods Tab (Mods Mode Only) */
-        <div className="flex flex-col gap-4 flex-1">
-          <div className="flex items-center justify-between bg-background-card border border-border-subtle p-4 rounded-2xl">
+        <div className="flex flex-col flex-1 min-h-0 pt-3 gap-4">
+          <div className="shrink-0 flex items-center justify-between bg-background-card border border-border-subtle p-4 rounded-2xl">
             <div>
               <h3 className="text-sm font-bold text-white">
                 Installed in {currentInstance?.name || 'Instance'}
@@ -658,90 +760,93 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
             </div>
           </div>
 
-          {isLoadingInstalled ? (
-            <div className="py-16 text-center text-slate-500 text-xs">Loading installed mods...</div>
-          ) : installedMods.length === 0 ? (
-            <div className="py-16 text-center text-slate-500 border border-dashed border-border-subtle rounded-2xl p-6">
-              <p className="text-xs text-slate-400 mb-2">No mods installed in this instance yet.</p>
-              <Button variant="primary" size="sm" onClick={() => setActiveSubTab('browse')}>
-                Browse & Install Mods
-              </Button>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2 overflow-y-auto pr-1">
-              {installedMods.map((mod) => (
-                <div
-                  key={mod.filename}
-                  className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
-                    mod.enabled
-                      ? 'bg-background-card border-border-subtle hover:border-border-strong'
-                      : 'bg-background-darkest/50 border-border-subtle/50 opacity-60'
-                  }`}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div
-                      className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${
-                        mod.enabled
-                          ? 'bg-primary/10 border-primary/20 text-primary'
-                          : 'bg-slate-800 border-slate-700 text-slate-500'
-                      }`}
-                    >
-                      <Package size={17} />
-                    </div>
+          <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+            {isLoadingInstalled ? (
+              <div className="py-16 text-center text-slate-500 text-xs">Loading installed mods...</div>
+            ) : installedMods.length === 0 ? (
+              <div className="py-16 text-center text-slate-500 border border-dashed border-border-subtle rounded-2xl p-6">
+                <p className="text-xs text-slate-400 mb-2">No mods installed in this instance yet.</p>
+                <Button variant="primary" size="sm" onClick={() => setActiveSubTab('browse')}>
+                  Browse & Install Mods
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 pb-6">
+                {installedMods.map((mod) => (
+                  <div
+                    key={mod.filename}
+                    className={`p-3.5 rounded-2xl border transition-all duration-150 flex items-center justify-between gap-3 ${
+                      mod.enabled
+                        ? 'bg-background-card border-border-subtle hover:border-border-strong hover:bg-background-surface/50'
+                        : 'bg-background-darkest/50 border-border-subtle/50 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${
+                          mod.enabled
+                            ? 'bg-primary/10 border-primary/20 text-primary'
+                            : 'bg-slate-800 border-slate-700 text-slate-500'
+                        }`}
+                      >
+                        <Package size={17} />
+                      </div>
 
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-slate-100 truncate">
-                          {mod.name}
-                        </span>
-                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-background-darkest text-slate-400 border border-border-subtle">
-                          {mod.version}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-slate-100 truncate">
+                            {mod.name}
+                          </span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-background-darkest text-slate-400 border border-border-subtle">
+                            {mod.version}
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-slate-500 font-mono block truncate">
+                          {mod.filename} • {formatFileSize(mod.fileSizeBytes)}
                         </span>
                       </div>
-                      <span className="text-[11px] text-slate-500 font-mono block truncate">
-                        {mod.filename} • {formatFileSize(mod.fileSizeBytes)}
-                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => handleToggleMod(mod)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                          mod.enabled
+                            ? 'bg-primary/15 border-primary/30 text-primary hover:bg-primary/20'
+                            : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {mod.enabled ? 'Enabled' : 'Disabled'}
+                      </button>
+
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        icon={ArrowUpDown}
+                        onClick={() => setSelectedInstalledModForChange(mod)}
+                        title="Change mod version"
+                      >
+                        Change Version
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={Trash2}
+                        onClick={() => handleDeleteMod(mod)}
+                        title="Delete Mod"
+                      >
+                        Remove
+                      </Button>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => handleToggleMod(mod)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                        mod.enabled
-                          ? 'bg-primary/15 border-primary/30 text-primary hover:bg-primary/20'
-                          : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      {mod.enabled ? 'Enabled' : 'Disabled'}
-                    </button>
-
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      icon={ArrowUpDown}
-                      onClick={() => setSelectedInstalledModForChange(mod)}
-                      title="Change mod version"
-                    >
-                      Change Version
-                    </Button>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      icon={Trash2}
-                      onClick={() => handleDeleteMod(mod)}
-                      title="Delete Mod"
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
+
 
       {/* Install Modal (Handles both Mod installation and Modpack installation) */}
       {selectedModForVersions && (

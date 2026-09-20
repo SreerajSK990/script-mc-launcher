@@ -23,14 +23,14 @@ export const Button: React.FC<ButtonProps> = ({
   disabled,
   ...rest
 }) => {
-  const baseClasses = 'inline-flex items-center justify-center font-medium transition-all duration-150 rounded-lg focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed select-none'
+  const baseClasses = 'inline-flex items-center justify-center font-medium transition-all duration-150 rounded-xl focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed select-none active:scale-[0.98]'
 
   const variantClasses: Record<ButtonVariant, string> = {
-    primary: 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm shadow-emerald-950/40 active:translate-y-px',
-    secondary: 'bg-background-surface hover:bg-slate-700 text-slate-100 border border-border-subtle active:translate-y-px',
-    outline: 'bg-transparent hover:bg-background-surface text-slate-300 hover:text-white border border-border-subtle active:translate-y-px',
-    ghost: 'bg-transparent hover:bg-background-surface text-slate-400 hover:text-slate-100 active:translate-y-px',
-    danger: 'bg-rose-600 hover:bg-rose-700 text-white active:translate-y-px'
+    primary: 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm shadow-emerald-950/40',
+    secondary: 'bg-background-surface hover:bg-slate-700 text-slate-100 border border-border-subtle',
+    outline: 'bg-transparent hover:bg-background-surface text-slate-300 hover:text-white border border-border-subtle',
+    ghost: 'bg-transparent hover:bg-background-surface text-slate-400 hover:text-slate-100',
+    danger: 'bg-rose-600 hover:bg-rose-700 text-white'
   }
 
   const sizeClasses: Record<ButtonSize, string> = {

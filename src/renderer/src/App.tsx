@@ -15,6 +15,7 @@ import { CreateInstanceModal } from '@renderer/components/instances/CreateInstan
 import { ImportModpackModal } from '@renderer/components/instances/ImportModpackModal'
 import { ImportFromLauncherModal } from '@renderer/components/instances/ImportFromLauncherModal'
 import { AccountModal } from '@renderer/components/auth/AccountModal'
+import { applyLauncherFont } from '@renderer/components/settings/FontSettingsSection'
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActivePageTab>('dashboard')
@@ -76,6 +77,47 @@ export const App: React.FC = () => {
     fetchEnvironment()
     fetchAuthState()
   }, [fetchInstances, fetchEnvironment, fetchAuthState])
+
+  useEffect(() => {
+    const saved = localStorage.getItem('launcher_selected_font') || 'plus-jakarta'
+    if (saved === 'plus-jakarta') {
+      applyLauncherFont(
+        '"Plus Jakarta Sans", sans-serif',
+        "@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');"
+      )
+    } else if (saved === 'geist') {
+      applyLauncherFont(
+        '"Geist", system-ui, sans-serif',
+        "@import url('https://cdn.jsdelivr.net/npm/geist@1.3.1/dist/core/font.css');"
+      )
+    } else if (saved === 'inter') {
+      applyLauncherFont(
+        '"Inter", sans-serif',
+        "@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');"
+      )
+    } else if (saved === 'pixel') {
+      applyLauncherFont(
+        '"VT323", monospace',
+        "@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');"
+      )
+    } else if (window.launcherAPI?.fonts) {
+      window.launcherAPI.fonts.list().then((list) => {
+        const found = list.find((f) => f.fileName === saved)
+        if (found) {
+          const css = `
+            @font-face {
+              font-family: "${found.name}";
+              src: url("${found.dataUrl}") format("${found.format}");
+              font-weight: 100 900;
+              font-style: normal;
+              font-display: swap;
+            }
+          `
+          applyLauncherFont(`"${found.name}", sans-serif`, css)
+        }
+      })
+    }
+  }, [])
 
   useEffect(() => {
     if (!window.launcherAPI?.launch) {
@@ -177,10 +219,10 @@ export const App: React.FC = () => {
 
   const handleSwitchAccount = async (accountId: string) => {
     if (window.launcherAPI?.auth) {
-      const account = await window.launcherAPI.auth.switchAccount(accountId)
+      const state = await window.launcherAPI.auth.switchAccount(accountId)
       await fetchAuthState()
-      if (account) {
-        showNotification(`Switched to ${account.username}`)
+      if (state?.activeAccount) {
+        showNotification(`Switched to ${state.activeAccount.username}`)
       }
     }
   }

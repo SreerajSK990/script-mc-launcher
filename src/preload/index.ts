@@ -35,6 +35,13 @@ const launcherAPI: LauncherAPI = {
         ipcRenderer.removeListener(IPC_CHANNELS.LAUNCH_STATUS_EVENT, handler)
       }
     },
+    onStatus: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: any) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.LAUNCH_STATUS_EVENT, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.LAUNCH_STATUS_EVENT, handler)
+      }
+    },
     onLog: (callback) => {
       const handler = (_event: Electron.IpcRendererEvent, data: any) => callback(data)
       ipcRenderer.on(IPC_CHANNELS.LAUNCH_LOG_EVENT, handler)
@@ -50,6 +57,7 @@ const launcherAPI: LauncherAPI = {
   },
   system: {
     getEnvironment: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_GET_ENVIRONMENT),
+    openExternal: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_OPEN_EXTERNAL, url),
     openExternalUrl: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_OPEN_EXTERNAL, url),
     openDirectory: (directoryPath: string) => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_OPEN_DIRECTORY, directoryPath),
     selectFile: (options) => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_SELECT_FILE, options)
@@ -65,7 +73,17 @@ const launcherAPI: LauncherAPI = {
     deleteInstalled: (instanceId, filename) =>
       ipcRenderer.invoke(IPC_CHANNELS.MODS_DELETE_INSTALLED, instanceId, filename),
     setCurseForgeKey: (key) => ipcRenderer.invoke(IPC_CHANNELS.MODS_SET_CURSEFORGE_KEY, key),
-    getCurseForgeKey: () => ipcRenderer.invoke(IPC_CHANNELS.MODS_GET_CURSEFORGE_KEY)
+    getCurseForgeKey: () => ipcRenderer.invoke(IPC_CHANNELS.MODS_GET_CURSEFORGE_KEY),
+    checkUpdates: (instanceId) => ipcRenderer.invoke(IPC_CHANNELS.MODS_CHECK_UPDATES, instanceId),
+    updateAll: (instanceId, updates) =>
+      ipcRenderer.invoke(IPC_CHANNELS.MODS_UPDATE_ALL, instanceId, updates),
+    onUpdateProgress: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: any) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.MODS_UPDATE_PROGRESS_EVENT, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.MODS_UPDATE_PROGRESS_EVENT, handler)
+      }
+    }
   },
   modpacks: {
     selectFile: () => ipcRenderer.invoke(IPC_CHANNELS.MODPACKS_SELECT_FILE),
@@ -103,6 +121,11 @@ const launcherAPI: LauncherAPI = {
     getRuntimes: () => ipcRenderer.invoke(IPC_CHANNELS.JAVA_GET_RUNTIMES),
     downloadRuntime: (componentOrVersion: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.JAVA_DOWNLOAD_RUNTIME, componentOrVersion)
+  },
+  fonts: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.FONTS_LIST),
+    install: (filePath: string) => ipcRenderer.invoke(IPC_CHANNELS.FONTS_INSTALL, filePath),
+    delete: (fileName: string) => ipcRenderer.invoke(IPC_CHANNELS.FONTS_DELETE, fileName)
   }
 }
 

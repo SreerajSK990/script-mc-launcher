@@ -1,6 +1,6 @@
-import { ipcMain } from 'electron'
+import { ipcMain, type BrowserWindow } from 'electron'
 import { IPC_CHANNELS } from '@shared/constants/channels'
-import type { ModSearchParams, InstallModPayload, ModSource } from '@shared/types/mods'
+import type { ModSearchParams, InstallModPayload, ModSource, ModUpdateInfo } from '@shared/types/mods'
 import type { ModLoaderType } from '@shared/types/instance'
 import {
   searchAllMods,
@@ -12,8 +12,9 @@ import {
   setCurseForgeApiKey,
   getCurseForgeApiKey
 } from '@main/services/mods'
+import { checkForModUpdates, updateAllMods } from '@main/core/mods/updates'
 
-export function registerModsIpcHandlers(): void {
+export function registerModsIpcHandlers(mainWindow?: BrowserWindow): void {
   ipcMain.handle(IPC_CHANNELS.MODS_SEARCH, async (_event, params: ModSearchParams) => {
     return await searchAllMods(params)
   })
@@ -66,4 +67,30 @@ export function registerModsIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.MODS_GET_CURSEFORGE_KEY, async () => {
     return getCurseForgeApiKey()
   })
+
+  ipcMain.handle(IPC_CHANNELS.MODS_CHECK_UPDATES, async (_event, instanceId: string) => {
+    try {
+      return await checkForModUpdates(instanceId)
+    } catch (err) {
+      console.warn('Failed to check for mod updates:', err)
+      return []
+    }
+  })
+
+  ipcMain.handle(
+    IPC_CHANNELS.MODS_UPDATE_ALL,
+    async (_event, instanceId: string, updates: ModUpdateInfo[]) => {
+      try {
+        return await updateAllMods(instanceId, updates, (progress) => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send(IPC_CHANNELS.MODS_UPDATE_PROGRESS_EVENT, progress)
+          }
+        })
+      } catch (err) {
+        console.error('Failed to update all mods:', err)
+        return { success: false, updatedCount: 0 }
+      }
+    }
+  )
 }
+

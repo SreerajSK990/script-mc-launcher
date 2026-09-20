@@ -54,6 +54,10 @@ export function getMetaCacheDirectory(): string {
   return join(getLauncherRootDirectory(), 'meta-cache')
 }
 
+export function getFontsDirectory(): string {
+  return join(getLauncherRootDirectory(), 'fonts')
+}
+
 export async function initializeLauncherDirectories(): Promise<void> {
   const root = getLauncherRootDirectory()
   await ensureDirectoryExists(root)
@@ -62,4 +66,6 @@ export async function initializeLauncherDirectories(): Promise<void> {
   await ensureDirectoryExists(getAssetsDirectory())
   await ensureDirectoryExists(getJavaRuntimesDirectory())
   await ensureDirectoryExists(getMetaCacheDirectory())
+  await ensureDirectoryExists(getFontsDirectory())
 }
+

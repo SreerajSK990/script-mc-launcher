@@ -8,7 +8,8 @@ import type {
   ModSearchParams,
   InstallModPayload,
   InstalledModRecord,
-  ModSource
+  ModSource,
+  ModUpdateInfo
 } from './mods'
 import type {
   ModpackManifestInfo,
@@ -21,6 +22,7 @@ import type {
   CloneInstancePayload,
   CloneProgressEvent
 } from './externalLauncher'
+import type { CustomFontEntry } from './fonts'
 
 export interface WindowControlActions {
   minimize: () => Promise<void>
@@ -31,38 +33,43 @@ export interface WindowControlActions {
 
 export interface InstanceActions {
   list: () => Promise<InstanceConfiguration[]>
-  get: (instanceId: string) => Promise<InstanceConfiguration | null>
+  get: (id: string) => Promise<InstanceConfiguration | null>
   create: (payload: CreateInstancePayload) => Promise<InstanceConfiguration>
   update: (payload: UpdateInstancePayload) => Promise<InstanceConfiguration>
-  delete: (instanceId: string) => Promise<boolean>
-  openFolder: (instanceId: string) => Promise<void>
+  delete: (id: string) => Promise<boolean>
+  openFolder: (id: string) => Promise<void>
 }
 
 export interface AuthActions {
   getState: () => Promise<AuthState>
   loginMicrosoft: () => Promise<StoredAccount>
   loginOffline: (username: string) => Promise<StoredAccount>
-  logout: (accountId: string) => Promise<boolean>
-  switchAccount: (accountId: string) => Promise<StoredAccount | null>
+  logout: (accountId: string) => Promise<AuthState>
+  switchAccount: (accountId: string) => Promise<AuthState>
 }
 
 export interface LaunchActions {
-  start: (instanceId: string) => Promise<boolean>
-  stop: (instanceId: string) => Promise<boolean>
+  start: (instanceId: string) => Promise<void>
+  stop: (instanceId: string) => Promise<void>
   onProgress: (callback: (event: LaunchProgressEvent) => void) => () => void
+  onStatus: (callback: (event: LaunchProgressEvent) => void) => () => void
   onLog: (callback: (event: LaunchLogEvent) => void) => () => void
 }
 
 export interface MetaActions {
   getVersions: () => Promise<string[]>
-  getLoaderVersions: (loaderType: ModLoaderType, minecraftVersion: string) => Promise<string[]>
+  getLoaderVersions: (loader: ModLoaderType, minecraftVersion: string) => Promise<string[]>
 }
 
 export interface SystemActions {
   getEnvironment: () => Promise<SystemEnvironment>
+  openExternal: (url: string) => Promise<void>
   openExternalUrl: (url: string) => Promise<void>
-  openDirectory: (directoryPath: string) => Promise<void>
-  selectFile: (options?: { title?: string; filters?: Array<{ name: string; extensions: string[] }> }) => Promise<string | null>
+  openDirectory: (path: string) => Promise<void>
+  selectFile: (options?: {
+    title?: string
+    filters?: Array<{ name: string; extensions: string[] }>
+  }) => Promise<string | null>
 }
 
 export interface ModActions {
@@ -79,6 +86,14 @@ export interface ModActions {
   deleteInstalled: (instanceId: string, filename: string) => Promise<boolean>
   setCurseForgeKey: (key: string | null) => Promise<boolean>
   getCurseForgeKey: () => Promise<string | null>
+  checkUpdates: (instanceId: string) => Promise<ModUpdateInfo[]>
+  updateAll: (
+    instanceId: string,
+    updates: ModUpdateInfo[]
+  ) => Promise<{ success: boolean; updatedCount: number }>
+  onUpdateProgress: (
+    callback: (event: { message: string; current: number; total: number }) => void
+  ) => () => void
 }
 
 export interface ModpackActions {
@@ -116,6 +131,12 @@ export interface ExternalLauncherActions {
   onProgress: (callback: (event: CloneProgressEvent) => void) => () => void
 }
 
+export interface FontActions {
+  list: () => Promise<CustomFontEntry[]>
+  install: (filePath: string) => Promise<CustomFontEntry>
+  delete: (fileName: string) => Promise<boolean>
+}
+
 export interface LauncherAPI {
   window: WindowControlActions
   instances: InstanceActions
@@ -128,4 +149,5 @@ export interface LauncherAPI {
   screenshots: ScreenshotActions
   externalLaunchers: ExternalLauncherActions
   java: JavaActions
+  fonts: FontActions
 }

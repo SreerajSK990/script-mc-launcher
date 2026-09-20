@@ -16,6 +16,7 @@ import {
 import type { SystemEnvironment } from '@shared/types/system'
 import { LAUNCHER_METADATA } from '@shared/constants/defaults'
 import { Button } from '@renderer/components/common/Button'
+import { FontSettingsSection } from '@renderer/components/settings/FontSettingsSection'
 
 interface SettingsPageProps {
   systemEnv: SystemEnvironment | null
@@ -257,6 +258,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ systemEnv }) => {
             </Button>
           </div>
         </div>
+
+        <FontSettingsSection />
 
         <div className="pt-6 border-t border-border-subtle/60">
           <h3 className="text-sm font-semibold text-slate-200 uppercase tracking-wider mb-3">

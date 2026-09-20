@@ -116,6 +116,11 @@ export async function batchGetCurseForgeFiles(fileIds: number[]): Promise<CurseF
   return results
 }
 
+import { getCachedData, setCachedData } from './cache'
+
+const CF_SEARCH_CACHE_TTL = 15 * 60 * 1000 // 15 minutes
+const CF_VERSIONS_CACHE_TTL = 30 * 60 * 1000 // 30 minutes
+
 export async function searchCurseForge(params: ModSearchParams): Promise<ModSearchResult[]> {
   const apiKey = getCurseForgeApiKey()
   if (!apiKey) {
@@ -143,6 +148,12 @@ export async function searchCurseForge(params: ModSearchParams): Promise<ModSear
   queryParams.set('pageSize', String(params.limit || 24))
   queryParams.set('index', String(params.offset || 0))
 
+  const cacheKey = `curseforge_search_${queryParams.toString()}`
+  const cached = await getCachedData<ModSearchResult[]>(cacheKey, CF_SEARCH_CACHE_TTL)
+  if (cached) {
+    return cached
+  }
+
   const url = `${CURSEFORGE_API_BASE}/mods/search?${queryParams.toString()}`
 
   try {
@@ -159,7 +170,7 @@ export async function searchCurseForge(params: ModSearchParams): Promise<ModSear
     const json = (await response.json()) as { data: CurseForgeMod[] }
     const mods = json.data || []
 
-    return mods.map((mod) => {
+    const results = mods.map((mod) => {
       const loaders = new Set<ModLoaderType>()
       for (const index of mod.latestFilesIndexes || []) {
         if (typeof index.modLoader === 'number') {
@@ -176,12 +187,15 @@ export async function searchCurseForge(params: ModSearchParams): Promise<ModSear
         description: mod.summary,
         iconUrl: mod.logo?.thumbnailUrl || mod.logo?.url,
         downloads: mod.downloadCount,
-        source: 'curseforge',
+        source: 'curseforge' as const,
         categories: mod.categories.map((c) => c.name),
-        loaders: Array.from(loaders),
-        projectType: params.projectType === 'modpack' ? 'modpack' : 'mod'
+        loaders: Array.from(loaders) as ModLoaderType[],
+        projectType: (params.projectType === 'modpack' ? 'modpack' : 'mod') as 'mod' | 'modpack'
       }
     })
+
+    await setCachedData(cacheKey, results)
+    return results
   } catch {
     return []
   }
@@ -206,6 +220,12 @@ export async function getCurseForgeFiles(
     queryParams.set('modLoaderType', String(loaderEnum))
   }
 
+  const cacheKey = `curseforge_files_${modId}_${queryParams.toString()}`
+  const cached = await getCachedData<ModVersionFile[]>(cacheKey, CF_VERSIONS_CACHE_TTL)
+  if (cached) {
+    return cached
+  }
+
   const url = `${CURSEFORGE_API_BASE}/mods/${modId}/files?${queryParams.toString()}`
 
   try {
@@ -222,7 +242,7 @@ export async function getCurseForgeFiles(
     const json = (await response.json()) as { data: CurseForgeFile[] }
     const files = json.data || []
 
-    return files
+    const results: ModVersionFile[] = files
       .filter((file) => file.downloadUrl)
       .map((file) => {
         const sha1Obj = file.hashes?.find((h) => h.algo === 1)
@@ -237,7 +257,7 @@ export async function getCurseForgeFiles(
           name: file.displayName,
           versionNumber: file.fileName,
           gameVersions: file.gameVersions,
-          loaders: loader ? [loader] : ['forge', 'fabric'],
+          loaders: loader ? [loader] : (['forge', 'fabric'] as ModLoaderType[]),
           downloadUrl: file.downloadUrl!,
           filename: file.fileName,
           sizeBytes: file.fileLength,
@@ -246,6 +266,9 @@ export async function getCurseForgeFiles(
           datePublished: file.fileDate
         }
       })
+
+    await setCachedData(cacheKey, results)
+    return results
   } catch {
     return []
   }

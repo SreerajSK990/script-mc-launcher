@@ -50,6 +50,11 @@ interface ModrinthVersionResponse {
   files: ModrinthVersionFileEntry[]
 }
 
+import { getCachedData, setCachedData } from './cache'
+
+const SEARCH_CACHE_TTL = 15 * 60 * 1000 // 15 minutes
+const VERSIONS_CACHE_TTL = 30 * 60 * 1000 // 30 minutes
+
 export async function searchModrinth(params: ModSearchParams): Promise<ModSearchResult[]> {
   const projectType = params.projectType === 'modpack' ? 'modpack' : 'mod'
   const facets: string[][] = [[`project_type:${projectType}`]]
@@ -75,6 +80,12 @@ export async function searchModrinth(params: ModSearchParams): Promise<ModSearch
   queryParams.set('offset', String(params.offset || 0))
   queryParams.set('index', params.query?.trim() ? 'relevance' : 'downloads')
 
+  const cacheKey = `modrinth_search_${queryParams.toString()}`
+  const cached = await getCachedData<ModSearchResult[]>(cacheKey, SEARCH_CACHE_TTL)
+  if (cached) {
+    return cached
+  }
+
   const url = `${MODRINTH_API_BASE}/search?${queryParams.toString()}`
 
   const response = await fetch(url, {
@@ -89,7 +100,7 @@ export async function searchModrinth(params: ModSearchParams): Promise<ModSearch
 
   const data = (await response.json()) as ModrinthSearchResponse
 
-  return data.hits.map((hit) => {
+  const results: ModSearchResult[] = data.hits.map((hit) => {
     const matchedLoaders: ModLoaderType[] = []
     for (const cat of hit.categories) {
       const lower = cat.toLowerCase()
@@ -119,6 +130,9 @@ export async function searchModrinth(params: ModSearchParams): Promise<ModSearch
       serverSide: hit.server_side
     }
   })
+
+  await setCachedData(cacheKey, results)
+  return results
 }
 
 export async function getModrinthProjectVersions(
@@ -134,6 +148,12 @@ export async function getModrinthProjectVersions(
 
   if (minecraftVersion) {
     queryParams.set('game_versions', JSON.stringify([minecraftVersion]))
+  }
+
+  const cacheKey = `modrinth_versions_${projectId}_${queryParams.toString()}`
+  const cached = await getCachedData<ModVersionFile[]>(cacheKey, VERSIONS_CACHE_TTL)
+  if (cached) {
+    return cached
   }
 
   const url = `${MODRINTH_API_BASE}/project/${projectId}/version?${queryParams.toString()}`
@@ -185,5 +205,6 @@ export async function getModrinthProjectVersions(
     })
   }
 
+  await setCachedData(cacheKey, result)
   return result
 }

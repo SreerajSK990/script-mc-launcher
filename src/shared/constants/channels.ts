@@ -56,5 +56,13 @@ export const IPC_CHANNELS = {
   LAUNCHERS_SCAN_DIRECTORY: 'launchers:scan-directory',
   LAUNCHERS_SELECT_DIRECTORY: 'launchers:select-directory',
   LAUNCHERS_CLONE: 'launchers:clone',
-  LAUNCHERS_CLONE_PROGRESS_EVENT: 'launchers:clone-progress'
+  LAUNCHERS_CLONE_PROGRESS_EVENT: 'launchers:clone-progress',
+
+  FONTS_LIST: 'fonts:list',
+  FONTS_INSTALL: 'fonts:install',
+  FONTS_DELETE: 'fonts:delete',
+
+  MODS_CHECK_UPDATES: 'mods:check-updates',
+  MODS_UPDATE_ALL: 'mods:update-all',
+  MODS_UPDATE_PROGRESS_EVENT: 'mods:update-progress'
 } as const

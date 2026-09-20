@@ -72,3 +72,15 @@ export interface InstallModPayload {
   }
   oldFilename?: string
 }
+
+export interface ModUpdateInfo {
+  modId: string
+  name: string
+  currentVersion: string
+  currentFilename: string
+  latestVersion: string
+  source: ModSource
+  versionFile: ModVersionFile
+  releaseType: 'release' | 'beta' | 'alpha'
+}
+

@@ -18,10 +18,13 @@ import {
   Maximize2,
   ExternalLink,
   Plus,
-  ArrowUpDown
+  ArrowUpDown,
+  ArrowUpCircle,
+  RefreshCw,
+  Loader2
 } from 'lucide-react'
 import type { InstanceConfiguration, ModLoaderType } from '@shared/types/instance'
-import type { InstalledModRecord } from '@shared/types/mods'
+import type { InstalledModRecord, ModUpdateInfo } from '@shared/types/mods'
 import type { ScreenshotEntry } from '@shared/types/screenshot'
 import { Button } from '@renderer/components/common/Button'
 import { ChangeModVersionModal } from '@renderer/components/mods/ChangeModVersionModal'
@@ -114,6 +117,11 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
   const [isLoadingMods, setIsLoadingMods] = useState(false)
   const [selectedModForVersionChange, setSelectedModForVersionChange] = useState<InstalledModRecord | null>(null)
   const [modsFeedbackMessage, setModsFeedbackMessage] = useState<string | null>(null)
+  const [modUpdates, setModUpdates] = useState<ModUpdateInfo[]>([])
+  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false)
+  const [isUpdatingAll, setIsUpdatingAll] = useState(false)
+  const [updatingModId, setUpdatingModId] = useState<string | null>(null)
+  const [updateProgress, setUpdateProgress] = useState<{ message: string; current: number; total: number } | null>(null)
 
   // Screenshots state
   const [screenshots, setScreenshots] = useState<ScreenshotEntry[]>([])
@@ -130,16 +138,30 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
   }, [instance])
 
   // Load mods
-  const loadMods = useCallback(async () => {
+  const loadMods = useCallback(async (silent = false) => {
     if (!window.launcherAPI?.mods) return
-    setIsLoadingMods(true)
+    if (!silent) setIsLoadingMods(true)
     try {
       const list = await window.launcherAPI.mods.listInstalled(instance.id)
       setInstalledMods(list)
     } catch (err) {
       console.error('Failed to list mods:', err)
     } finally {
-      setIsLoadingMods(false)
+      if (!silent) setIsLoadingMods(false)
+    }
+  }, [instance.id])
+
+  // Check for mod updates
+  const checkForUpdates = useCallback(async () => {
+    if (!window.launcherAPI?.mods) return
+    setIsCheckingUpdates(true)
+    try {
+      const updates = await window.launcherAPI.mods.checkUpdates(instance.id)
+      setModUpdates(updates)
+    } catch (err) {
+      console.warn('Failed to check for mod updates:', err)
+    } finally {
+      setIsCheckingUpdates(false)
     }
   }, [instance.id])
 
@@ -159,11 +181,11 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
 
   useEffect(() => {
     if (activeTab === 'mods') {
-      loadMods()
+      loadMods().then(() => checkForUpdates())
     } else if (activeTab === 'screenshots') {
       loadScreenshots()
     }
-  }, [activeTab, loadMods, loadScreenshots])
+  }, [activeTab, loadMods, checkForUpdates, loadScreenshots])
 
   const handleSaveConfig = async () => {
     if (!name.trim()) return
@@ -208,11 +230,72 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
   }
 
   const handleToggleMod = async (mod: InstalledModRecord) => {
+    // Optimistic toggle (0ms latency, zero screen flicker!)
+    const nextEnabled = !mod.enabled
+    setInstalledMods((prev) =>
+      prev.map((m) => (m.filename === mod.filename ? { ...m, enabled: nextEnabled } : m))
+    )
+
     try {
-      await window.launcherAPI.mods.toggleInstalled(instance.id, mod.filename, !mod.enabled)
-      await loadMods()
+      await window.launcherAPI.mods.toggleInstalled(instance.id, mod.filename, nextEnabled)
+      await loadMods(true)
     } catch (err) {
       console.error('Failed to toggle mod:', err)
+      // Revert on error
+      setInstalledMods((prev) =>
+        prev.map((m) => (m.filename === mod.filename ? { ...m, enabled: !nextEnabled } : m))
+      )
+    }
+  }
+
+  const handleUpdateSingleMod = async (update: ModUpdateInfo) => {
+    if (!window.launcherAPI?.mods) return
+    setUpdatingModId(update.modId)
+    try {
+      await window.launcherAPI.mods.install({
+        instanceId: instance.id,
+        versionFile: update.versionFile,
+        modMetadata: {
+          id: update.modId,
+          name: update.name,
+          source: update.source
+        },
+        oldFilename: update.currentFilename
+      })
+      setModsFeedbackMessage(`Successfully updated ${update.name} to ${update.latestVersion}!`)
+      setModUpdates((prev) => prev.filter((u) => u.modId !== update.modId))
+      await loadMods(true)
+    } catch (err: any) {
+      console.error('Failed to update mod:', err)
+      alert(err.message || 'Failed to update mod.')
+    } finally {
+      setUpdatingModId(null)
+    }
+  }
+
+  const handleUpdateAllMods = async () => {
+    if (!window.launcherAPI?.mods || modUpdates.length === 0) return
+    if (!confirm(`Update all ${modUpdates.length} mods to their latest versions?`)) return
+
+    setIsUpdatingAll(true)
+    setUpdateProgress({ message: 'Starting update...', current: 0, total: modUpdates.length })
+
+    const unsub = window.launcherAPI.mods.onUpdateProgress((p) => {
+      setUpdateProgress(p)
+    })
+
+    try {
+      const res = await window.launcherAPI.mods.updateAll(instance.id, modUpdates)
+      setModsFeedbackMessage(`Successfully updated ${res.updatedCount} mods!`)
+      setModUpdates([])
+      await loadMods(true)
+    } catch (err: any) {
+      console.error('Failed to update all mods:', err)
+      alert(err.message || 'Failed to update all mods.')
+    } finally {
+      unsub()
+      setIsUpdatingAll(false)
+      setUpdateProgress(null)
     }
   }
 
@@ -220,7 +303,7 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
     if (!confirm(`Are you sure you want to remove ${mod.name}?`)) return
     try {
       await window.launcherAPI.mods.deleteInstalled(instance.id, mod.filename)
-      await loadMods()
+      await loadMods(true)
     } catch (err) {
       console.error('Failed to delete mod:', err)
     }
@@ -570,7 +653,30 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
               />
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={isCheckingUpdates ? Loader2 : RefreshCw}
+                isLoading={isCheckingUpdates}
+                onClick={checkForUpdates}
+                title="Check for mod updates"
+              >
+                {isCheckingUpdates ? 'Checking Updates...' : 'Check Updates'}
+              </Button>
+
+              {modUpdates.length > 0 && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={isUpdatingAll ? Loader2 : ArrowUpCircle}
+                  isLoading={isUpdatingAll}
+                  onClick={handleUpdateAllMods}
+                >
+                  Update All ({modUpdates.length})
+                </Button>
+              )}
+
               <Button
                 variant="secondary"
                 size="sm"
@@ -591,7 +697,27 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
             </div>
           </div>
 
-          {isLoadingMods ? (
+          {updateProgress && (
+            <div className="bg-background-card border border-emerald-500/30 p-4 rounded-2xl flex flex-col gap-2 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-200 font-medium flex items-center gap-2">
+                  <Loader2 size={14} className="animate-spin text-emerald-400" />
+                  {updateProgress.message}
+                </span>
+                <span className="text-emerald-400 font-mono font-semibold">
+                  {updateProgress.current} / {updateProgress.total}
+                </span>
+              </div>
+              <div className="w-full h-2 bg-background-darkest rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 transition-all duration-300"
+                  style={{ width: `${(updateProgress.current / updateProgress.total) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {isLoadingMods && installedMods.length === 0 ? (
             <div className="py-16 text-center text-slate-400 text-sm">
               Loading installed mods...
             </div>
@@ -621,69 +747,95 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
             </div>
           ) : (
             <div className="bg-background-card border border-border-subtle rounded-2xl overflow-hidden divide-y divide-border-subtle/60">
-              {filteredMods.map((mod) => (
-                <div
-                  key={mod.filename}
-                  className={`p-4 flex items-center justify-between gap-4 transition-colors ${
-                    mod.enabled ? 'hover:bg-background-surface/40' : 'opacity-60 bg-black/20'
-                  }`}
-                >
-                  <div className="flex items-center gap-3.5 min-w-0">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={mod.enabled}
-                      onClick={() => handleToggleMod(mod)}
-                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                        mod.enabled
-                          ? 'bg-emerald-500 shadow-sm shadow-emerald-950/40'
-                          : 'bg-slate-700'
-                      }`}
-                      title={mod.enabled ? 'Disable mod' : 'Enable mod'}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm ring-0 transform transition-transform duration-200 ease-in-out ${
-                          mod.enabled ? 'translate-x-4' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
+              {filteredMods.map((mod) => {
+                const update = modUpdates.find(
+                  (u) => u.currentFilename === mod.filename || u.modId === mod.id
+                )
+                const isUpdatingThis = updatingModId === update?.modId
 
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-slate-100 truncate">
-                          {mod.name}
-                        </span>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full font-medium uppercase bg-slate-800 border border-border-subtle text-slate-400 shrink-0">
-                          {mod.source}
-                        </span>
+                return (
+                  <div
+                    key={mod.filename}
+                    className={`p-4 flex items-center justify-between gap-4 transition-colors ${
+                      mod.enabled ? 'hover:bg-background-surface/40' : 'opacity-60 bg-black/20'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={mod.enabled}
+                        onClick={() => handleToggleMod(mod)}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          mod.enabled
+                            ? 'bg-emerald-500 shadow-sm shadow-emerald-950/40'
+                            : 'bg-slate-700'
+                        }`}
+                        title={mod.enabled ? 'Disable mod' : 'Enable mod'}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm ring-0 transform transition-transform duration-200 ease-in-out ${
+                            mod.enabled ? 'translate-x-4' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-semibold text-slate-100 truncate">
+                            {mod.name}
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-medium uppercase bg-slate-800 border border-border-subtle text-slate-400 shrink-0">
+                            {mod.source}
+                          </span>
+                          {update && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0 flex items-center gap-1">
+                              <ArrowUpCircle size={11} />
+                              Update: v{update.latestVersion}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 font-mono truncate mt-0.5">
+                          {mod.filename} • {(mod.fileSizeBytes / 1024 / 1024).toFixed(2)} MB
+                        </p>
                       </div>
-                      <p className="text-xs text-slate-500 font-mono truncate mt-0.5">
-                        {mod.filename} • {(mod.fileSizeBytes / 1024 / 1024).toFixed(2)} MB
-                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {update && (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          icon={isUpdatingThis ? Loader2 : ArrowUpCircle}
+                          isLoading={isUpdatingThis}
+                          onClick={() => handleUpdateSingleMod(update)}
+                          title={`Update to ${update.latestVersion}`}
+                        >
+                          Update
+                        </Button>
+                      )}
+
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        icon={ArrowUpDown}
+                        onClick={() => setSelectedModForVersionChange(mod)}
+                        title="Change mod version"
+                      >
+                        Change Version
+                      </Button>
+
+                      <button
+                        onClick={() => handleDeleteMod(mod)}
+                        className="p-2 rounded-lg bg-background-surface hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 border border-border-subtle hover:border-rose-900/50 transition-colors"
+                        title="Remove mod"
+                      >
+                        <Trash2 size={15} />
+                      </button>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      icon={ArrowUpDown}
-                      onClick={() => setSelectedModForVersionChange(mod)}
-                      title="Change mod version"
-                    >
-                      Change Version
-                    </Button>
-
-                    <button
-                      onClick={() => handleDeleteMod(mod)}
-                      className="p-2 rounded-lg bg-background-surface hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 border border-border-subtle hover:border-rose-900/50 transition-colors"
-                      title="Remove mod"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

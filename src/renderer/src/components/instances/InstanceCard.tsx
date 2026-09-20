@@ -48,7 +48,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
   const ramGigabytes = (instance.ramAllocationMegabytes / 1024).toFixed(1)
 
   return (
-    <div className="group relative bg-background-card hover:bg-background-surface/80 border border-border-subtle hover:border-border-strong rounded-2xl p-5 transition-all duration-200 flex flex-col justify-between shadow-sm hover:shadow-xl hover:shadow-black/20">
+    <div className="group relative bg-background-card hover:bg-background-surface/80 border border-border-subtle hover:border-border-strong rounded-2xl p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-500/5 active:scale-[0.99] flex flex-col justify-between shadow-sm">
       <div
         className={onManage ? 'cursor-pointer' : undefined}
         onClick={() => onManage?.(instance)}
