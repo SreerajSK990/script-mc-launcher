@@ -17,12 +17,14 @@ import {
   Copy,
   Maximize2,
   ExternalLink,
-  Plus
+  Plus,
+  ArrowUpDown
 } from 'lucide-react'
 import type { InstanceConfiguration, ModLoaderType } from '@shared/types/instance'
 import type { InstalledModRecord } from '@shared/types/mods'
 import type { ScreenshotEntry } from '@shared/types/screenshot'
 import { Button } from '@renderer/components/common/Button'
+import { ChangeModVersionModal } from '@renderer/components/mods/ChangeModVersionModal'
 
 interface InstanceDetailPageProps {
   instance: InstanceConfiguration
@@ -110,6 +112,8 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
   const [installedMods, setInstalledMods] = useState<InstalledModRecord[]>([])
   const [modsSearch, setModsSearch] = useState('')
   const [isLoadingMods, setIsLoadingMods] = useState(false)
+  const [selectedModForVersionChange, setSelectedModForVersionChange] = useState<InstalledModRecord | null>(null)
+  const [modsFeedbackMessage, setModsFeedbackMessage] = useState<string | null>(null)
 
   // Screenshots state
   const [screenshots, setScreenshots] = useState<ScreenshotEntry[]>([])
@@ -544,6 +548,13 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
       {/* Tab 2: Installed Mods */}
       {activeTab === 'mods' && (
         <div className="space-y-5">
+          {modsFeedbackMessage && (
+            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-200">
+              <Check size={16} className="shrink-0" />
+              <span>{modsFeedbackMessage}</span>
+            </div>
+          )}
+
           <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-background-card border border-border-subtle p-3 rounded-2xl">
             <div className="relative flex-1">
               <Search
@@ -648,6 +659,16 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={ArrowUpDown}
+                      onClick={() => setSelectedModForVersionChange(mod)}
+                      title="Change mod version"
+                    >
+                      Change Version
+                    </Button>
+
                     <button
                       onClick={() => handleDeleteMod(mod)}
                       className="p-2 rounded-lg bg-background-surface hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 border border-border-subtle hover:border-rose-900/50 transition-colors"
@@ -824,6 +845,19 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
           </div>
         </div>
       )}
+
+      {/* Change Mod Version Modal */}
+      <ChangeModVersionModal
+        isOpen={Boolean(selectedModForVersionChange)}
+        onClose={() => setSelectedModForVersionChange(null)}
+        instance={instance}
+        mod={selectedModForVersionChange}
+        onSuccess={(msg) => {
+          setModsFeedbackMessage(msg)
+          loadMods()
+          setTimeout(() => setModsFeedbackMessage(null), 3500)
+        }}
+      />
     </div>
   )
 }

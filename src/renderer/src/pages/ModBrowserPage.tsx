@@ -15,7 +15,8 @@ import {
   ExternalLink,
   ShieldCheck,
   AlertCircle,
-  Loader2
+  Loader2,
+  ArrowUpDown
 } from 'lucide-react'
 import type { InstanceConfiguration, ModLoaderType } from '@shared/types/instance'
 import type {
@@ -27,6 +28,7 @@ import type {
 import type { ModpackImportProgressEvent } from '@shared/types/modpack'
 import { Button } from '@renderer/components/common/Button'
 import { Modal } from '@renderer/components/common/Modal'
+import { ChangeModVersionModal } from '@renderer/components/mods/ChangeModVersionModal'
 
 interface ModBrowserPageProps {
   instances: InstanceConfiguration[]
@@ -81,6 +83,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
 
   const [installedMods, setInstalledMods] = useState<InstalledModRecord[]>([])
   const [isLoadingInstalled, setIsLoadingInstalled] = useState(false)
+  const [selectedInstalledModForChange, setSelectedInstalledModForChange] = useState<InstalledModRecord | null>(null)
 
   const currentInstance = instances.find((i) => i.id === selectedInstanceId)
 
@@ -116,6 +119,46 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
       setIsLoadingInstalled(false)
     }
   }, [selectedInstanceId])
+
+  const getInstalledModForProject = useCallback(
+    (project: ModSearchResult): InstalledModRecord | undefined => {
+      if (projectType !== 'mod' || !selectedInstanceId) return undefined
+
+      const projId = project.id.toLowerCase()
+      const projSlug = (project.slug || '').toLowerCase()
+      const projName = project.name.toLowerCase()
+      const projClean = projName.replace(/[^a-z0-9]/g, '')
+
+      return installedMods.find((inst) => {
+        const instId = inst.id.toLowerCase()
+        const instName = inst.name.toLowerCase()
+        const instClean = instName.replace(/[^a-z0-9]/g, '')
+        const instFile = inst.filename.toLowerCase()
+
+        // Direct ID or slug match
+        if (instId === projId || (projSlug && instId === projSlug)) return true
+
+        // Exact name match
+        if (instName === projName || (projClean.length >= 3 && instClean === projClean)) return true
+
+        // Filename prefix match with slug or clean name
+        if (
+          projSlug &&
+          (instFile.startsWith(projSlug + '-') ||
+            instFile.startsWith(projSlug + '_') ||
+            instFile.startsWith(projSlug + '+'))
+        ) {
+          return true
+        }
+        if (projClean.length >= 4 && instFile.startsWith(projClean)) {
+          return true
+        }
+
+        return false
+      })
+    },
+    [projectType, selectedInstanceId, installedMods]
+  )
 
   useEffect(() => {
     if (selectedInstanceId && projectType === 'mod') {
@@ -178,7 +221,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
     }
   }
 
-  const handleInstallModVersion = async (version: ModVersionFile) => {
+  const handleInstallModVersion = async (version: ModVersionFile, oldFilename?: string) => {
     if (!selectedInstanceId || !selectedModForVersions || !window.launcherAPI?.mods) return
 
     try {
@@ -191,10 +234,15 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
           name: selectedModForVersions.name,
           source: selectedModForVersions.source,
           iconUrl: selectedModForVersions.iconUrl
-        }
+        },
+        oldFilename
       })
 
-      onNotification(`Installed ${selectedModForVersions.name} successfully.`)
+      onNotification(
+        oldFilename
+          ? `Switched ${selectedModForVersions.name} to version ${version.versionNumber || version.name}!`
+          : `Installed ${selectedModForVersions.name} successfully.`
+      )
       await fetchInstalledMods()
       setSelectedModForVersions(null)
     } catch (error) {
@@ -545,14 +593,33 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
                       {formatDownloads(item.downloads)} downloads
                     </span>
 
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      icon={Download}
-                      onClick={() => handleOpenInstallModal(item)}
-                    >
-                      {projectType === 'modpack' ? 'Install Modpack' : 'Install'}
-                    </Button>
+                    {(() => {
+                      const installedRecord = getInstalledModForProject(item)
+                      if (installedRecord) {
+                        return (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            icon={Check}
+                            className="border-emerald-500/30 text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20"
+                            onClick={() => handleOpenInstallModal(item)}
+                            title={`Installed (${installedRecord.version || 'installed'}). Click to change version.`}
+                          >
+                            Installed
+                          </Button>
+                        )
+                      }
+                      return (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={Download}
+                          onClick={() => handleOpenInstallModal(item)}
+                        >
+                          {projectType === 'modpack' ? 'Install Modpack' : 'Install'}
+                        </Button>
+                      )
+                    })()}
                   </div>
                 </div>
               ))}
@@ -648,6 +715,16 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
                     >
                       {mod.enabled ? 'Enabled' : 'Disabled'}
                     </button>
+
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={ArrowUpDown}
+                      onClick={() => setSelectedInstalledModForChange(mod)}
+                      title="Change mod version"
+                    >
+                      Change Version
+                    </Button>
 
                     <Button
                       variant="ghost"
@@ -776,30 +853,85 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
                       </div>
                     </div>
 
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      icon={Download}
-                      isLoading={
-                        projectType === 'modpack'
-                          ? isInstallingModpack
-                          : installingVersionId === ver.id
+                    {(() => {
+                      const installedRecordForModal = selectedModForVersions
+                        ? getInstalledModForProject(selectedModForVersions)
+                        : undefined
+
+                      const isCurrent =
+                        projectType === 'mod' &&
+                        installedRecordForModal &&
+                        (ver.filename.toLowerCase() ===
+                          installedRecordForModal.filename.toLowerCase() ||
+                          ver.versionNumber === installedRecordForModal.version)
+
+                      if (isCurrent) {
+                        return (
+                          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs font-semibold">
+                            <Check size={13} />
+                            <span>Current</span>
+                          </div>
+                        )
                       }
-                      disabled={isInstallingModpack}
-                      onClick={() =>
-                        projectType === 'modpack'
-                          ? handleInstallModpackVersion(ver)
-                          : handleInstallModVersion(ver)
+
+                      if (projectType === 'mod' && installedRecordForModal) {
+                        return (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            icon={installingVersionId === ver.id ? Loader2 : ArrowUpDown}
+                            isLoading={installingVersionId === ver.id}
+                            disabled={isInstallingModpack}
+                            onClick={() =>
+                              handleInstallModVersion(ver, installedRecordForModal.filename)
+                            }
+                          >
+                            Switch Version
+                          </Button>
+                        )
                       }
-                    >
-                      {projectType === 'modpack' ? 'Install Pack' : 'Install'}
-                    </Button>
+
+                      return (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          icon={Download}
+                          isLoading={
+                            projectType === 'modpack'
+                              ? isInstallingModpack
+                              : installingVersionId === ver.id
+                          }
+                          disabled={isInstallingModpack}
+                          onClick={() =>
+                            projectType === 'modpack'
+                              ? handleInstallModpackVersion(ver)
+                              : handleInstallModVersion(ver)
+                          }
+                        >
+                          {projectType === 'modpack' ? 'Install Pack' : 'Install'}
+                        </Button>
+                      )
+                    })()}
                   </div>
                 ))}
               </div>
             )}
           </div>
         </Modal>
+      )}
+
+      {/* Change Mod Version Modal (from Installed tab) */}
+      {currentInstance && (
+        <ChangeModVersionModal
+          isOpen={Boolean(selectedInstalledModForChange)}
+          onClose={() => setSelectedInstalledModForChange(null)}
+          instance={currentInstance}
+          mod={selectedInstalledModForChange}
+          onSuccess={(msg) => {
+            onNotification(msg)
+            fetchInstalledMods()
+          }}
+        />
       )}
     </div>
   )

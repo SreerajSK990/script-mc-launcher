@@ -70,4 +70,5 @@ export interface InstallModPayload {
     source: ModSource
     iconUrl?: string
   }
+  oldFilename?: string
 }

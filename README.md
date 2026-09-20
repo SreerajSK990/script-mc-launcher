@@ -20,6 +20,8 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
   - Search thousands of mods on Modrinth with zero API keys or setup needed.
   - Optional CurseForge API integration if you have an API key.
   - Automatically filters mods to match your selected instance's Minecraft version and mod loader.
+  - **Live "Installed" Status Badges:** Mod cards in Mod Browser automatically indicate when a mod is already installed in the selected instance with a clean green status badge.
+  - **In-App Version Switching:** Change or upgrade any mod's version directly from the Instance Details mods tab or the Mod Browser with one click; automatically removes old `.jar` / `.jar.disabled` files and updates configurations.
   - One-click mod installation directly into your instance's `mods/` folder with SHA-512 hash verification.
   - In-app mod manager to toggle mods on/off (`.jar.disabled`) or delete them without digging through File Explorer.
 - **Modpack Support (Local Imports & Direct Online Downloads):**
@@ -30,7 +32,7 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
   - **RAM Memory Tuning:** Dynamic memory slider with quick preset pills (2 GB, 4 GB, 6 GB, 8 GB, 12 GB, 16 GB).
   - **JVM Arguments Editor:** Quick-apply presets for Aikar's high-performance G1GC flags, ultra-low-latency Shenandoah GC, or custom arguments.
   - **Custom Java Override:** Browse and select any external `java.exe` binary with file picker, or let the launcher auto-manage it.
-  - **Embedded Mod Manager:** Direct mod list table with search filtering, on/off toggles (`.jar.disabled`), and quick deletion.
+  - **Embedded Mod Manager:** Direct mod list table with search filtering, on/off toggles (`.jar.disabled`), one-click version switching, and quick deletion.
 - **In-App Screenshots Gallery:**
   - Visual gallery scanning each instance's `screenshots/` directory automatically.
   - High-resolution Lightbox modal viewer for full-screen inspection.

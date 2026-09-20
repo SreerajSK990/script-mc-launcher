@@ -121,8 +121,34 @@ export async function installModToInstance(payload: InstallModPayload): Promise<
   const metaPath = getModsMetadataPath(payload.instanceId)
   const existingMods = (await readJsonFile<InstalledModRecord[]>(metaPath)) || []
 
+  // Check for previous file that needs cleanup
+  const oldFilesToRemove = new Set<string>()
+  if (payload.oldFilename && payload.oldFilename !== payload.versionFile.filename) {
+    oldFilesToRemove.add(payload.oldFilename)
+  }
+
+  const previousRecord = existingMods.find(
+    (mod) =>
+      mod.id === newRecord.id ||
+      (payload.oldFilename && (mod.filename === payload.oldFilename || mod.filename === `${payload.oldFilename}.disabled`))
+  )
+
+  if (previousRecord && previousRecord.filename !== payload.versionFile.filename) {
+    oldFilesToRemove.add(previousRecord.filename)
+  }
+
+  for (const oldFile of oldFilesToRemove) {
+    const activeOld = join(modsDir, oldFile)
+    const disabledOld = join(modsDir, `${oldFile}.disabled`)
+    await fs.rm(activeOld, { force: true }).catch(() => {})
+    await fs.rm(disabledOld, { force: true }).catch(() => {})
+  }
+
   const updatedMods = existingMods.filter(
-    (mod) => mod.id !== newRecord.id && mod.filename !== newRecord.filename
+    (mod) =>
+      mod.id !== newRecord.id &&
+      mod.filename !== newRecord.filename &&
+      !oldFilesToRemove.has(mod.filename)
   )
   updatedMods.push(newRecord)
 
