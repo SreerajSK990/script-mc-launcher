@@ -26,7 +26,9 @@ function replaceArgumentVariables(template: string, context: ArgumentReplacement
     '${assets_index_name}': context.versionPackage.assetIndex.id,
     '${natives_directory}': context.nativesDirectory,
     '${classpath}': context.classpathString,
-    '${classpath_separator}': delimiter
+    '${classpath_separator}': delimiter,
+    '${clientid}': context.account.uuid,
+    '${auth_xuid}': context.account.uuid
   }
 
   let result = template
@@ -91,13 +93,13 @@ export function buildExecutionArguments(context: ArgumentReplacementContext): {
     jvmArguments.push(context.classpathString)
   }
 
-  if (context.versionPackage.arguments?.game && context.versionPackage.arguments.game.length > 0) {
-    const modernGame = processArgumentValues(context.versionPackage.arguments.game, context)
-    gameArguments.push(...modernGame)
-  } else if (context.versionPackage.minecraftArguments) {
+  if (context.versionPackage.minecraftArguments) {
     const legacyExpanded = replaceArgumentVariables(context.versionPackage.minecraftArguments, context)
     const splitArgs = legacyExpanded.split(' ').filter(Boolean)
     gameArguments.push(...splitArgs)
+  } else if (context.versionPackage.arguments?.game && context.versionPackage.arguments.game.length > 0) {
+    const modernGame = processArgumentValues(context.versionPackage.arguments.game, context)
+    gameArguments.push(...modernGame)
   }
 
   return {
