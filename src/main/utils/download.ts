@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { createWriteStream, promises as fs } from 'node:fs'
 import { dirname } from 'node:path'
 import { pipeline } from 'node:stream/promises'
@@ -17,46 +17,66 @@ export async function downloadFileWithSha1(
   destinationPath: string,
   expectedSha1?: string
 ): Promise<void> {
-  if (expectedSha1 && (await doesPathExist(destinationPath))) {
-    const existingFileBuffer = await fs.readFile(destinationPath)
-    const existingSha1 = createHash('sha1').update(existingFileBuffer).digest('hex')
-    if (existingSha1.toLowerCase() === expectedSha1.toLowerCase()) {
-      return
+  if (await doesPathExist(destinationPath)) {
+    if (expectedSha1) {
+      try {
+        const existingFileBuffer = await fs.readFile(destinationPath)
+        const existingSha1 = createHash('sha1').update(existingFileBuffer).digest('hex')
+        if (existingSha1.toLowerCase() === expectedSha1.toLowerCase()) {
+          return
+        }
+      } catch {
+        // Continue to download if reading fails
+      }
+    } else {
+      try {
+        const stats = await fs.stat(destinationPath)
+        if (stats.size > 0) {
+          return
+        }
+      } catch {
+        // Continue to download
+      }
     }
   }
 
   await ensureDirectoryExists(dirname(destinationPath))
-  const temporaryFilePath = `${destinationPath}.downloading`
+  const randomSuffix = randomBytes(4).toString('hex')
+  const temporaryFilePath = `${destinationPath}.${randomSuffix}.tmp`
 
-  const response = await fetch(url)
-  if (!response.ok || !response.body) {
-    throw new Error(`Failed to download ${url}: HTTP ${response.status}`)
-  }
+  try {
+    const response = await fetch(url)
+    if (!response.ok || !response.body) {
+      throw new Error(`Failed to download ${url}: HTTP ${response.status}`)
+    }
 
-  const hashCalculator = createHash('sha1')
-  const fileWriteStream = createWriteStream(temporaryFilePath)
+    const hashCalculator = createHash('sha1')
+    const fileWriteStream = createWriteStream(temporaryFilePath)
 
-  const nodeReadable = Readable.fromWeb(response.body as import('stream/web').ReadableStream)
+    const nodeReadable = Readable.fromWeb(response.body as import('stream/web').ReadableStream)
 
-  nodeReadable.on('data', (chunk: Buffer) => {
-    hashCalculator.update(chunk)
-  })
+    nodeReadable.on('data', (chunk: Buffer) => {
+      hashCalculator.update(chunk)
+    })
 
-  await pipeline(nodeReadable, fileWriteStream)
+    await pipeline(nodeReadable, fileWriteStream)
 
-  const computedSha1 = hashCalculator.digest('hex')
+    const computedSha1 = hashCalculator.digest('hex')
 
-  if (expectedSha1 && computedSha1.toLowerCase() !== expectedSha1.toLowerCase()) {
+    if (expectedSha1 && computedSha1.toLowerCase() !== expectedSha1.toLowerCase()) {
+      throw new Error(
+        `SHA-1 mismatch for ${url}. Expected ${expectedSha1}, computed ${computedSha1}`
+      )
+    }
+
+    try {
+      await fs.rename(temporaryFilePath, destinationPath)
+    } catch {
+      await fs.copyFile(temporaryFilePath, destinationPath)
+    }
+  } finally {
     await fs.rm(temporaryFilePath, { force: true }).catch(() => {})
-    throw new Error(
-      `SHA-1 mismatch for ${url}. Expected ${expectedSha1}, computed ${computedSha1}`
-    )
   }
-
-  await fs.rename(temporaryFilePath, destinationPath).catch(async () => {
-    await fs.copyFile(temporaryFilePath, destinationPath)
-    await fs.rm(temporaryFilePath, { force: true }).catch(() => {})
-  })
 }
 
 export async function downloadBatch(
@@ -64,7 +84,17 @@ export async function downloadBatch(
   maxConcurrency = 12,
   onProgress?: (completed: number, total: number, currentUrl: string) => void
 ): Promise<void> {
-  const total = tasks.length
+  const uniqueTasks: DownloadTask[] = []
+  const seenDestinations = new Set<string>()
+
+  for (const task of tasks) {
+    if (!seenDestinations.has(task.destination)) {
+      seenDestinations.add(task.destination)
+      uniqueTasks.push(task)
+    }
+  }
+
+  const total = uniqueTasks.length
   let completed = 0
 
   if (total === 0) {
@@ -74,9 +104,9 @@ export async function downloadBatch(
   let taskIndex = 0
 
   async function worker(): Promise<void> {
-    while (taskIndex < tasks.length) {
+    while (taskIndex < uniqueTasks.length) {
       const currentTaskIndex = taskIndex++
-      const task = tasks[currentTaskIndex]
+      const task = uniqueTasks[currentTaskIndex]
       if (!task) break
 
       await downloadFileWithSha1(task.url, task.destination, task.sha1)

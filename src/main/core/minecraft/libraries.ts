@@ -75,6 +75,12 @@ export async function prepareMinecraftLibraries(
       continue
     }
 
+    const addClasspathJar = (jarPath: string) => {
+      if (!classpathJars.includes(jarPath)) {
+        classpathJars.push(jarPath)
+      }
+    }
+
     if (library.downloads?.artifact) {
       const artifact = library.downloads.artifact
       const relativePath = artifact.path || convertMavenCoordinateToPath(library.name)
@@ -86,7 +92,7 @@ export async function prepareMinecraftLibraries(
         sha1: artifact.sha1,
         size: artifact.size
       })
-      classpathJars.push(destination)
+      addClasspathJar(destination)
     } else if (library.url && library.name) {
       const relativePath = convertMavenCoordinateToPath(library.name)
       const destination = join(librariesRoot, relativePath)
@@ -96,11 +102,11 @@ export async function prepareMinecraftLibraries(
         url: `${baseUrl}${relativePath}`,
         destination
       })
-      classpathJars.push(destination)
+      addClasspathJar(destination)
     } else if (library.name && !library.natives) {
       const relativePath = convertMavenCoordinateToPath(library.name)
       const destination = join(librariesRoot, relativePath)
-      classpathJars.push(destination)
+      addClasspathJar(destination)
     }
 
     const nativeClassifierKey = resolveNativeClassifierKey(library, currentOs, currentArch)
@@ -116,7 +122,9 @@ export async function prepareMinecraftLibraries(
           sha1: nativeArtifact.sha1,
           size: nativeArtifact.size
         })
-        nativeJarPathsToExtract.push(destination)
+        if (!nativeJarPathsToExtract.includes(destination)) {
+          nativeJarPathsToExtract.push(destination)
+        }
       }
     }
   }
@@ -141,7 +149,9 @@ export async function prepareMinecraftLibraries(
     sha1: clientDownload.sha1,
     size: clientDownload.size
   })
-  classpathJars.push(clientJarPath)
+  if (!classpathJars.includes(clientJarPath)) {
+    classpathJars.push(clientJarPath)
+  }
 
   await downloadBatch(downloadTasks, 12, onProgress)
 
