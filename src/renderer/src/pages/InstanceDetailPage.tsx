@@ -27,6 +27,7 @@ import type { InstanceConfiguration, ModLoaderType } from '@shared/types/instanc
 import type { InstalledModRecord, ModUpdateInfo } from '@shared/types/mods'
 import type { ScreenshotEntry } from '@shared/types/screenshot'
 import { Button } from '@renderer/components/common/Button'
+import { ConfirmModal } from '@renderer/components/common/ConfirmModal'
 import { ChangeModVersionModal } from '@renderer/components/mods/ChangeModVersionModal'
 
 interface InstanceDetailPageProps {
@@ -122,6 +123,25 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
   const [isUpdatingAll, setIsUpdatingAll] = useState(false)
   const [updatingModId, setUpdatingModId] = useState<string | null>(null)
   const [updateProgress, setUpdateProgress] = useState<{ message: string; current: number; total: number } | null>(null)
+
+  // Confirmation dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    confirmLabel?: string
+    variant?: 'danger' | 'warning' | 'primary'
+    onConfirm: () => void | Promise<void>
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  })
+
+  const closeConfirmDialog = () => {
+    setConfirmDialog((prev) => ({ ...prev, isOpen: false }))
+  }
 
   // Screenshots state
   const [screenshots, setScreenshots] = useState<ScreenshotEntry[]>([])
@@ -275,51 +295,77 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
 
   const handleUpdateAllMods = async () => {
     if (!window.launcherAPI?.mods || modUpdates.length === 0) return
-    if (!confirm(`Update all ${modUpdates.length} mods to their latest versions?`)) return
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Update All Mods',
+      message: `Are you sure you want to update all ${modUpdates.length} mods to their latest compatible versions? Outdated JAR files will be safely replaced.`,
+      confirmLabel: 'Update All',
+      variant: 'primary',
+      onConfirm: async () => {
+        closeConfirmDialog()
+        setIsUpdatingAll(true)
+        setUpdateProgress({ message: 'Starting update...', current: 0, total: modUpdates.length })
 
-    setIsUpdatingAll(true)
-    setUpdateProgress({ message: 'Starting update...', current: 0, total: modUpdates.length })
+        const unsub = window.launcherAPI!.mods.onUpdateProgress((p) => {
+          setUpdateProgress(p)
+        })
 
-    const unsub = window.launcherAPI.mods.onUpdateProgress((p) => {
-      setUpdateProgress(p)
-    })
-
-    try {
-      const res = await window.launcherAPI.mods.updateAll(instance.id, modUpdates)
-      setModsFeedbackMessage(`Successfully updated ${res.updatedCount} mods!`)
-      setModUpdates([])
-      await loadMods(true)
-    } catch (err: any) {
-      console.error('Failed to update all mods:', err)
-      alert(err.message || 'Failed to update all mods.')
-    } finally {
-      unsub()
-      setIsUpdatingAll(false)
-      setUpdateProgress(null)
-    }
-  }
-
-  const handleDeleteMod = async (mod: InstalledModRecord) => {
-    if (!confirm(`Are you sure you want to remove ${mod.name}?`)) return
-    try {
-      await window.launcherAPI.mods.deleteInstalled(instance.id, mod.filename)
-      await loadMods(true)
-    } catch (err) {
-      console.error('Failed to delete mod:', err)
-    }
-  }
-
-  const handleDeleteScreenshot = async (filename: string) => {
-    if (!confirm('Are you sure you want to delete this screenshot?')) return
-    try {
-      await window.launcherAPI.screenshots.delete(instance.id, filename)
-      if (selectedLightboxScreenshot?.filename === filename) {
-        setSelectedLightboxScreenshot(null)
+        try {
+          const res = await window.launcherAPI!.mods.updateAll(instance.id, modUpdates)
+          setModsFeedbackMessage(`Successfully updated ${res.updatedCount} mods!`)
+          setModUpdates([])
+          await loadMods(true)
+        } catch (err: any) {
+          console.error('Failed to update all mods:', err)
+          setModsFeedbackMessage(err.message || 'Failed to update all mods.')
+        } finally {
+          unsub()
+          setIsUpdatingAll(false)
+          setUpdateProgress(null)
+        }
       }
-      await loadScreenshots()
-    } catch (err) {
-      console.error('Failed to delete screenshot:', err)
-    }
+    })
+  }
+
+  const handleDeleteMod = (mod: InstalledModRecord) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Remove Mod',
+      message: `Are you sure you want to remove ${mod.name}? This will delete "${mod.filename}" from your instance.`,
+      confirmLabel: 'Remove Mod',
+      variant: 'danger',
+      onConfirm: async () => {
+        closeConfirmDialog()
+        try {
+          await window.launcherAPI?.mods.deleteInstalled(instance.id, mod.filename)
+          await loadMods(true)
+        } catch (err) {
+          console.error('Failed to delete mod:', err)
+        }
+      }
+    })
+  }
+
+  const handleDeleteScreenshot = (filename: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Screenshot',
+      message: 'Are you sure you want to permanently delete this screenshot? This action cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+      onConfirm: async () => {
+        closeConfirmDialog()
+        try {
+          await window.launcherAPI?.screenshots.delete(instance.id, filename)
+          if (selectedLightboxScreenshot?.filename === filename) {
+            setSelectedLightboxScreenshot(null)
+          }
+          await loadScreenshots()
+        } catch (err) {
+          console.error('Failed to delete screenshot:', err)
+        }
+      }
+    })
   }
 
   const handleCopyScreenshot = async (screenshot: ScreenshotEntry) => {
@@ -1014,6 +1060,17 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
           loadMods()
           setTimeout(() => setModsFeedbackMessage(null), 3500)
         }}
+      />
+
+      {/* Themed Confirmation Modal */}
+      <ConfirmModal
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        variant={confirmDialog.variant}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={closeConfirmDialog}
       />
     </div>
   )

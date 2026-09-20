@@ -3,6 +3,8 @@ import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { initializeLauncherDirectories } from '@main/services/paths'
 import { initializeAuthenticationState } from '@main/services/auth'
+import { initializeLauncherSettings } from '@main/services/settings'
+import { initCurseForgeApiKey } from '@main/services/mods'
 import { registerAllIpcHandlers } from '@main/ipc/register'
 
 let mainWindow: BrowserWindow | null = null
@@ -57,6 +59,10 @@ async function createMainWindow(): Promise<BrowserWindow> {
 app.whenReady().then(async () => {
   await initializeLauncherDirectories()
   await initializeAuthenticationState()
+  const settings = await initializeLauncherSettings()
+  if (settings.curseForgeApiKey) {
+    initCurseForgeApiKey(settings.curseForgeApiKey)
+  }
   mainWindow = await createMainWindow()
 
   app.on('activate', async () => {

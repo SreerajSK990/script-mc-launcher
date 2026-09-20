@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Type, Upload, Trash2, Check, Sparkles, FolderOpen, Loader2 } from 'lucide-react'
 import type { CustomFontEntry } from '@shared/types/fonts'
 import { Button } from '@renderer/components/common/Button'
+import { ConfirmModal } from '@renderer/components/common/ConfirmModal'
 
 const BUILT_IN_PRESETS = [
   {
@@ -58,6 +59,23 @@ export const FontSettingsSection: React.FC = () => {
   const [isInstalling, setIsInstalling] = useState(false)
   const [feedback, setFeedback] = useState<string | null>(null)
 
+  // Themed confirmation dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    onConfirm: () => void | Promise<void>
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  })
+
+  const closeConfirmDialog = () => {
+    setConfirmDialog((prev) => ({ ...prev, isOpen: false }))
+  }
+
   const loadFonts = async () => {
     try {
       setIsLoading(true)
@@ -74,25 +92,19 @@ export const FontSettingsSection: React.FC = () => {
 
   useEffect(() => {
     loadFonts()
-    const saved = localStorage.getItem('launcher_selected_font') || 'plus-jakarta'
-    setSelectedFontId(saved)
   }, [])
 
   const handleSelectPreset = (preset: (typeof BUILT_IN_PRESETS)[0]) => {
     setSelectedFontId(preset.id)
     localStorage.setItem('launcher_selected_font', preset.id)
-
-    const css = `@import url('${preset.importUrl}');`
-    applyLauncherFont(preset.fontFamily, css)
-
-    setFeedback(`Applied font: ${preset.name}`)
+    applyLauncherFont(preset.fontFamily)
+    setFeedback(`Applied ${preset.name}`)
     setTimeout(() => setFeedback(null), 2500)
   }
 
   const handleSelectCustomFont = (font: CustomFontEntry) => {
     setSelectedFontId(font.fileName)
     localStorage.setItem('launcher_selected_font', font.fileName)
-
     const css = `
       @font-face {
         font-family: "${font.name}";
@@ -103,18 +115,17 @@ export const FontSettingsSection: React.FC = () => {
       }
     `
     applyLauncherFont(`"${font.name}", sans-serif`, css)
-
-    setFeedback(`Applied custom font: ${font.name}`)
+    setFeedback(`Applied ${font.name}`)
     setTimeout(() => setFeedback(null), 2500)
   }
 
-  const handleInstallFont = async () => {
+  const handleInstallCustomFont = async () => {
     if (!window.launcherAPI?.system || !window.launcherAPI?.fonts) return
 
     try {
       const selected = await window.launcherAPI.system.selectFile({
-        title: 'Select Custom Font File (.ttf, .otf, .woff2)',
-        filters: [{ name: 'Font Files (*.ttf, *.otf, *.woff2)', extensions: ['ttf', 'otf', 'woff2'] }]
+        title: 'Select Font File (.ttf, .otf, .woff2)',
+        filters: [{ name: 'Font Files', extensions: ['ttf', 'otf', 'woff2', 'woff'] }]
       })
 
       if (!selected) return
@@ -125,25 +136,32 @@ export const FontSettingsSection: React.FC = () => {
       handleSelectCustomFont(installed)
     } catch (err: any) {
       console.error('Failed to install font:', err)
-      alert(err.message || 'Failed to install custom font.')
+      setFeedback(err.message || 'Failed to install custom font.')
+      setTimeout(() => setFeedback(null), 3000)
     } finally {
       setIsInstalling(false)
     }
   }
 
-  const handleDeleteFont = async (fileName: string, e: React.MouseEvent) => {
+  const handleDeleteFont = (fileName: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!confirm('Are you sure you want to delete this custom font?')) return
-
-    try {
-      await window.launcherAPI?.fonts.delete(fileName)
-      if (selectedFontId === fileName) {
-        handleSelectPreset(BUILT_IN_PRESETS[0])
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Custom Font',
+      message: 'Are you sure you want to delete this custom font? The font file will be removed from your launcher directory.',
+      onConfirm: async () => {
+        closeConfirmDialog()
+        try {
+          await window.launcherAPI?.fonts.delete(fileName)
+          if (selectedFontId === fileName) {
+            handleSelectPreset(BUILT_IN_PRESETS[0])
+          }
+          await loadFonts()
+        } catch (err) {
+          console.error('Failed to delete font:', err)
+        }
       }
-      await loadFonts()
-    } catch (err) {
-      console.error('Failed to delete font:', err)
-    }
+    })
   }
 
   return (
@@ -166,7 +184,7 @@ export const FontSettingsSection: React.FC = () => {
           size="sm"
           icon={isInstalling ? Loader2 : Upload}
           isLoading={isInstalling}
-          onClick={handleInstallFont}
+          onClick={handleInstallCustomFont}
         >
           Install Custom Font
         </Button>
@@ -269,6 +287,17 @@ export const FontSettingsSection: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Themed Confirmation Modal */}
+      <ConfirmModal
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel="Delete Font"
+        variant="danger"
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={closeConfirmDialog}
+      />
     </div>
   )
 }

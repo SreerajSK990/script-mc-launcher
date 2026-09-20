@@ -30,6 +30,7 @@ import type {
 import type { ModpackImportProgressEvent } from '@shared/types/modpack'
 import { Button } from '@renderer/components/common/Button'
 import { Modal } from '@renderer/components/common/Modal'
+import { ConfirmModal } from '@renderer/components/common/ConfirmModal'
 import { ChangeModVersionModal } from '@renderer/components/mods/ChangeModVersionModal'
 
 interface ModBrowserPageProps {
@@ -90,6 +91,25 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
   const [installedMods, setInstalledMods] = useState<InstalledModRecord[]>([])
   const [isLoadingInstalled, setIsLoadingInstalled] = useState(false)
   const [selectedInstalledModForChange, setSelectedInstalledModForChange] = useState<InstalledModRecord | null>(null)
+
+  // Themed confirmation dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    confirmLabel?: string
+    variant?: 'danger' | 'warning' | 'primary'
+    onConfirm: () => void | Promise<void>
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  })
+
+  const closeConfirmDialog = () => {
+    setConfirmDialog((prev) => ({ ...prev, isOpen: false }))
+  }
 
   const currentInstance = instances.find((i) => i.id === selectedInstanceId)
 
@@ -339,18 +359,25 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
     }
   }
 
-  const handleDeleteMod = async (mod: InstalledModRecord) => {
+  const handleDeleteMod = (mod: InstalledModRecord) => {
     if (!selectedInstanceId || !window.launcherAPI?.mods) return
-    const confirmed = window.confirm(`Are you sure you want to remove ${mod.name}?`)
-    if (!confirmed) return
-
-    try {
-      await window.launcherAPI.mods.deleteInstalled(selectedInstanceId, mod.filename)
-      await fetchInstalledMods()
-      onNotification(`Removed ${mod.name}.`)
-    } catch (error) {
-      console.error('Failed to delete mod:', error)
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Remove Mod',
+      message: `Are you sure you want to remove ${mod.name}? This will delete "${mod.filename}" from this instance.`,
+      confirmLabel: 'Remove Mod',
+      variant: 'danger',
+      onConfirm: async () => {
+        closeConfirmDialog()
+        try {
+          await window.launcherAPI?.mods.deleteInstalled(selectedInstanceId, mod.filename)
+          await fetchInstalledMods()
+          onNotification(`Removed ${mod.name}.`)
+        } catch (error) {
+          console.error('Failed to delete mod:', error)
+        }
+      }
+    })
   }
 
   const formatDownloads = (num: number): string => {
@@ -1045,6 +1072,17 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
           }}
         />
       )}
+
+      {/* Themed Confirmation Modal */}
+      <ConfirmModal
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        variant={confirmDialog.variant}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={closeConfirmDialog}
+      />
     </div>
   )
 }

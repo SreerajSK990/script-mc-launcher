@@ -15,6 +15,7 @@ import { CreateInstanceModal } from '@renderer/components/instances/CreateInstan
 import { ImportModpackModal } from '@renderer/components/instances/ImportModpackModal'
 import { ImportFromLauncherModal } from '@renderer/components/instances/ImportFromLauncherModal'
 import { AccountModal } from '@renderer/components/auth/AccountModal'
+import { ConfirmModal } from '@renderer/components/common/ConfirmModal'
 import { applyLauncherFont } from '@renderer/components/settings/FontSettingsSection'
 
 export const App: React.FC = () => {
@@ -33,6 +34,25 @@ export const App: React.FC = () => {
   const [activeLaunchingInstance, setActiveLaunchingInstance] = useState<InstanceConfiguration | null>(null)
   const [launchProgress, setLaunchProgress] = useState<LaunchProgressEvent | null>(null)
   const [launchLogs, setLaunchLogs] = useState<LaunchLogEvent[]>([])
+
+  // Themed confirmation dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean
+    title: string
+    message: string
+    confirmLabel?: string
+    variant?: 'danger' | 'warning' | 'primary'
+    onConfirm: () => void | Promise<void>
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  })
+
+  const closeConfirmDialog = () => {
+    setConfirmDialog((prev) => ({ ...prev, isOpen: false }))
+  }
 
   const showNotification = (message: string) => {
     setActiveNotification(message)
@@ -149,18 +169,23 @@ export const App: React.FC = () => {
     }
   }
 
-  const handleDeleteInstance = async (instanceId: string) => {
+  const handleDeleteInstance = (instanceId: string) => {
     const target = instances.find((inst) => inst.id === instanceId)
-    const confirmed = window.confirm(
-      `Are you sure you want to delete "${target?.name || 'this instance'}"? This action cannot be undone.`
-    )
-    if (!confirmed) return
-
-    if (window.launcherAPI?.instances) {
-      await window.launcherAPI.instances.delete(instanceId)
-      await fetchInstances()
-      showNotification('Instance deleted.')
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Instance',
+      message: `Are you sure you want to delete "${target?.name || 'this instance'}"? All files, mods, and local worlds will be permanently removed.`,
+      confirmLabel: 'Delete Instance',
+      variant: 'danger',
+      onConfirm: async () => {
+        closeConfirmDialog()
+        if (window.launcherAPI?.instances) {
+          await window.launcherAPI.instances.delete(instanceId)
+          await fetchInstances()
+          showNotification('Instance deleted.')
+        }
+      }
+    })
   }
 
   const handleOpenFolder = async (instanceId: string) => {
@@ -376,6 +401,17 @@ export const App: React.FC = () => {
         onLoginOffline={handleLoginOffline}
         onSwitchAccount={handleSwitchAccount}
         onLogout={handleLogout}
+      />
+
+      {/* Themed Confirmation Modal */}
+      <ConfirmModal
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        variant={confirmDialog.variant}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={closeConfirmDialog}
       />
     </div>
   )

@@ -12,7 +12,8 @@ import {
   searchCurseForge,
   getCurseForgeFiles,
   setCurseForgeApiKey,
-  getCurseForgeApiKey
+  getCurseForgeApiKey,
+  initCurseForgeApiKey
 } from '@main/core/mods/curseforge'
 import {
   listInstalledMods,
@@ -21,7 +22,7 @@ import {
   deleteInstalledMod
 } from '@main/core/mods/manager'
 
-export { setCurseForgeApiKey, getCurseForgeApiKey }
+export { setCurseForgeApiKey, getCurseForgeApiKey, initCurseForgeApiKey }
 
 export async function searchAllMods(params: ModSearchParams): Promise<ModSearchResult[]> {
   const source = params.source || 'all'

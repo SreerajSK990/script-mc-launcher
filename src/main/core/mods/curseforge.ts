@@ -6,10 +6,19 @@ const MINECRAFT_GAME_ID = 432
 const MODS_CLASS_ID = 6
 const MODPACKS_CLASS_ID = 4471
 
+import { updateLauncherSettings } from '@main/services/settings'
+
 let customCurseForgeApiKey: string | null = null
+
+export function initCurseForgeApiKey(key: string | null): void {
+  customCurseForgeApiKey = key?.trim() || null
+}
 
 export function setCurseForgeApiKey(key: string | null): void {
   customCurseForgeApiKey = key?.trim() || null
+  updateLauncherSettings({ curseForgeApiKey: customCurseForgeApiKey }).catch((err) => {
+    console.error('Failed to save curseForgeApiKey to settings:', err)
+  })
 }
 
 export function getCurseForgeApiKey(): string | null {
