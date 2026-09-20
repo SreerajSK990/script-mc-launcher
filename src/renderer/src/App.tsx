@@ -13,6 +13,7 @@ import { LogsPage } from '@renderer/pages/LogsPage'
 import { SettingsPage } from '@renderer/pages/SettingsPage'
 import { CreateInstanceModal } from '@renderer/components/instances/CreateInstanceModal'
 import { ImportModpackModal } from '@renderer/components/instances/ImportModpackModal'
+import { ImportFromLauncherModal } from '@renderer/components/instances/ImportFromLauncherModal'
 import { AccountModal } from '@renderer/components/auth/AccountModal'
 
 export const App: React.FC = () => {
@@ -24,6 +25,7 @@ export const App: React.FC = () => {
   const [authState, setAuthState] = useState<AuthState>({ activeAccount: null, accounts: [] })
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isImportModpackModalOpen, setIsImportModpackModalOpen] = useState(false)
+  const [isImportLauncherModalOpen, setIsImportLauncherModalOpen] = useState(false)
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false)
   const [activeNotification, setActiveNotification] = useState<string | null>(null)
 
@@ -260,6 +262,7 @@ export const App: React.FC = () => {
                   onDelete={handleDeleteInstance}
                   onCreateClick={() => setIsCreateModalOpen(true)}
                   onImportClick={() => setIsImportModpackModalOpen(true)}
+                  onCloneLauncherClick={() => setIsImportLauncherModalOpen(true)}
                   onManage={(inst) => setSelectedDetailInstance(inst)}
                 />
               )
@@ -307,6 +310,17 @@ export const App: React.FC = () => {
         onSuccess={(newInstance) => {
           fetchInstances()
           showNotification(`Successfully imported ${newInstance.name}!`)
+          setSelectedDetailInstance(newInstance)
+          setActiveTab('instances')
+        }}
+      />
+
+      <ImportFromLauncherModal
+        isOpen={isImportLauncherModalOpen}
+        onClose={() => setIsImportLauncherModalOpen(false)}
+        onSuccess={(newInstance) => {
+          fetchInstances()
+          showNotification(`Successfully cloned ${newInstance.name}!`)
           setSelectedDetailInstance(newInstance)
           setActiveTab('instances')
         }}

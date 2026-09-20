@@ -8,6 +8,7 @@ import { registerModsIpcHandlers } from '@main/ipc/mods'
 import { registerModpackIpcHandlers } from '@main/ipc/modpacks'
 import { registerScreenshotIpcHandlers } from '@main/ipc/screenshots'
 import { registerJavaIpcHandlers } from '@main/ipc/java'
+import { registerExternalLauncherIpcHandlers } from '@main/ipc/externalLaunchers'
 
 export function registerAllIpcHandlers(mainWindow: BrowserWindow): void {
   registerInstanceIpcHandlers()
@@ -19,4 +20,5 @@ export function registerAllIpcHandlers(mainWindow: BrowserWindow): void {
   registerModpackIpcHandlers(mainWindow)
   registerScreenshotIpcHandlers()
   registerJavaIpcHandlers()
+  registerExternalLauncherIpcHandlers(mainWindow)
 }

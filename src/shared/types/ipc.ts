@@ -16,6 +16,11 @@ import type {
   InstallRemoteModpackPayload
 } from './modpack'
 import type { ScreenshotEntry } from './screenshot'
+import type {
+  DiscoveredExternalInstance,
+  CloneInstancePayload,
+  CloneProgressEvent
+} from './externalLauncher'
 
 export interface WindowControlActions {
   minimize: () => Promise<void>
@@ -103,6 +108,14 @@ export interface JavaActions {
   downloadRuntime: (componentOrVersion: string) => Promise<string>
 }
 
+export interface ExternalLauncherActions {
+  scanAll: () => Promise<DiscoveredExternalInstance[]>
+  scanDirectory: (directoryPath: string) => Promise<DiscoveredExternalInstance[]>
+  selectDirectory: () => Promise<string | null>
+  clone: (payload: CloneInstancePayload) => Promise<InstanceConfiguration>
+  onProgress: (callback: (event: CloneProgressEvent) => void) => () => void
+}
+
 export interface LauncherAPI {
   window: WindowControlActions
   instances: InstanceActions
@@ -113,5 +126,6 @@ export interface LauncherAPI {
   mods: ModActions
   modpacks: ModpackActions
   screenshots: ScreenshotActions
+  externalLaunchers: ExternalLauncherActions
   java: JavaActions
 }

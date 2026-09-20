@@ -50,5 +50,11 @@ export const IPC_CHANNELS = {
   SCREENSHOTS_OPEN_FOLDER: 'screenshots:open-folder',
 
   JAVA_GET_RUNTIMES: 'java:get-runtimes',
-  JAVA_DOWNLOAD_RUNTIME: 'java:download-runtime'
+  JAVA_DOWNLOAD_RUNTIME: 'java:download-runtime',
+
+  LAUNCHERS_SCAN_ALL: 'launchers:scan-all',
+  LAUNCHERS_SCAN_DIRECTORY: 'launchers:scan-directory',
+  LAUNCHERS_SELECT_DIRECTORY: 'launchers:select-directory',
+  LAUNCHERS_CLONE: 'launchers:clone',
+  LAUNCHERS_CLONE_PROGRESS_EVENT: 'launchers:clone-progress'
 } as const

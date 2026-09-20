@@ -408,7 +408,104 @@ async function runTests() {
   await deleteInstanceById(targetTestInstance.id)
   console.log('Deleted temporary test instances.')
 
-  console.log('--- All Modpack, Screenshot, Instance Settings & Mod Verifications Passed! ---')
+  console.log('--- External Launcher Scanner & Cloning Verification ---')
+
+  const {
+    parsePrismInstance,
+    parseCurseForgeInstance,
+    scanCustomDirectory,
+    cloneExternalInstance
+  } = await import('../src/main/core/importers/externalLaunchers.ts')
+  const { doesPathExist } = await import('../src/main/utils/filesystem.ts')
+
+  // 1. Create mock Prism instance directory
+  const mockPrismDir = join(testSandboxDir, 'mock-prism-instance')
+  await fs.mkdir(mockPrismDir, { recursive: true })
+  await fs.mkdir(join(mockPrismDir, '.minecraft', 'mods'), { recursive: true })
+  await fs.mkdir(join(mockPrismDir, '.minecraft', 'saves', 'MyWorld'), { recursive: true })
+  await fs.writeFile(
+    join(mockPrismDir, 'mmc-pack.json'),
+    JSON.stringify({
+      formatVersion: 1,
+      components: [
+        { uid: 'net.minecraft', version: '1.20.2' },
+        { uid: 'net.fabricmc.fabric-loader', version: '0.15.7' }
+      ]
+    })
+  )
+  await fs.writeFile(
+    join(mockPrismDir, 'instance.cfg'),
+    'name=Prism Epic Pack\nMaxMemAlloc=6144\nJvmArgs=-XX:+UseG1GC\n'
+  )
+  await fs.writeFile(join(mockPrismDir, '.minecraft', 'mods', 'sodium.jar'), Buffer.from('mock-jar'))
+  await fs.writeFile(join(mockPrismDir, '.minecraft', 'saves', 'MyWorld', 'level.dat'), Buffer.from('world-data'))
+
+  const parsedPrism = await parsePrismInstance(mockPrismDir)
+  if (!parsedPrism || parsedPrism.name !== 'Prism Epic Pack' || parsedPrism.loaderType !== 'fabric') {
+    throw new Error('Failed to parse mock Prism instance!')
+  }
+  if (parsedPrism.totalModCount !== 1 || !parsedPrism.hasSaves || parsedPrism.ramAllocationMegabytes !== 6144) {
+    throw new Error('Prism instance details mismatch!')
+  }
+  console.log('Parsed Prism Instance successfully:', parsedPrism.name)
+
+  // 2. Create mock CurseForge instance directory
+  const mockCurseDir = join(testSandboxDir, 'mock-curse-instance')
+  await fs.mkdir(mockCurseDir, { recursive: true })
+  await fs.mkdir(join(mockCurseDir, 'mods'), { recursive: true })
+  await fs.writeFile(
+    join(mockCurseDir, 'minecraftinstance.json'),
+    JSON.stringify({
+      name: 'CurseForge Pack',
+      gameVersion: '1.20.1',
+      baseModLoader: { name: 'forge-47.2.0' },
+      allocatedMemory: 8192
+    })
+  )
+  await fs.writeFile(join(mockCurseDir, 'mods', 'jei.jar'), Buffer.from('mock-jei'))
+
+  const parsedCurse = await parseCurseForgeInstance(mockCurseDir)
+  if (!parsedCurse || parsedCurse.loaderType !== 'forge' || parsedCurse.ramAllocationMegabytes !== 8192) {
+    throw new Error('Failed to parse mock CurseForge instance!')
+  }
+  console.log('Parsed CurseForge Instance successfully:', parsedCurse.name)
+
+  // 3. Test scanCustomDirectory
+  const customScanned = await scanCustomDirectory(mockPrismDir)
+  if (customScanned.length === 0 || customScanned[0].name !== 'Prism Epic Pack') {
+    throw new Error('Failed to scan custom directory!')
+  }
+  console.log('Verified custom directory scanner.')
+
+  // 4. Test Cloning Prism instance with world saves
+  const clonedInstance = await cloneExternalInstance({
+    sourceInstance: parsedPrism,
+    customName: 'Imported Prism World',
+    copySaves: true
+  })
+  console.log('Cloned instance successfully:', clonedInstance.name, `(${clonedInstance.id})`)
+
+  if (clonedInstance.ramAllocationMegabytes !== 6144) {
+    throw new Error('Cloned instance RAM allocation mismatch!')
+  }
+
+  // Verify mods copied
+  const clonedModPath = join(testSandboxDir, 'instances', clonedInstance.id, 'minecraft', 'mods', 'sodium.jar')
+  if (!(await doesPathExist(clonedModPath))) {
+    throw new Error('Cloned instance is missing copied mod jar!')
+  }
+
+  // Verify save copied
+  const clonedSavePath = join(testSandboxDir, 'instances', clonedInstance.id, 'minecraft', 'saves', 'MyWorld', 'level.dat')
+  if (!(await doesPathExist(clonedSavePath))) {
+    throw new Error('Cloned instance is missing copied world save!')
+  }
+  console.log('Verified cloned instance mods and world saves isolation.')
+
+  await deleteInstanceById(clonedInstance.id)
+  console.log('Deleted cloned test instance.')
+
+  console.log('--- All Launcher Cloner, Modpack, Screenshot, and Mod Verifications Passed! ---')
 }
 
 runTests()

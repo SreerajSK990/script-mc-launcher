@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Search, Plus, Filter, Upload } from 'lucide-react'
+import { Search, Plus, Filter, Upload, Copy } from 'lucide-react'
 import type { InstanceConfiguration, ModLoaderType } from '@shared/types/instance'
 import { Button } from '@renderer/components/common/Button'
 import { InstanceGrid } from '@renderer/components/instances/InstanceGrid'
@@ -11,6 +11,7 @@ interface InstancesPageProps {
   onDelete: (instanceId: string) => void
   onCreateClick: () => void
   onImportClick?: () => void
+  onCloneLauncherClick?: () => void
   onManage?: (instance: InstanceConfiguration) => void
 }
 
@@ -32,6 +33,7 @@ export const InstancesPage: React.FC<InstancesPageProps> = ({
   onDelete,
   onCreateClick,
   onImportClick,
+  onCloneLauncherClick,
   onManage
 }) => {
   const [searchQuery, setSearchQuery] = useState('')
@@ -58,7 +60,12 @@ export const InstancesPage: React.FC<InstancesPageProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {onCloneLauncherClick && (
+            <Button variant="secondary" icon={Copy} onClick={onCloneLauncherClick}>
+              Import from Launcher
+            </Button>
+          )}
           {onImportClick && (
             <Button variant="secondary" icon={Upload} onClick={onImportClick}>
               Import Modpack

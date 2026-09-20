@@ -39,6 +39,12 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 - **Microsoft OAuth & Local Dev Profiles:**
   - Safe Microsoft Xbox Live login with tokens encrypted on disk via Electron's Windows DPAPI `safeStorage`.
   - Offline local player accounts for testing and dev environments.
+- **Direct External Launcher Cloning & Importing:**
+  - One-click import and deep cloning from existing launchers installed on your machine: **Prism Launcher**, **Modrinth App**, **CurseForge App**, **Official Vanilla Launcher**, and **MultiMC**.
+  - **Custom Directory Scanner:** Point to any folder containing Minecraft instances or profiles.
+  - Automatic translation of foreign configuration files (`mmc-pack.json`, `instance.cfg`, `profile.json`, `minecraftinstance.json`, `launcher_profiles.json`) into Script Launcher configurations.
+  - Deep file cloning of configs, mods, resource packs, and shader packs with an optional toggle to clone singleplayer world saves.
+  - Zero symlink risks: instances are completely copied into isolated folders so neither launcher ever affects the other.
 - **Dedicated Live Logs View:** Full-window terminal tab in the sidebar with live stdout/stderr streaming, log search filtering, log level filters (All, Info, Warn, Error), auto-scroll, copy to clipboard, and instant "Stop Game" controls.
 - **Zero Button Emojis & Modern UI:** Clean, human-designed dark interface using Lucide SVG icons that uses your full screen properly instead of cramming everything into the center.
 
@@ -63,6 +69,7 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 │   │   ├── index.ts             # App lifecycle and window creation
 │   │   ├── core/                # Core launcher business logic
 │   │   │   ├── auth/            # OAuth window, Xbox Live, tokens, encrypted storage
+│   │   │   ├── importers/       # External launcher detection & deep cloner (Prism, Modrinth, CurseForge, Vanilla)
 │   │   │   ├── java/            # Mojang JRE API client and auto-downloader
 │   │   │   ├── loaders/         # Fabric, Quilt, Forge, NeoForge resolvers
 │   │   │   ├── meta/            # Prism Meta client with disk cache & TTL
@@ -78,9 +85,9 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 │   │   │   ├── pages/           # Dashboard, Instances, InstanceDetail, ModBrowser, Logs, Settings
 │   │   │   └── App.tsx          # Root routing and state management
 │   ├── preload/                 # Secure contextBridge API exposing window.launcherAPI
-│   └── shared/                  # Shared types (instances, auth, launch, mods, ipc)
+│   └── shared/                  # Shared types (instances, auth, launch, mods, externalLauncher, ipc)
 ├── scripts/
-│   └── test-services.mjs        # Automated sandbox test suite (Phases 1–7)
+│   └── test-services.mjs        # Automated sandbox test suite (Phases 1–7 + Cloner)
 ├── package.json
 └── tsconfig.json
 ```
@@ -132,9 +139,10 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 - [x] **Phase 4 & 5:** Prism Meta Integration & Mod Loaders (Fabric, Quilt, Forge, NeoForge)
 - [x] **Phase 6:** Automatic Mojang Java Runtime Management (Java 8, 16, 17, 21)
 - [x] **Phase 7:** Integrated Mod Browser (Modrinth + CurseForge) & Mod Manager
+- [x] **Instance Detail & Settings View:** Per-instance RAM allocation, JVM argument flags, custom Java paths, screenshot gallery
+- [x] **Modpack System:** Import `.mrpack` and `.zip` modpacks locally + online modpack browser
+- [x] **External Launcher Cloning:** Direct import and cloning from Prism, Modrinth, CurseForge, and Vanilla launchers
 - [x] **Dedicated Logs:** Full-window live terminal page with search & controls
-- [ ] **Phase 8 (Next):** Instance Edit & Detail Page (per-instance RAM sliders, custom JVM flags, world saves inspector)
-- [ ] **Modpack Support:** One-click `.mrpack` (Modrinth) & `.zip` (CurseForge) import
 - [ ] **Production Packaging:** Custom launcher icon & Windows `.exe` installer via `electron-builder`
 
 ---

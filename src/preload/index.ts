@@ -85,6 +85,20 @@ const launcherAPI: LauncherAPI = {
     delete: (instanceId, filename) => ipcRenderer.invoke(IPC_CHANNELS.SCREENSHOTS_DELETE, instanceId, filename),
     openFolder: (instanceId) => ipcRenderer.invoke(IPC_CHANNELS.SCREENSHOTS_OPEN_FOLDER, instanceId)
   },
+  externalLaunchers: {
+    scanAll: () => ipcRenderer.invoke(IPC_CHANNELS.LAUNCHERS_SCAN_ALL),
+    scanDirectory: (directoryPath) =>
+      ipcRenderer.invoke(IPC_CHANNELS.LAUNCHERS_SCAN_DIRECTORY, directoryPath),
+    selectDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.LAUNCHERS_SELECT_DIRECTORY),
+    clone: (payload) => ipcRenderer.invoke(IPC_CHANNELS.LAUNCHERS_CLONE, payload),
+    onProgress: (callback) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: any) => callback(data)
+      ipcRenderer.on(IPC_CHANNELS.LAUNCHERS_CLONE_PROGRESS_EVENT, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.LAUNCHERS_CLONE_PROGRESS_EVENT, handler)
+      }
+    }
+  },
   java: {
     getRuntimes: () => ipcRenderer.invoke(IPC_CHANNELS.JAVA_GET_RUNTIMES),
     downloadRuntime: (componentOrVersion: string) =>
