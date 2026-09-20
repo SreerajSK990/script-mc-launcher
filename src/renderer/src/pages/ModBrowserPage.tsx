@@ -201,12 +201,19 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
         })
 
         if (isAppend) {
-          setSearchResults((prev) => [...prev, ...results])
+          let addedCount = 0
+          setSearchResults((prev) => {
+            const existingKeys = new Set(prev.map((item) => `${item.source}:${item.id}`))
+            const uniqueNew = results.filter((item) => !existingKeys.has(`${item.source}:${item.id}`))
+            addedCount = uniqueNew.length
+            return [...prev, ...uniqueNew]
+          })
+          setHasMoreResults(results.length >= PAGE_SIZE && addedCount > 0)
         } else {
           setSearchResults(results)
+          setHasMoreResults(results.length >= PAGE_SIZE)
         }
 
-        setHasMoreResults(results.length >= PAGE_SIZE)
         setCurrentPage(page)
       } catch (error) {
         console.error('Search error:', error)
@@ -228,17 +235,17 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
   }, [executeSearch])
 
   const handleLoadMore = () => {
-    if (isLoadingMore || !hasMoreResults) return
+    if (isLoadingMore || isSearching || !hasMoreResults) return
     executeSearch(currentPage + 1, true)
   }
 
   const handleNextPage = () => {
-    if (isSearching || !hasMoreResults) return
+    if (isSearching || isLoadingMore || !hasMoreResults) return
     executeSearch(currentPage + 1, false)
   }
 
   const handlePrevPage = () => {
-    if (isSearching || currentPage <= 0) return
+    if (isSearching || isLoadingMore || currentPage <= 0) return
     executeSearch(currentPage - 1, false)
   }
 

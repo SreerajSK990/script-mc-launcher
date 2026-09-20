@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { promises as fs } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { getMetaCacheDirectory } from '@main/services/paths'
 import {
   readJsonFile,
@@ -19,7 +20,9 @@ function getModsCacheDirectory(): string {
 }
 
 function sanitizeKey(key: string): string {
-  return key.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 120)
+  const hash = createHash('sha256').update(key).digest('hex')
+  const prefix = key.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 32)
+  return `${prefix}_${hash}`
 }
 
 function getCacheFilePath(key: string): string {
