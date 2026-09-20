@@ -1,0 +1,37 @@
+{
+  "name": "script-mc-launcher",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Custom modern Minecraft launcher with instance isolation and mod loader support",
+  "main": "./out/main/index.js",
+  "author": "Sreeraj SK",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "npm run typecheck && electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "tsx scripts/test-services.mjs",
+    "package": "npm run build && electron-builder",
+    "preview": "electron-vite preview"
+  },
+  "dependencies": {
+    "lucide-react": "^1.16.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "autoprefixer": "^10.4.21",
+    "electron": "^38.2.0",
+    "electron-builder": "^26.0.0",
+    "electron-vite": "^5.0.0",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.23.14",
+    "typescript": "^5.8.0",
+    "vite": "^7.0.0"
+  }
+}

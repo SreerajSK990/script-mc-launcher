@@ -1,0 +1,24 @@
+node_modules/
+dist/
+dist-electron/
+out/
+build/
+.cache/
+*.log
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+
+# User data & credentials during development
+auth.json
+.launcher/
+instances/
+meta-cache/
+libraries/
+assets/
+java/
+natives/
+
+# Environment files
+.env
+.env.local
