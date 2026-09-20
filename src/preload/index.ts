@@ -18,6 +18,13 @@ const launcherAPI: LauncherAPI = {
     delete: (instanceId: string) => ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_DELETE, instanceId),
     openFolder: (instanceId: string) => ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_OPEN_FOLDER, instanceId)
   },
+  auth: {
+    getState: () => ipcRenderer.invoke(IPC_CHANNELS.AUTH_GET_STATE),
+    loginMicrosoft: () => ipcRenderer.invoke(IPC_CHANNELS.AUTH_LOGIN_MICROSOFT),
+    loginOffline: (username: string) => ipcRenderer.invoke(IPC_CHANNELS.AUTH_LOGIN_OFFLINE, username),
+    logout: (accountId: string) => ipcRenderer.invoke(IPC_CHANNELS.AUTH_LOGOUT, accountId),
+    switchAccount: (accountId: string) => ipcRenderer.invoke(IPC_CHANNELS.AUTH_SWITCH_ACCOUNT, accountId)
+  },
   system: {
     getEnvironment: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_GET_ENVIRONMENT),
     openExternalUrl: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_OPEN_EXTERNAL, url),

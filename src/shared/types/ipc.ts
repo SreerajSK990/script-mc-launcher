@@ -1,5 +1,6 @@
 import type { InstanceConfiguration, CreateInstancePayload, UpdateInstancePayload } from './instance'
 import type { SystemEnvironment } from './system'
+import type { AuthState, StoredAccount } from './auth'
 
 export interface WindowControlActions {
   minimize: () => Promise<void>
@@ -17,6 +18,14 @@ export interface InstanceActions {
   openFolder: (instanceId: string) => Promise<void>
 }
 
+export interface AuthActions {
+  getState: () => Promise<AuthState>
+  loginMicrosoft: () => Promise<StoredAccount>
+  loginOffline: (username: string) => Promise<StoredAccount>
+  logout: (accountId: string) => Promise<boolean>
+  switchAccount: (accountId: string) => Promise<StoredAccount | null>
+}
+
 export interface SystemActions {
   getEnvironment: () => Promise<SystemEnvironment>
   openExternalUrl: (url: string) => Promise<void>
@@ -26,5 +35,6 @@ export interface SystemActions {
 export interface LauncherAPI {
   window: WindowControlActions
   instances: InstanceActions
+  auth: AuthActions
   system: SystemActions
 }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import type { InstanceConfiguration, CreateInstancePayload } from '@shared/types/instance'
 import type { SystemEnvironment } from '@shared/types/system'
+import type { AuthState } from '@shared/types/auth'
 import { TitleBar } from '@renderer/components/layout/TitleBar'
 import { Sidebar, type ActivePageTab } from '@renderer/components/layout/Sidebar'
 import { DashboardPage } from '@renderer/pages/DashboardPage'
@@ -8,12 +9,15 @@ import { InstancesPage } from '@renderer/pages/InstancesPage'
 import { ModBrowserPage } from '@renderer/pages/ModBrowserPage'
 import { SettingsPage } from '@renderer/pages/SettingsPage'
 import { CreateInstanceModal } from '@renderer/components/instances/CreateInstanceModal'
+import { AccountModal } from '@renderer/components/auth/AccountModal'
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActivePageTab>('dashboard')
   const [instances, setInstances] = useState<InstanceConfiguration[]>([])
   const [systemEnv, setSystemEnv] = useState<SystemEnvironment | null>(null)
+  const [authState, setAuthState] = useState<AuthState>({ activeAccount: null, accounts: [] })
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false)
   const [activeNotification, setActiveNotification] = useState<string | null>(null)
 
   const showNotification = (message: string) => {
@@ -43,10 +47,22 @@ export const App: React.FC = () => {
     }
   }, [])
 
+  const fetchAuthState = useCallback(async () => {
+    if (window.launcherAPI?.auth) {
+      try {
+        const state = await window.launcherAPI.auth.getState()
+        setAuthState(state)
+      } catch (error) {
+        console.error('Failed to get auth state:', error)
+      }
+    }
+  }, [])
+
   useEffect(() => {
     fetchInstances()
     fetchEnvironment()
-  }, [fetchInstances, fetchEnvironment])
+    fetchAuthState()
+  }, [fetchInstances, fetchEnvironment, fetchAuthState])
 
   const handleCreateInstance = async (payload: CreateInstancePayload) => {
     if (window.launcherAPI?.instances) {
@@ -77,7 +93,42 @@ export const App: React.FC = () => {
   }
 
   const handlePlayInstance = (instance: InstanceConfiguration) => {
-    showNotification(`Launching ${instance.name} (Launch engine will link in Phase 3)`)
+    const playerName = authState.activeAccount?.username || 'Player'
+    showNotification(`Launching ${instance.name} as ${playerName} (Launch engine in Phase 3)`)
+  }
+
+  const handleLoginMicrosoft = async () => {
+    if (window.launcherAPI?.auth) {
+      const account = await window.launcherAPI.auth.loginMicrosoft()
+      await fetchAuthState()
+      showNotification(`Signed in as ${account.username}`)
+    }
+  }
+
+  const handleLoginOffline = async (username: string) => {
+    if (window.launcherAPI?.auth) {
+      const account = await window.launcherAPI.auth.loginOffline(username)
+      await fetchAuthState()
+      showNotification(`Created offline player ${account.username}`)
+    }
+  }
+
+  const handleSwitchAccount = async (accountId: string) => {
+    if (window.launcherAPI?.auth) {
+      const account = await window.launcherAPI.auth.switchAccount(accountId)
+      await fetchAuthState()
+      if (account) {
+        showNotification(`Switched to ${account.username}`)
+      }
+    }
+  }
+
+  const handleLogout = async (accountId: string) => {
+    if (window.launcherAPI?.auth) {
+      await window.launcherAPI.auth.logout(accountId)
+      await fetchAuthState()
+      showNotification('Account removed.')
+    }
   }
 
   return (
@@ -89,6 +140,8 @@ export const App: React.FC = () => {
           activeTab={activeTab}
           onSelectTab={setActiveTab}
           onOpenCreateModal={() => setIsCreateModalOpen(true)}
+          onOpenAccountModal={() => setIsAccountModalOpen(true)}
+          activeAccount={authState.activeAccount}
           instanceCount={instances.length}
         />
 
@@ -138,6 +191,16 @@ export const App: React.FC = () => {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onCreate={handleCreateInstance}
+      />
+
+      <AccountModal
+        isOpen={isAccountModalOpen}
+        onClose={() => setIsAccountModalOpen(false)}
+        authState={authState}
+        onLoginMicrosoft={handleLoginMicrosoft}
+        onLoginOffline={handleLoginOffline}
+        onSwitchAccount={handleSwitchAccount}
+        onLogout={handleLogout}
       />
     </div>
   )

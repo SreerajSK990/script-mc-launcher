@@ -5,8 +5,11 @@ import {
   Boxes,
   Settings,
   Plus,
-  UserCheck
+  User,
+  ShieldCheck,
+  ChevronRight
 } from 'lucide-react'
+import type { StoredAccount } from '@shared/types/auth'
 import { Button } from '@renderer/components/common/Button'
 
 export type ActivePageTab = 'dashboard' | 'instances' | 'mods' | 'settings'
@@ -15,6 +18,8 @@ interface SidebarProps {
   activeTab: ActivePageTab
   onSelectTab: (tab: ActivePageTab) => void
   onOpenCreateModal: () => void
+  onOpenAccountModal: () => void
+  activeAccount: StoredAccount | null
   instanceCount: number
 }
 
@@ -22,6 +27,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   onSelectTab,
   onOpenCreateModal,
+  onOpenAccountModal,
+  activeAccount,
   instanceCount
 }) => {
   const navigationItems = [
@@ -100,17 +107,51 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       <div className="pt-4 border-t border-border-subtle">
-        <div className="flex items-center justify-between p-2.5 rounded-xl bg-background-darkest/60 border border-border-subtle">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
-              <UserCheck size={16} />
+        <button
+          onClick={onOpenAccountModal}
+          className="w-full flex items-center justify-between p-2.5 rounded-xl bg-background-darkest/60 hover:bg-background-surface/80 border border-border-subtle hover:border-border-strong transition-all text-left group"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            {activeAccount ? (
+              <img
+                src={`https://mc-heads.net/avatar/${activeAccount.username}/32`}
+                alt={activeAccount.username}
+                className="w-8 h-8 rounded-lg bg-background-surface border border-border-subtle shrink-0 object-cover"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none'
+                  const fallback = e.currentTarget.nextElementSibling as HTMLElement
+                  if (fallback) fallback.style.display = 'flex'
+                }}
+              />
+            ) : null}
+
+            <div
+              className={`w-8 h-8 rounded-lg bg-background-surface border border-border-subtle flex items-center justify-center text-slate-400 shrink-0 ${
+                activeAccount ? 'hidden' : 'flex'
+              }`}
+            >
+              <User size={16} />
             </div>
-            <div className="flex flex-col">
-              <span className="text-xs font-medium text-slate-200">Dev Player</span>
-              <span className="text-[10px] text-emerald-400">Ready to Launch</span>
+
+            <div className="flex flex-col min-w-0">
+              <span className="text-xs font-medium text-slate-200 truncate group-hover:text-white transition-colors">
+                {activeAccount ? activeAccount.username : 'No Account'}
+              </span>
+              <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+                {activeAccount?.accountType === 'microsoft' ? (
+                  <>
+                    <ShieldCheck size={11} className="text-cyan-400" />
+                    <span className="text-cyan-400">Microsoft</span>
+                  </>
+                ) : (
+                  <span>{activeAccount ? 'Offline Dev' : 'Click to sign in'}</span>
+                )}
+              </span>
             </div>
           </div>
-        </div>
+
+          <ChevronRight size={14} className="text-slate-500 group-hover:text-slate-300 transition-colors shrink-0" />
+        </button>
       </div>
     </aside>
   )

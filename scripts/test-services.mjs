@@ -1,9 +1,15 @@
-import { getLauncherRootDirectory, initializeLauncherDirectories, getInstancesDirectory } from '../src/main/services/paths.ts'
+import { getLauncherRootDirectory, initializeLauncherDirectories } from '../src/main/services/paths.ts'
 import { createNewInstance, listAllInstances, getInstanceById, deleteInstanceById } from '../src/main/services/instances.ts'
 import { getSystemEnvironment } from '../src/main/services/system.ts'
+import {
+  loginWithOfflineAccount,
+  getCurrentAuthState,
+  switchActiveAccount,
+  logoutAccount
+} from '../src/main/services/auth.ts'
 
 async function runTests() {
-  console.log('Running Phase 1 Services Verification...')
+  console.log('--- Phase 1 Services Verification ---')
 
   const rootDir = getLauncherRootDirectory()
   console.log('Launcher Root:', rootDir)
@@ -39,10 +45,35 @@ async function runTests() {
   }
   console.log('Deleted instance successfully.')
 
-  const remaining = await listAllInstances()
-  console.log('Remaining instances count:', remaining.length)
+  console.log('--- Phase 2 Auth Services Verification ---')
 
-  console.log('All Phase 1 Services Passed with flying colors!')
+  const alexAccount = await loginWithOfflineAccount('Alex')
+  console.log(`Created Offline Player: ${alexAccount.username} (${alexAccount.uuid})`)
+
+  const steveAccount = await loginWithOfflineAccount('Steve')
+  console.log(`Created Offline Player: ${steveAccount.username} (${steveAccount.uuid})`)
+
+  let authState = await getCurrentAuthState()
+  console.log(`Total Stored Accounts: ${authState.accounts.length}`)
+  console.log(`Active Account: ${authState.activeAccount?.username}`)
+
+  if (authState.activeAccount?.username !== 'Steve') {
+    throw new Error('Expected newest account to be active')
+  }
+
+  await switchActiveAccount(alexAccount.id)
+  authState = await getCurrentAuthState()
+  console.log(`Switched Active Account to: ${authState.activeAccount?.username}`)
+  if (authState.activeAccount?.username !== 'Alex') {
+    throw new Error('Failed to switch active account')
+  }
+
+  await logoutAccount(steveAccount.id)
+  await logoutAccount(alexAccount.id)
+  authState = await getCurrentAuthState()
+  console.log(`Remaining accounts after logout: ${authState.accounts.length}`)
+
+  console.log('--- All Phase 1 & Phase 2 Verifications Passed! ---')
 }
 
 runTests().catch((err) => {

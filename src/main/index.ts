@@ -2,6 +2,7 @@ import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { initializeLauncherDirectories } from '@main/services/paths'
+import { initializeAuthenticationState } from '@main/services/auth'
 import { registerAllIpcHandlers } from '@main/ipc/register'
 
 let mainWindow: BrowserWindow | null = null
@@ -55,6 +56,7 @@ async function createMainWindow(): Promise<BrowserWindow> {
 
 app.whenReady().then(async () => {
   await initializeLauncherDirectories()
+  await initializeAuthenticationState()
   mainWindow = await createMainWindow()
 
   app.on('activate', async () => {

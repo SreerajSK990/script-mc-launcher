@@ -11,6 +11,12 @@ export const IPC_CHANNELS = {
   INSTANCES_DELETE: 'instances:delete',
   INSTANCES_OPEN_FOLDER: 'instances:open-folder',
 
+  AUTH_GET_STATE: 'auth:get-state',
+  AUTH_LOGIN_MICROSOFT: 'auth:login-microsoft',
+  AUTH_LOGIN_OFFLINE: 'auth:login-offline',
+  AUTH_LOGOUT: 'auth:logout',
+  AUTH_SWITCH_ACCOUNT: 'auth:switch-account',
+
   SYSTEM_GET_ENVIRONMENT: 'system:get-environment',
   SYSTEM_OPEN_EXTERNAL: 'system:open-external',
   SYSTEM_OPEN_DIRECTORY: 'system:open-directory'
