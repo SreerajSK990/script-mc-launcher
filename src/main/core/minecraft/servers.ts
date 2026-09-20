@@ -12,14 +12,14 @@ import type { InstanceConfiguration } from '@shared/types/instance'
 import { getInstanceMinecraftPath, getInstanceConfigPath, getInstancesDirectory } from '@main/services/paths'
 import { readJsonFile } from '@main/utils/filesystem'
 
-// --- Lightweight NBT Parser for servers.dat & level.dat ---
+
 
 class NbtReader {
   private buffer: Buffer
   private offset = 0
 
   constructor(buffer: Buffer) {
-    // Check if gzipped (0x1f, 0x8b)
+    
     if (buffer.length >= 2 && buffer[0] === 0x1f && buffer[1] === 0x8b) {
       try {
         this.buffer = gunzipSync(buffer)
@@ -77,26 +77,26 @@ class NbtReader {
 
   readTag(type: number): any {
     switch (type) {
-      case 1: // TAG_Byte
+      case 1: 
         return this.readByte()
-      case 2: // TAG_Short
+      case 2: 
         return this.readShort()
-      case 3: // TAG_Int
+      case 3: 
         return this.readInt()
-      case 4: // TAG_Long
+      case 4: 
         return Number(this.readLong())
-      case 5: // TAG_Float
+      case 5: 
         return this.readFloat()
-      case 6: // TAG_Double
+      case 6: 
         return this.readDouble()
-      case 7: { // TAG_Byte_Array
+      case 7: { 
         const len = this.readInt()
         this.offset += len
         return null
       }
-      case 8: // TAG_String
+      case 8: 
         return this.readString()
-      case 9: { // TAG_List
+      case 9: { 
         const elemType = this.readByte()
         const len = this.readInt()
         const list: any[] = []
@@ -105,22 +105,22 @@ class NbtReader {
         }
         return list
       }
-      case 10: { // TAG_Compound
+      case 10: { 
         const compound: Record<string, any> = {}
         while (this.offset < this.buffer.length) {
           const tagType = this.readByte()
-          if (tagType === 0) break // TAG_End
+          if (tagType === 0) break 
           const name = this.readString()
           compound[name] = this.readTag(tagType)
         }
         return compound
       }
-      case 11: { // TAG_Int_Array
+      case 11: { 
         const len = this.readInt()
         this.offset += len * 4
         return null
       }
-      case 12: { // TAG_Long_Array
+      case 12: { 
         const len = this.readInt()
         this.offset += len * 8
         return null
@@ -135,7 +135,7 @@ class NbtReader {
       if (this.offset >= this.buffer.length) return {}
       const rootType = this.readByte()
       if (rootType !== 10) return {}
-      this.readString() // root name
+      this.readString() 
       return this.readTag(10) || {}
     } catch (err) {
       return {}
@@ -143,7 +143,7 @@ class NbtReader {
   }
 }
 
-// --- Server List Ping (SLP) Implementation ---
+
 
 function writeVarInt(value: number): Buffer {
   const bytes: number[] = []
@@ -182,10 +182,13 @@ export function pingMinecraftServer(
   timeoutMs = 4000
 ): Promise<ServerPingStatus> {
   return new Promise((resolve) => {
-    const startTime = Date.now()
     const socket = new Socket()
     let buffer = Buffer.alloc(0)
     let isResolved = false
+    let requestSentTime = 0
+    let firstByteLatency = -1
+    let pingSentTime = 0
+    let statusData: any = null
 
     const finish = (result: ServerPingStatus) => {
       if (isResolved) return
@@ -194,27 +197,61 @@ export function pingMinecraftServer(
       resolve(result)
     }
 
+    const finishWithStatusData = (latency: number) => {
+      if (!statusData) return
+      let rawMotd = ''
+      if (typeof statusData.description === 'string') {
+        rawMotd = statusData.description
+      } else if (statusData.description?.text) {
+        rawMotd = statusData.description.text
+      } else if (statusData.description?.extra) {
+        rawMotd = statusData.description.extra.map((e: any) => e.text || '').join('')
+      }
+
+      const cleanMotd = stripMinecraftColors(rawMotd) || 'A Minecraft Server'
+
+      finish({
+        online: true,
+        latencyMs: Math.max(1, latency),
+        motd: rawMotd,
+        cleanMotd,
+        versionName: statusData.version?.name,
+        protocolVersion: statusData.version?.protocol,
+        players: statusData.players
+          ? { online: statusData.players.online ?? 0, max: statusData.players.max ?? 0 }
+          : undefined,
+        favicon: statusData.favicon
+      })
+    }
+
     socket.setTimeout(timeoutMs)
 
     socket.on('timeout', () => {
-      finish({ online: false, latencyMs: -1, cleanMotd: "Can't connect to server" })
+      if (statusData) {
+        finishWithStatusData(firstByteLatency > 0 ? firstByteLatency : 50)
+      } else {
+        finish({ online: false, latencyMs: -1, cleanMotd: "Can't connect to server" })
+      }
     })
 
     socket.on('error', () => {
-      finish({ online: false, latencyMs: -1, cleanMotd: "Can't connect to server" })
+      if (statusData) {
+        finishWithStatusData(firstByteLatency > 0 ? firstByteLatency : 50)
+      } else {
+        finish({ online: false, latencyMs: -1, cleanMotd: "Can't connect to server" })
+      }
     })
 
     socket.connect(port, host, () => {
       try {
-        // 1. Handshake Packet (ID: 0x00)
         const hostBuf = Buffer.from(host, 'utf8')
         const handshakePayload = Buffer.concat([
-          writeVarInt(0x00), // Packet ID
-          writeVarInt(47), // Protocol Version (1.8 - widely accepted)
+          writeVarInt(0x00),
+          writeVarInt(47),
           writeVarInt(hostBuf.length),
           hostBuf,
-          Buffer.from([(port >> 8) & 0xff, port & 0xff]), // Port as unsigned short
-          writeVarInt(1) // Next state: 1 (status)
+          Buffer.from([(port >> 8) & 0xff, port & 0xff]),
+          writeVarInt(1)
         ])
 
         const handshakePacket = Buffer.concat([
@@ -222,9 +259,9 @@ export function pingMinecraftServer(
           handshakePayload
         ])
 
-        // 2. Status Request Packet (ID: 0x00)
         const requestPacket = Buffer.from([0x01, 0x00])
 
+        requestSentTime = Date.now()
         socket.write(Buffer.concat([handshakePacket, requestPacket]))
       } catch {
         finish({ online: false, latencyMs: -1, cleanMotd: "Can't connect to server" })
@@ -232,6 +269,10 @@ export function pingMinecraftServer(
     })
 
     socket.on('data', (chunk) => {
+      if (firstByteLatency === -1 && requestSentTime > 0) {
+        firstByteLatency = Math.max(1, Date.now() - requestSentTime)
+      }
+
       buffer = Buffer.concat([buffer, chunk])
 
       try {
@@ -240,46 +281,37 @@ export function pingMinecraftServer(
         if (packetLength <= 0) return
 
         const packetId = readVarInt(buffer, offset)
-        if (packetId !== 0) return
 
-        const stringLength = readVarInt(buffer, offset)
-        if (buffer.length >= offset.index + stringLength) {
-          const latencyMs = Date.now() - startTime
-          const jsonString = buffer.toString('utf8', offset.index, offset.index + stringLength)
-          const data = JSON.parse(jsonString)
+        if (packetId === 0 && !statusData) {
+          const stringLength = readVarInt(buffer, offset)
+          if (buffer.length >= offset.index + stringLength) {
+            const jsonString = buffer.toString('utf8', offset.index, offset.index + stringLength)
+            statusData = JSON.parse(jsonString)
 
-          let rawMotd = ''
-          if (typeof data.description === 'string') {
-            rawMotd = data.description
-          } else if (data.description?.text) {
-            rawMotd = data.description.text
-          } else if (data.description?.extra) {
-            rawMotd = data.description.extra.map((e: any) => e.text || '').join('')
+            buffer = buffer.subarray(offset.index + stringLength)
+
+            pingSentTime = Date.now()
+            const pingPayload = Buffer.alloc(9)
+            pingPayload.writeUInt8(0x01, 0)
+            pingPayload.writeBigInt64BE(BigInt(pingSentTime), 1)
+            const pingPacket = Buffer.concat([writeVarInt(pingPayload.length), pingPayload])
+            socket.write(pingPacket)
+
+            setTimeout(() => {
+              finishWithStatusData(firstByteLatency > 0 ? firstByteLatency : 50)
+            }, 400)
           }
-
-          const cleanMotd = stripMinecraftColors(rawMotd) || 'A Minecraft Server'
-
-          finish({
-            online: true,
-            latencyMs,
-            motd: rawMotd,
-            cleanMotd,
-            versionName: data.version?.name,
-            protocolVersion: data.version?.protocol,
-            players: data.players
-              ? { online: data.players.online ?? 0, max: data.players.max ?? 0 }
-              : undefined,
-            favicon: data.favicon // Server icon dataUrl!
-          })
+        } else if (packetId === 1 && statusData) {
+          const actualPing = pingSentTime > 0 ? Date.now() - pingSentTime : firstByteLatency
+          finishWithStatusData(actualPing > 0 ? actualPing : firstByteLatency)
         }
       } catch {
-        // Wait for more chunks
       }
     })
   })
 }
 
-// --- Instance Scanner for Servers & Worlds ---
+
 
 export async function getInstanceServers(
   instance: InstanceConfiguration
@@ -383,7 +415,7 @@ export async function getInstanceWorlds(
           const iconRaw = await fs.readFile(iconPath)
           icon = `data:image/png;base64,${iconRaw.toString('base64')}`
         } catch {
-          // No world icon
+          
         }
 
         worlds.push({
@@ -400,7 +432,7 @@ export async function getInstanceWorlds(
           type: 'world'
         })
       } catch {
-        // Skip corrupted world
+        
       }
     }
 

@@ -84,3 +84,44 @@ export interface ModUpdateInfo {
   releaseType: 'release' | 'beta' | 'alpha'
 }
 
+export interface ModDetail {
+  id: string
+  slug: string
+  name: string
+  summary: string
+  description: string
+  iconUrl?: string
+  downloads: number
+  followers?: number
+  source: ModSource
+  categories: string[]
+  loaders: ModLoaderType[]
+  gameVersions: string[]
+  clientSide?: 'required' | 'optional' | 'unsupported'
+  serverSide?: 'required' | 'optional' | 'unsupported'
+  links: {
+    issues?: string
+    source?: string
+    wiki?: string
+    discord?: string
+    donate?: string
+  }
+  license?: {
+    id: string
+    name?: string
+    url?: string
+  }
+  creators: Array<{
+    name: string
+    role?: string
+    avatarUrl?: string
+  }>
+  gallery: Array<{
+    url: string
+    title?: string
+    description?: string
+  }>
+  publishedAt?: string
+  updatedAt?: string
+}
+

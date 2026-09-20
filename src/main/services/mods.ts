@@ -1,16 +1,18 @@
-import type { ModLoaderType } from '@shared/types/instance'
 import type {
   ModSearchResult,
   ModVersionFile,
   ModSearchParams,
   InstallModPayload,
   InstalledModRecord,
-  ModSource
+  ModSource,
+  ModDetail
 } from '@shared/types/mods'
-import { searchModrinth, getModrinthProjectVersions } from '@main/core/mods/modrinth'
+import type { ModLoaderType } from '@shared/types/instance'
+import { searchModrinth, getModrinthProjectVersions, getModrinthProjectDetail } from '@main/core/mods/modrinth'
 import {
   searchCurseForge,
   getCurseForgeFiles,
+  getCurseForgeModDetail,
   setCurseForgeApiKey,
   getCurseForgeApiKey,
   initCurseForgeApiKey
@@ -23,6 +25,13 @@ import {
 } from '@main/core/mods/manager'
 
 export { setCurseForgeApiKey, getCurseForgeApiKey, initCurseForgeApiKey }
+
+export async function fetchModDetail(source: ModSource, id: string): Promise<ModDetail> {
+  if (source === 'curseforge') {
+    return await getCurseForgeModDetail(id)
+  }
+  return await getModrinthProjectDetail(id)
+}
 
 export async function searchAllMods(params: ModSearchParams): Promise<ModSearchResult[]> {
   const source = params.source || 'all'

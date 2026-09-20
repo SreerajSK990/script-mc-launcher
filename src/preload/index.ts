@@ -80,6 +80,7 @@ const launcherAPI: LauncherAPI = {
   },
   mods: {
     search: (params) => ipcRenderer.invoke(IPC_CHANNELS.MODS_SEARCH, params),
+    getDetail: (source, id) => ipcRenderer.invoke(IPC_CHANNELS.MODS_GET_DETAIL, source, id),
     getVersions: (projectId, source, minecraftVersion, loader) =>
       ipcRenderer.invoke(IPC_CHANNELS.MODS_GET_VERSIONS, projectId, source, minecraftVersion, loader),
     install: (payload) => ipcRenderer.invoke(IPC_CHANNELS.MODS_INSTALL, payload),

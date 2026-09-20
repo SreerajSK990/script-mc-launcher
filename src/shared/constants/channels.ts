@@ -37,6 +37,7 @@ export const IPC_CHANNELS = {
   SYSTEM_SELECT_FILE: 'system:select-file',
 
   MODS_SEARCH: 'mods:search',
+  MODS_GET_DETAIL: 'mods:get-detail',
   MODS_GET_VERSIONS: 'mods:get-versions',
   MODS_INSTALL: 'mods:install',
   MODS_LIST_INSTALLED: 'mods:list-installed',

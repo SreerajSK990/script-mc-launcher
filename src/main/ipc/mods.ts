@@ -4,6 +4,7 @@ import type { ModSearchParams, InstallModPayload, ModSource, ModUpdateInfo } fro
 import type { ModLoaderType } from '@shared/types/instance'
 import {
   searchAllMods,
+  fetchModDetail,
   fetchModVersions,
   installMod,
   listMods,
@@ -17,6 +18,10 @@ import { checkForModUpdates, updateAllMods } from '@main/core/mods/updates'
 export function registerModsIpcHandlers(mainWindow?: BrowserWindow): void {
   ipcMain.handle(IPC_CHANNELS.MODS_SEARCH, async (_event, params: ModSearchParams) => {
     return await searchAllMods(params)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.MODS_GET_DETAIL, async (_event, source: ModSource, id: string) => {
+    return await fetchModDetail(source, id)
   })
 
   ipcMain.handle(

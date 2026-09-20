@@ -1,5 +1,5 @@
 import type { ModLoaderType } from '@shared/types/instance'
-import type { ModSearchResult, ModVersionFile, ModSearchParams } from '@shared/types/mods'
+import type { ModSearchResult, ModVersionFile, ModSearchParams, ModDetail } from '@shared/types/mods'
 
 const MODRINTH_API_BASE = 'https://api.modrinth.com/v2'
 const USER_AGENT = 'ScriptLauncher/0.2.0 (github.com/SreerajSK990/script-mc-launcher)'
@@ -52,8 +52,8 @@ interface ModrinthVersionResponse {
 
 import { getCachedData, setCachedData } from './cache'
 
-const SEARCH_CACHE_TTL = 15 * 60 * 1000 // 15 minutes
-const VERSIONS_CACHE_TTL = 30 * 60 * 1000 // 30 minutes
+const SEARCH_CACHE_TTL = 15 * 60 * 1000
+const VERSIONS_CACHE_TTL = 30 * 60 * 1000
 
 export async function searchModrinth(params: ModSearchParams): Promise<ModSearchResult[]> {
   const projectType = params.projectType === 'modpack' ? 'modpack' : 'mod'
@@ -207,4 +207,104 @@ export async function getModrinthProjectVersions(
 
   await setCachedData(cacheKey, result)
   return result
+}
+
+const DETAIL_CACHE_TTL = 30 * 60 * 1000
+
+export async function getModrinthProjectDetail(projectIdOrSlug: string): Promise<ModDetail> {
+  const cacheKey = `modrinth_detail_${projectIdOrSlug}`
+  const cached = await getCachedData<ModDetail>(cacheKey, DETAIL_CACHE_TTL)
+  if (cached) {
+    return cached
+  }
+
+  const projectUrl = `${MODRINTH_API_BASE}/project/${encodeURIComponent(projectIdOrSlug)}`
+  const resp = await fetch(projectUrl, {
+    headers: { 'User-Agent': USER_AGENT }
+  })
+
+  if (!resp.ok) {
+    throw new Error(`Failed to fetch Modrinth project ${projectIdOrSlug}: ${resp.status}`)
+  }
+
+  const data = await resp.json()
+
+  let creators: Array<{ name: string; role?: string; avatarUrl?: string }> = []
+  try {
+    const membersUrl = `${MODRINTH_API_BASE}/project/${encodeURIComponent(projectIdOrSlug)}/members`
+    const memResp = await fetch(membersUrl, {
+      headers: { 'User-Agent': USER_AGENT }
+    })
+    if (memResp.ok) {
+      const membersData = await memResp.json()
+      if (Array.isArray(membersData)) {
+        creators = membersData.map((m: any) => ({
+          name: m.user?.username || m.user?.name || 'Creator',
+          role: m.role || 'Member',
+          avatarUrl: m.user?.avatar_url
+        }))
+      }
+    }
+  } catch {
+  }
+
+  const validLoaders: ModLoaderType[] = []
+  if (Array.isArray(data.loaders)) {
+    for (const l of data.loaders) {
+      const lower = String(l).toLowerCase()
+      if (lower === 'fabric' || lower === 'forge' || lower === 'neoforge' || lower === 'quilt') {
+        validLoaders.push(lower as ModLoaderType)
+      }
+    }
+  }
+
+  const galleryItems = Array.isArray(data.gallery)
+    ? data.gallery.map((g: any) => ({
+        url: g.url,
+        title: g.title || undefined,
+        description: g.description || undefined
+      }))
+    : []
+
+  const donationUrl = Array.isArray(data.donation_urls) && data.donation_urls.length > 0
+    ? data.donation_urls[0].url
+    : undefined
+
+  const detail: ModDetail = {
+    id: data.id,
+    slug: data.slug,
+    name: data.title,
+    summary: data.description,
+    description: data.body || '',
+    iconUrl: data.icon_url || undefined,
+    downloads: data.downloads || 0,
+    followers: data.followers || 0,
+    source: 'modrinth',
+    categories: Array.isArray(data.categories) ? data.categories : [],
+    loaders: validLoaders,
+    gameVersions: Array.isArray(data.game_versions) ? data.game_versions : [],
+    clientSide: data.client_side,
+    serverSide: data.server_side,
+    links: {
+      issues: data.issues_url || undefined,
+      source: data.source_url || undefined,
+      wiki: data.wiki_url || undefined,
+      discord: data.discord_url || undefined,
+      donate: donationUrl
+    },
+    license: data.license
+      ? {
+          id: data.license.id || data.license.name || 'Custom',
+          name: data.license.name,
+          url: data.license.url
+        }
+      : undefined,
+    creators,
+    gallery: galleryItems,
+    publishedAt: data.published,
+    updatedAt: data.updated
+  }
+
+  await setCachedData(cacheKey, detail)
+  return detail
 }

@@ -1,5 +1,5 @@
 import type { ModLoaderType } from '@shared/types/instance'
-import type { ModSearchResult, ModVersionFile, ModSearchParams } from '@shared/types/mods'
+import type { ModSearchResult, ModVersionFile, ModSearchParams, ModDetail } from '@shared/types/mods'
 
 const CURSEFORGE_API_BASE = 'https://api.curseforge.com/v1'
 const MINECRAFT_GAME_ID = 432
@@ -118,7 +118,6 @@ export async function batchGetCurseForgeFiles(fileIds: number[]): Promise<CurseF
         }
       }
     } catch {
-      // Ignore and continue
     }
   }
 
@@ -127,8 +126,8 @@ export async function batchGetCurseForgeFiles(fileIds: number[]): Promise<CurseF
 
 import { getCachedData, setCachedData } from './cache'
 
-const CF_SEARCH_CACHE_TTL = 15 * 60 * 1000 // 15 minutes
-const CF_VERSIONS_CACHE_TTL = 30 * 60 * 1000 // 30 minutes
+const CF_SEARCH_CACHE_TTL = 15 * 60 * 1000
+const CF_VERSIONS_CACHE_TTL = 30 * 60 * 1000
 
 export async function searchCurseForge(params: ModSearchParams): Promise<ModSearchResult[]> {
   const apiKey = getCurseForgeApiKey()
@@ -281,4 +280,95 @@ export async function getCurseForgeFiles(
   } catch {
     return []
   }
+}
+
+export async function getCurseForgeModDetail(modId: string): Promise<ModDetail> {
+  const apiKey = getCurseForgeApiKey()
+  if (!apiKey) {
+    throw new Error('CurseForge API key is required')
+  }
+
+  const cacheKey = `curseforge_detail_${modId}`
+  const cached = await getCachedData<ModDetail>(cacheKey, CF_VERSIONS_CACHE_TTL)
+  if (cached) {
+    return cached
+  }
+
+  const modUrl = `${CURSEFORGE_API_BASE}/mods/${modId}`
+  const descUrl = `${CURSEFORGE_API_BASE}/mods/${modId}/description`
+
+  const [modResp, descResp] = await Promise.all([
+    fetch(modUrl, { headers: { 'x-api-key': apiKey } }),
+    fetch(descUrl, { headers: { 'x-api-key': apiKey } })
+  ])
+
+  if (!modResp.ok) {
+    throw new Error(`Failed to fetch CurseForge mod ${modId}: ${modResp.status}`)
+  }
+
+  const modJson = (await modResp.json()) as { data: any }
+  const modData = modJson.data
+
+  let htmlDescription = ''
+  if (descResp.ok) {
+    const descJson = (await descResp.json()) as { data: string }
+    htmlDescription = descJson.data || ''
+  }
+
+  const loaders = new Set<ModLoaderType>()
+  const gameVersions = new Set<string>()
+
+  if (Array.isArray(modData.latestFilesIndexes)) {
+    for (const idx of modData.latestFilesIndexes) {
+      if (idx.gameVersion) gameVersions.add(idx.gameVersion)
+      if (idx.modLoader) {
+        const l = convertCurseForgeEnumToLoader(idx.modLoader)
+        if (l) loaders.add(l)
+      }
+    }
+  }
+
+  const creators = Array.isArray(modData.authors)
+    ? modData.authors.map((a: any) => ({
+        name: a.name,
+        role: 'Author'
+      }))
+    : []
+
+  const gallery = Array.isArray(modData.screenshots)
+    ? modData.screenshots.map((s: any) => ({
+        url: s.url,
+        title: s.title || undefined,
+        description: s.description || undefined
+      }))
+    : []
+
+  const detail: ModDetail = {
+    id: String(modData.id),
+    slug: modData.slug || String(modData.id),
+    name: modData.name,
+    summary: modData.summary || '',
+    description: htmlDescription || modData.summary || '',
+    iconUrl: modData.logo?.url || modData.logo?.thumbnailUrl,
+    downloads: modData.downloadCount || 0,
+    followers: modData.thumbsUpCount || 0,
+    source: 'curseforge',
+    categories: Array.isArray(modData.categories) ? modData.categories.map((c: any) => c.name) : [],
+    loaders: Array.from(loaders),
+    gameVersions: Array.from(gameVersions),
+    links: {
+      issues: modData.links?.issuesUrl,
+      source: modData.links?.sourceUrl,
+      wiki: modData.links?.wikiUrl,
+      discord: undefined,
+      donate: modData.links?.websiteUrl
+    },
+    creators,
+    gallery,
+    publishedAt: modData.dateCreated,
+    updatedAt: modData.dateModified
+  }
+
+  await setCachedData(cacheKey, detail)
+  return detail
 }

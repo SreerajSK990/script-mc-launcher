@@ -32,6 +32,7 @@ import { Button } from '@renderer/components/common/Button'
 import { Modal } from '@renderer/components/common/Modal'
 import { ConfirmModal } from '@renderer/components/common/ConfirmModal'
 import { ChangeModVersionModal } from '@renderer/components/mods/ChangeModVersionModal'
+import { ModDetailModal } from '@renderer/components/mods/ModDetailModal'
 
 interface ModBrowserPageProps {
   instances: InstanceConfiguration[]
@@ -78,12 +79,12 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const PAGE_SIZE = 24
 
+  const [selectedModForDetail, setSelectedModForDetail] = useState<ModSearchResult | null>(null)
   const [selectedModForVersions, setSelectedModForVersions] = useState<ModSearchResult | null>(null)
   const [availableVersions, setAvailableVersions] = useState<ModVersionFile[]>([])
   const [isLoadingVersions, setIsLoadingVersions] = useState(false)
   const [installingVersionId, setInstallingVersionId] = useState<string | null>(null)
 
-  // Modpack install state
   const [modpackInstanceName, setModpackInstanceName] = useState('')
   const [modpackProgress, setModpackProgress] = useState<ModpackImportProgressEvent | null>(null)
   const [isInstallingModpack, setIsInstallingModpack] = useState(false)
@@ -92,7 +93,6 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
   const [isLoadingInstalled, setIsLoadingInstalled] = useState(false)
   const [selectedInstalledModForChange, setSelectedInstalledModForChange] = useState<InstalledModRecord | null>(null)
 
-  // Themed confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean
     title: string
@@ -160,7 +160,6 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
     }
   }, [instances, selectedInstanceId, initialInstanceId])
 
-  // Listen to modpack install progress
   useEffect(() => {
     if (!window.launcherAPI?.modpacks) return
     const unsub = window.launcherAPI.modpacks.onProgress((event) => {
@@ -199,13 +198,10 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
         const instClean = instName.replace(/[^a-z0-9]/g, '')
         const instFile = inst.filename.toLowerCase()
 
-        // Direct ID or slug match
         if (instId === projId || (projSlug && instId === projSlug)) return true
 
-        // Exact name match
         if (instName === projName || (projClean.length >= 3 && instClean === projClean)) return true
 
-        // Filename prefix match with slug or clean name
         if (
           projSlug &&
           (instFile.startsWith(projSlug + '-') ||
@@ -386,6 +382,59 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
     }
   }
 
+  const handleInstallFromDetailModal = async (mod: ModSearchResult, version: ModVersionFile) => {
+    if (mod.projectType === 'modpack') {
+      if (!window.launcherAPI?.modpacks) return
+      try {
+        setIsInstallingModpack(true)
+        const instance = await window.launcherAPI.modpacks.installRemote({
+          source: mod.source,
+          projectId: mod.id,
+          versionFile: version,
+          customInstanceName: mod.name
+        })
+        onNotification(`Installed modpack "${instance.name}" successfully!`)
+        onInstanceCreated?.(instance)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to install modpack'
+        onNotification(message)
+      } finally {
+        setIsInstallingModpack(false)
+      }
+      return
+    }
+
+    if (!selectedInstanceId || !window.launcherAPI?.mods) {
+      onNotification('Please select a target instance first.')
+      return
+    }
+
+    try {
+      const installedRec = getInstalledModForProject(mod)
+      await window.launcherAPI.mods.install({
+        instanceId: selectedInstanceId,
+        versionFile: version,
+        modMetadata: {
+          id: mod.id,
+          name: mod.name,
+          source: mod.source,
+          iconUrl: mod.iconUrl
+        },
+        oldFilename: installedRec?.filename
+      })
+
+      onNotification(
+        installedRec
+          ? `Updated ${mod.name} to ${version.versionNumber || version.name}!`
+          : `Installed ${mod.name} successfully.`
+      )
+      await fetchInstalledMods()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to install mod'
+      onNotification(message)
+    }
+  }
+
   const handleToggleMod = async (mod: InstalledModRecord) => {
     if (!selectedInstanceId || !window.launcherAPI?.mods) return
     try {
@@ -456,7 +505,6 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
         </div>
       )}
 
-      {/* Header bar (Pinned) */}
       <div className="shrink-0 flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3 border-b border-border-subtle">
         <div>
           <h2 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
@@ -475,7 +523,6 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* Project Type Switcher */}
           <div className="flex items-center gap-1 bg-background-darkest border border-border-subtle p-1 rounded-xl">
             <button
               onClick={() => {
@@ -507,7 +554,6 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
             </button>
           </div>
 
-          {/* Instance selector (only in mods mode) */}
           {projectType === 'mod' ? (
             <div className="flex items-center gap-2 bg-background-darkest border border-border-subtle p-1.5 rounded-xl">
               <span className="text-xs text-slate-400 pl-2">Target Instance:</span>
@@ -534,7 +580,6 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
             </div>
           )}
 
-          {/* Browse / Installed Tabs (only in mods mode) */}
           {projectType === 'mod' && (
             <div className="flex items-center gap-1 bg-background-darkest border border-border-subtle p-1 rounded-xl">
               <button
@@ -567,7 +612,6 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
 
       {activeSubTab === 'browse' ? (
         <div className="flex flex-col flex-1 min-h-0 pt-3">
-          {/* Search Toolbar (Pinned) */}
           <div className="shrink-0 flex flex-col gap-2.5 pb-3">
             <div className="flex flex-col md:flex-row items-center gap-3 bg-background-card border border-border-subtle p-3 rounded-2xl">
               <div className="relative flex-1 w-full">
@@ -635,7 +679,6 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
               </div>
             </div>
 
-            {/* Search Result Count */}
             {!isSearching && searchResults.length > 0 && (
               <div className="flex items-center justify-between px-1">
                 <span className="text-[11px] text-slate-400 font-mono">
@@ -650,7 +693,6 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
             )}
           </div>
 
-          {/* Results Area (Scrolls independently) */}
           <div className="flex-1 min-h-0 overflow-y-auto pr-1.5 flex flex-col gap-4">
             {isSearching ? (
               <div className="flex-1 flex flex-col items-center justify-center py-24 text-slate-500 gap-3">
@@ -675,7 +717,8 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
                   {searchResults.map((item) => (
                     <div
                       key={`${item.source}-${item.id}`}
-                      className="bg-background-card hover:bg-background-surface/80 border border-border-subtle hover:border-border-strong rounded-2xl p-4 flex flex-col justify-between transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 group"
+                      onClick={() => setSelectedModForDetail(item)}
+                      className="bg-background-card hover:bg-background-surface/80 border border-border-subtle hover:border-border-strong rounded-2xl p-4 flex flex-col justify-between transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/20 group cursor-pointer"
                     >
                       <div>
                         <div className="flex items-start gap-3 mb-2.5">
@@ -753,7 +796,10 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
                                 size="sm"
                                 icon={Check}
                                 className="border-emerald-500/30 text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20"
-                                onClick={() => handleOpenInstallModal(item)}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleOpenInstallModal(item)
+                                }}
                                 title={`Installed (${installedRecord.version || 'installed'}). Click to change version.`}
                               >
                                 Installed
@@ -765,7 +811,10 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
                               variant="secondary"
                               size="sm"
                               icon={Download}
-                              onClick={() => handleOpenInstallModal(item)}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleOpenInstallModal(item)
+                              }}
                             >
                               {projectType === 'modpack' ? 'Install Modpack' : 'Install'}
                             </Button>
@@ -776,7 +825,6 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
                   ))}
                 </div>
 
-                {/* Pagination Controls */}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 pb-8 border-t border-border-subtle/50 mt-2">
                   <div className="text-xs text-slate-400">
                     Page <span className="font-semibold text-white">{currentPage + 1}</span> • Showing{' '}
@@ -825,7 +873,6 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
           </div>
         </div>
       ) : (
-        /* Installed Mods Tab (Mods Mode Only) */
         <div className="flex flex-col flex-1 min-h-0 pt-3 gap-4">
           <div className="shrink-0 flex items-center justify-between bg-background-card border border-border-subtle p-4 rounded-2xl">
             <div>
@@ -944,7 +991,6 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
       )}
 
 
-      {/* Install Modal (Handles both Mod installation and Modpack installation) */}
       {selectedModForVersions && (
         <Modal
           isOpen={Boolean(selectedModForVersions)}
@@ -966,7 +1012,6 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
           maxWidthClass="max-w-xl"
         >
           <div className="flex flex-col gap-4">
-            {/* Instance Name Input for Modpacks */}
             {projectType === 'modpack' && (
               <div className="bg-background-darkest border border-border-subtle p-3.5 rounded-xl space-y-2">
                 <label className="block text-xs font-semibold text-slate-300">
@@ -983,7 +1028,6 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
               </div>
             )}
 
-            {/* Live Modpack Installation Progress */}
             {projectType === 'modpack' && isInstallingModpack && modpackProgress && (
               <div className="bg-background-darkest border border-border-subtle p-4 rounded-xl space-y-3">
                 <div className="flex items-center justify-between text-xs">
@@ -1121,7 +1165,6 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
         </Modal>
       )}
 
-      {/* Change Mod Version Modal (from Installed tab) */}
       {currentInstance && (
         <ChangeModVersionModal
           isOpen={Boolean(selectedInstalledModForChange)}
@@ -1135,7 +1178,16 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
         />
       )}
 
-      {/* Themed Confirmation Modal */}
+      <ModDetailModal
+        isOpen={Boolean(selectedModForDetail)}
+        onClose={() => setSelectedModForDetail(null)}
+        mod={selectedModForDetail}
+        currentInstance={currentInstance}
+        onInstallVersion={handleInstallFromDetailModal}
+        isInstalled={Boolean(selectedModForDetail && getInstalledModForProject(selectedModForDetail))}
+        installedVersion={selectedModForDetail ? getInstalledModForProject(selectedModForDetail)?.version : undefined}
+      />
+
       <ConfirmModal
         isOpen={confirmDialog.isOpen}
         title={confirmDialog.title}

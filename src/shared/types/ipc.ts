@@ -9,7 +9,8 @@ import type {
   InstallModPayload,
   InstalledModRecord,
   ModSource,
-  ModUpdateInfo
+  ModUpdateInfo,
+  ModDetail
 } from './mods'
 import type {
   ModpackManifestInfo,
@@ -85,6 +86,7 @@ export interface SystemActions {
 
 export interface ModActions {
   search: (params: ModSearchParams) => Promise<ModSearchResult[]>
+  getDetail: (source: ModSource, id: string) => Promise<ModDetail>
   getVersions: (
     projectId: string,
     source: ModSource,
