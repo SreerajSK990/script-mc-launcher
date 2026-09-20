@@ -150,8 +150,9 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 - [x] **Instance Detail & Settings View:** Per-instance RAM allocation, JVM argument flags, custom Java paths, screenshot gallery
 - [x] **Modpack System:** Import `.mrpack` and `.zip` modpacks locally + online modpack browser
 - [x] **External Launcher Cloning:** Direct import and cloning from Prism, Modrinth, CurseForge, and Vanilla launchers
-- [x] **Dedicated Logs:** Full-window live terminal page with search & controls
-- [ ] **Production Packaging:** Custom launcher icon & Windows `.exe` installer via `electron-builder`
+- [x] **Production Packaging:** Custom launcher icon, Windows NSIS `.exe` installer, and standalone portable executable via `electron-builder`
+- [x] **Auto-Updater:** Differential background updates from GitHub Releases with restart prompts and manual checks
+- [x] **Multiplayer Server Management:** Direct `servers.dat` management, real-time server ping, and one-click quick join
 
 ---
 
