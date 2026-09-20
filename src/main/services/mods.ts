@@ -64,10 +64,15 @@ export async function fetchModVersions(
   minecraftVersion?: string,
   loader?: ModLoaderType
 ): Promise<ModVersionFile[]> {
-  if (source === 'curseforge') {
-    return await getCurseForgeFiles(projectId, minecraftVersion, loader)
+  try {
+    if (source === 'curseforge') {
+      return await getCurseForgeFiles(projectId, minecraftVersion, loader)
+    }
+    return await getModrinthProjectVersions(projectId, minecraftVersion, loader)
+  } catch (err) {
+    console.warn(`Failed to fetch versions for mod ${projectId}:`, err)
+    return []
   }
-  return await getModrinthProjectVersions(projectId, minecraftVersion, loader)
 }
 
 export async function installMod(payload: InstallModPayload): Promise<InstalledModRecord> {

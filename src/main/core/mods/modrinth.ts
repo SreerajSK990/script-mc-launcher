@@ -145,6 +145,9 @@ export async function getModrinthProjectVersions(
   })
 
   if (!response.ok) {
+    if (response.status === 404 || response.status === 400) {
+      return []
+    }
     throw new Error(`Failed to fetch Modrinth versions: ${response.status}`)
   }
 

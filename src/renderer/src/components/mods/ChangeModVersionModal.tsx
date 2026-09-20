@@ -22,6 +22,60 @@ interface ChangeModVersionModalProps {
   onSuccess: (message: string) => void
 }
 
+function extractCandidateQueries(name: string, filename: string): string[] {
+  const queries: string[] = []
+  const seen = new Set<string>()
+
+  const add = (q: string | undefined | null) => {
+    if (!q) return
+    const trimmed = q.trim()
+    if (trimmed.length >= 2 && !seen.has(trimmed.toLowerCase())) {
+      seen.add(trimmed.toLowerCase())
+      queries.push(trimmed)
+    }
+  }
+
+  const raw = (name || filename || '')
+    .replace(/^manual-/, '')
+    .replace(/\.jar(\.disabled)?$/i, '')
+    .trim()
+
+  // 1. Spaced CamelCase / PascalCase, e.g. "ForgeConfigAPIPort" -> "Forge Config API Port"
+  const spacedCamel = raw
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+
+  // 2. Strip trailing versions, build numbers, mc versions, and loader tags
+  // e.g. "c2me-fabric-mc26.3-0.3.6" -> "c2me-fabric"
+  // e.g. "cloth-config-26.3.1" -> "cloth-config"
+  // e.g. "fabric-api-0.160.7+26.3" -> "fabric-api"
+  // e.g. "connectedglass-1.1.13-fabric-mc1.20.1" -> "connectedglass"
+  const strippedVersions = raw
+    .replace(/[-_+](mc)?v?\d+(\.\d+).*$/i, '')
+    .replace(/\+.*$/, '')
+
+  const strippedLoader = strippedVersions
+    .replace(/[-_+](fabric|forge|neoforge|quilt)$/i, '')
+
+  const spacedCamelStripped = spacedCamel
+    .replace(/[-_+](mc)?v?\d+(\.\d+).*$/i, '')
+    .replace(/\+.*$/, '')
+
+  // Insert space in common compound words like "connectedglass" -> "connected glass"
+  const compoundSpaced = strippedLoader.replace(/(connected)(glass)/i, '$1 $2')
+
+  // Add prioritized queries:
+  add(compoundSpaced.replace(/[-_.]/g, ' '))
+  add(strippedLoader.replace(/[-_.]/g, ' '))
+  add(strippedVersions.replace(/[-_.]/g, ' '))
+  add(spacedCamelStripped.replace(/[-_.]/g, ' '))
+  add(strippedLoader)
+  add(strippedVersions)
+  add(raw.replace(/[-_.]/g, ' '))
+
+  return queries
+}
+
 export const ChangeModVersionModal: React.FC<ChangeModVersionModalProps> = ({
   isOpen,
   onClose,
@@ -45,53 +99,81 @@ export const ChangeModVersionModal: React.FC<ChangeModVersionModalProps> = ({
     try {
       const loader = instance.loaderType !== 'vanilla' ? instance.loaderType : undefined
 
-      // 1. First attempt: lookup directly with mod.id
-      let resultVersions = await window.launcherAPI.mods.getVersions(
-        mod.id,
-        mod.source,
-        instance.minecraftVersion,
-        loader
-      )
+      // 1. First attempt: if mod.id is a real project ID (not our synthetic manual- ID), try direct lookup
+      if (mod.id && !mod.id.startsWith('manual-') && !mod.id.includes(' ')) {
+        try {
+          let resultVersions = await window.launcherAPI.mods.getVersions(
+            mod.id,
+            mod.source,
+            instance.minecraftVersion,
+            loader
+          )
+          // If strict MC version returned 0, try without MC version filter (fallback to loader only)
+          if ((!resultVersions || resultVersions.length === 0) && instance.minecraftVersion) {
+            resultVersions = await window.launcherAPI.mods.getVersions(
+              mod.id,
+              mod.source,
+              undefined,
+              loader
+            )
+          }
 
-      if (resultVersions && resultVersions.length > 0) {
-        setVersions(resultVersions)
-        setResolvedProjectId(mod.id)
-        return
+          if (resultVersions && resultVersions.length > 0) {
+            setVersions(resultVersions)
+            setResolvedProjectId(mod.id)
+            return
+          }
+        } catch {
+          // Continue to fallback search
+        }
       }
 
-      // 2. Second attempt: search mod by clean name to resolve project ID
-      const cleanQuery = mod.name
-        .replace(/[-_.]/g, ' ')
-        .replace(/\b(fabric|forge|neoforge|quilt|mc|v\d+)\b/gi, '')
-        .trim()
+      // 2. Second attempt: search mod by candidate queries to resolve project ID
+      const candidateQueries = extractCandidateQueries(mod.name, mod.filename)
 
-      const searchHits = await window.launcherAPI.mods.search({
-        query: cleanQuery || mod.name,
-        source: mod.source,
-        minecraftVersion: instance.minecraftVersion,
-        loader,
-        limit: 6
-      })
+      for (const query of candidateQueries.slice(0, 4)) {
+        try {
+          const searchHits = await window.launcherAPI.mods.search({
+            query,
+            source: mod.source,
+            minecraftVersion: instance.minecraftVersion,
+            loader,
+            limit: 5
+          })
 
-      if (searchHits && searchHits.length > 0) {
-        // Try the top search hit
-        const topHit = searchHits[0]
-        const fallbackVersions = await window.launcherAPI.mods.getVersions(
-          topHit.id,
-          topHit.source,
-          instance.minecraftVersion,
-          loader
-        )
+          if (searchHits && searchHits.length > 0) {
+            // Try top hits
+            for (const hit of searchHits.slice(0, 3)) {
+              let hitVersions = await window.launcherAPI.mods.getVersions(
+                hit.id,
+                hit.source,
+                instance.minecraftVersion,
+                loader
+              )
 
-        if (fallbackVersions && fallbackVersions.length > 0) {
-          setVersions(fallbackVersions)
-          setResolvedProjectId(topHit.id)
-          return
+              if ((!hitVersions || hitVersions.length === 0) && instance.minecraftVersion) {
+                hitVersions = await window.launcherAPI.mods.getVersions(
+                  hit.id,
+                  hit.source,
+                  undefined,
+                  loader
+                )
+              }
+
+              if (hitVersions && hitVersions.length > 0) {
+                setVersions(hitVersions)
+                setResolvedProjectId(hit.id)
+                return
+              }
+            }
+          }
+        } catch {
+          // Try next candidate
         }
       }
 
       setErrorMessage(
-        `No compatible versions found for ${instance.loaderType} ${instance.minecraftVersion}.`
+        `Could not find compatible versions for "${mod.name}" on ${mod.source}.`
       )
     } catch (err: any) {
       console.error('Failed to fetch mod versions for version change:', err)

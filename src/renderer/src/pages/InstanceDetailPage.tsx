@@ -630,15 +630,20 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
                 >
                   <div className="flex items-center gap-3.5 min-w-0">
                     <button
+                      type="button"
+                      role="switch"
+                      aria-checked={mod.enabled}
                       onClick={() => handleToggleMod(mod)}
-                      className={`w-9 h-5 flex items-center rounded-full p-1 transition-colors duration-200 shrink-0 ${
-                        mod.enabled ? 'bg-primary' : 'bg-slate-700'
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500/40 ${
+                        mod.enabled
+                          ? 'bg-emerald-500 shadow-sm shadow-emerald-950/40'
+                          : 'bg-slate-700/90 border border-slate-600/50'
                       }`}
                       title={mod.enabled ? 'Disable mod' : 'Enable mod'}
                     >
-                      <div
-                        className={`bg-white w-3 h-3 rounded-full shadow-md transform transition-transform duration-200 ${
-                          mod.enabled ? 'translate-x-4' : 'translate-x-0'
+                      <span
+                        className={`pointer-events-none inline-block h-3.5 w-3.5 rounded-full bg-white shadow-md transform transition-transform duration-200 ease-in-out ${
+                          mod.enabled ? 'translate-x-4.5' : 'translate-x-0.5'
                         }`}
                       />
                     </button>

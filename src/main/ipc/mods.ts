@@ -27,7 +27,12 @@ export function registerModsIpcHandlers(): void {
       minecraftVersion?: string,
       loader?: ModLoaderType
     ) => {
-      return await fetchModVersions(projectId, source, minecraftVersion, loader)
+      try {
+        return await fetchModVersions(projectId, source, minecraftVersion, loader)
+      } catch (err) {
+        console.warn(`IPC mods:get-versions error for ${projectId}:`, err)
+        return []
+      }
     }
   )
 
