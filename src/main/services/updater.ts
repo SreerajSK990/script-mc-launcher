@@ -1,7 +1,9 @@
 import { app, type BrowserWindow } from 'electron'
-import { autoUpdater } from 'electron-updater'
+import electronUpdater from 'electron-updater'
 import { IPC_CHANNELS } from '@shared/constants/channels'
 import type { UpdateCheckResult, UpdateInfo, UpdateProgressEvent, UpdateStatus } from '@shared/types/updater'
+
+const autoUpdater = electronUpdater.autoUpdater || (electronUpdater as any).default?.autoUpdater
 
 let targetWindow: BrowserWindow | null = null
 
