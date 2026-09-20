@@ -127,9 +127,9 @@ export async function launchInstance(
     onLog: (line, level) => {
       sendLog(line, level)
     },
-    onExit: (exitCode) => {
+    onExit: async (exitCode) => {
       activeProcesses.delete(instanceId)
-      const durationSeconds = Math.round((Date.now() - processStartTime) / 1000)
+      const durationSeconds = Math.max(0, Math.round((Date.now() - processStartTime) / 1000))
 
       if (exitCode === 0) {
         sendLog(`Minecraft process completed cleanly (Duration: ${durationSeconds}s)`)
@@ -139,10 +139,20 @@ export async function launchInstance(
         sendProgress('CRASHED', `Game closed with code ${exitCode}`)
       }
 
-      updateExistingInstance({
-        id: instance.id,
-        lastPlayedAt: new Date().toISOString()
-      }).catch(() => {})
+      try {
+        const currentConfig = await getInstanceById(instance.id)
+        const previousMinutes = currentConfig?.totalPlayTimeMinutes || 0
+        const sessionMinutes = Math.max(1, Math.round(durationSeconds / 60))
+        const totalPlayTimeMinutes = durationSeconds >= 10 ? previousMinutes + sessionMinutes : previousMinutes
+
+        await updateExistingInstance({
+          id: instance.id,
+          lastPlayedAt: new Date().toISOString(),
+          totalPlayTimeMinutes
+        })
+      } catch {
+        // Ignore instance update error on exit
+      }
     }
   })
 
