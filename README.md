@@ -1,53 +1,73 @@
 # Script Minecraft Launcher
 
-A modern, clean, and modular Minecraft launcher built with Electron, React, TypeScript, and Tailwind CSS.
+A fast, sleek, and modular Minecraft launcher built with **Electron**, **React**, **TypeScript**, and **Tailwind CSS**.
 
-Most Minecraft launchers out there either look like they are stuck in 2010 with clunky table grids, or they are bloated and slow. This launcher is designed to be fast, sleek, easy to use, and completely isolated so your game instances never mess with each other.
+Most Minecraft launchers out there either look like they're stuck in 2010 with clunky Java Swing windows, or they're bloated with electron bloatware and ads. Script Launcher is built to be fast, clean, and completely isolated so your mod setups and game versions never conflict with each other.
 
 ---
 
-## What Makes It Different?
+## Highlights
 
-- **Modern full-screen layout:** No cramped windows or tiny centered boxes. It uses your whole screen properly with a clean dark sidebar and responsive card grid.
-- **Instance Isolation:** Every instance has its own separate folder (`mods`, `saves`, `config`). Installing a mod or changing settings in one instance will never break another.
-- **Built for Modding:** Built to support Vanilla, Fabric, Quilt, Forge, and NeoForge right out of the box.
-- **Integrated Mod Browsing:** Modrinth and CurseForge in one place without needing to juggle websites or external downloads.
-- **Auto Java Management:** Mojang runtimes are automatically resolved so you don't have to fiddle with installing multiple Java versions manually.
-- **Clean and Modular Codebase:** Every piece of launcher logic, IPC bridge, and UI component lives in its own small, focused file.
+- **Complete Instance Isolation:** Every instance has its own dedicated directory (`instances/<id>/minecraft/`). Mods, configs, resource packs, and saves stay strictly inside that instance. No shared messy `.minecraft` folder.
+- **All Major Mod Loaders Supported:**
+  - **Vanilla** (all releases and legacy versions)
+  - **Fabric** (auto-configured with KnotClient)
+  - **Quilt** (full Quilt Loader support)
+  - **Forge** (bootstrapped with Prism ForgeWrapper)
+  - **NeoForge** (modern 1.20.4+ Forge fork support)
+- **Automatic Mojang Java Runtimes:** Never worry about installing Java manually again. The launcher talks directly to Mojang's official JRE API and auto-downloads the exact right Java version for your game (Java 8 for old versions, Java 17 for 1.18–1.20.4, Java 21 for 1.20.5+) right into `.scriptlauncher/java/`.
+- **Integrated Mod Browser (Modrinth + CurseForge):**
+  - Search thousands of mods on Modrinth with zero API keys or setup needed.
+  - Optional CurseForge API integration if you have an API key.
+  - Automatically filters mods to match your selected instance's Minecraft version and mod loader.
+  - One-click mod installation directly into your instance's `mods/` folder with SHA-512 hash verification.
+  - In-app mod manager to toggle mods on/off (`.jar.disabled`) or delete them without digging through File Explorer.
+- **Microsoft OAuth & Local Dev Profiles:**
+  - Safe Microsoft Xbox Live login with tokens encrypted on disk via Electron's Windows DPAPI `safeStorage`.
+  - Offline local player accounts for testing and dev environments.
+- **Dedicated Live Logs View:** Full-window terminal tab in the sidebar with live stdout/stderr streaming, log search filtering, log level filters (All, Info, Warn, Error), auto-scroll, copy to clipboard, and instant "Stop Game" controls.
+- **Zero Button Emojis & Modern UI:** Clean, human-designed dark interface using Lucide SVG icons that uses your full screen properly instead of cramming everything into the center.
 
 ---
 
 ## Tech Stack
 
-- **Desktop Shell:** Electron
-- **UI Framework:** React + Vite
-- **Styling:** Tailwind CSS + Lucide Icons
+- **Desktop Framework:** Electron + Electron-Vite
+- **Frontend:** React 19, Tailwind CSS, Lucide Icons
 - **Language:** TypeScript (ESM)
-- **Metadata Sources:** Mojang Piston API + Prism Meta Server
-- **Mod Providers:** Modrinth API v2 + CurseForge API
+- **Metadata Engines:** Mojang Piston API + Prism Meta API (`meta.prismlauncher.org`)
+- **Mod Providers:** Modrinth API v2 + CurseForge API v1
+- **Encryption:** Electron `safeStorage` (Windows DPAPI)
 
 ---
 
-## Project Structure
+## Repository Structure
 
 ```
 ├── src/
-│   ├── main/                 # Electron main process (Node.js)
-│   │   ├── index.ts          # Window setup & app lifecycle
-│   │   ├── preload.ts        # Secure contextBridge API
-│   │   ├── services/         # Filesystem, paths, instances, system specs
-│   │   ├── ipc/              # Typed IPC handlers between main and renderer
-│   │   └── utils/            # Atomic file writers, helpers
-│   ├── renderer/             # Frontend UI (React + Tailwind)
-│   │   ├── index.html
-│   │   └── src/
-│   │       ├── components/   # Titlebar, sidebar, instance cards, modals
-│   │       ├── pages/        # Dashboard, Instances, Mod Browser, Settings
-│   │       ├── styles/       # Tailwind and dark theme CSS
-│   │       └── App.tsx       # Root view and navigation
-│   └── shared/               # Shared TypeScript types and IPC channel constants
-│       ├── types/            # Instance, system, and IPC types
-│       └── constants/        # Default settings and channel names
+│   ├── main/                    # Electron Main Process (Node.js)
+│   │   ├── index.ts             # App lifecycle and window creation
+│   │   ├── core/                # Core launcher business logic
+│   │   │   ├── auth/            # OAuth window, Xbox Live, tokens, encrypted storage
+│   │   │   ├── java/            # Mojang JRE API client and auto-downloader
+│   │   │   ├── loaders/         # Fabric, Quilt, Forge, NeoForge resolvers
+│   │   │   ├── meta/            # Prism Meta client with disk cache & TTL
+│   │   │   ├── minecraft/       # Piston manifest, assets, libraries, args, process spawner
+│   │   │   └── mods/            # Modrinth client, CurseForge client, instance mod manager
+│   │   ├── services/            # Instances, auth state, launch engine, paths, system specs
+│   │   ├── ipc/                 # Typed IPC handlers (bridge to renderer)
+│   │   └── utils/               # Atomic filesystem writers, batch downloader, zip extract
+│   ├── renderer/                # Electron Renderer Process (React UI)
+│   │   ├── src/
+│   │   │   ├── components/      # TitleBar, Sidebar, Modals, Cards, Buttons
+│   │   │   ├── pages/           # Dashboard, Instances, ModBrowser, Logs, Settings
+│   │   │   └── App.tsx          # Root routing and state management
+│   ├── preload/                 # Secure contextBridge API exposing window.launcherAPI
+│   └── shared/                  # Shared types (instances, auth, launch, mods, ipc)
+├── scripts/
+│   └── test-services.mjs        # Automated sandbox test suite (Phases 1–7)
+├── package.json
+└── tsconfig.json
 ```
 
 ---
@@ -56,38 +76,54 @@ Most Minecraft launchers out there either look like they are stuck in 2010 with 
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) (v20+ recommended)
-- Git
+- [Node.js](https://nodejs.org/) (v20 or newer)
+- npm or pnpm
 
-### Installation
+### Quick Setup
 
-Clone the repository:
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/SreerajSK990/script-mc-launcher.git
+   cd script-mc-launcher
+   ```
 
-```bash
-git clone https://github.com/SreerajSK990/script-mc-launcher.git
-cd script-mc-launcher
-```
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
 
-Install dependencies:
+3. **Start in development mode:**
+   ```bash
+   npm run dev
+   ```
 
-```bash
-npm install
-```
+4. **Run the automated test suite (in isolated sandbox):**
+   ```bash
+   npm test
+   ```
 
-Start the launcher in development mode:
+5. **Build production bundle:**
+   ```bash
+   npm run build
+   ```
 
-```bash
-npm run dev
-```
+---
 
-Build and package for production:
+## Roadmap
 
-```bash
-npm run package
-```
+- [x] **Phase 1:** Foundation & Isolated Instance System
+- [x] **Phase 2:** Microsoft OAuth & Encrypted Auth Storage
+- [x] **Phase 3:** Mojang Metadata, Assets, Libraries & Process Spawning
+- [x] **Phase 4 & 5:** Prism Meta Integration & Mod Loaders (Fabric, Quilt, Forge, NeoForge)
+- [x] **Phase 6:** Automatic Mojang Java Runtime Management (Java 8, 16, 17, 21)
+- [x] **Phase 7:** Integrated Mod Browser (Modrinth + CurseForge) & Mod Manager
+- [x] **Dedicated Logs:** Full-window live terminal page with search & controls
+- [ ] **Phase 8 (Next):** Instance Edit & Detail Page (per-instance RAM sliders, custom JVM flags, world saves inspector)
+- [ ] **Modpack Support:** One-click `.mrpack` (Modrinth) & `.zip` (CurseForge) import
+- [ ] **Production Packaging:** Custom launcher icon & Windows `.exe` installer via `electron-builder`
 
 ---
 
 ## License
 
-MIT License. Feel free to use and modify.
+MIT License. Free to use, modify, and build upon.
