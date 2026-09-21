@@ -1,484 +1,290 @@
-# Minecraft Launcher — Agent Implementation Plan
+# Script Minecraft Launcher — Agent & Developer Handbook
 
-> Stack: Electron + TypeScript (ESM). Tauri/Rust is optional later. Start here since the dev already has Electron experience from Music4All.
-
----
-
-## Project Overview
-
-Build a custom Minecraft launcher with:
-
-- All vanilla MC versions
-- Mod loader support: Fabric, Quilt, Forge, NeoForge, LiteLoader
-- Integrated mod browser: Modrinth + CurseForge in one UI
-- Microsoft OAuth authentication
-- Java auto-management
-- Instance isolation (each instance = its own folder)
+Official guidelines, architecture standards, coding conventions, Git workflow, README synchronization, and release publishing rules for **Script Minecraft Launcher**.
 
 ---
 
-## Repository Structure
+## 1. Project Overview & Philosophy
+
+Script Minecraft Launcher is a modern, high-performance, isolated Minecraft launcher built with **Electron**, **React 19**, **TypeScript (ESM)**, and **Tailwind CSS**.
+
+### Core Tenets
+1. **Zero Bloat & Peak Performance:** Ultra-fast startup, low RAM footprint, native OS responsiveness.
+2. **Absolute Instance Isolation:** Every instance lives in its own sandboxed folder (`instances/<id>/minecraft/`). One instance's mods, configs, saves, or versions never pollute another.
+3. **No Forced Dependencies:** Auto-manages official Mojang Java runtimes (Java 8, 16, 17, 21) silently in the background. Users never have to install Java manually.
+4. **Clean, Modern Visuals:** Cyber-industrial dark UI with Lucide SVG icons, glassmorphism panels, and full-screen data density. No clumsy 2010 Java Swing windows or ad banners.
+5. **Open Ecosystem:** Native support for all major mod loaders (Fabric, Quilt, Forge, NeoForge, Vanilla), direct unified mod & modpack browsing (Modrinth + CurseForge), multiplayer server management, 3D skin viewer, and Discord Rich Presence.
+
+---
+
+## 2. Architecture & Directory Structure
+
+The project follows a strict three-tier Electron architecture: **Main Process**, **Preload Bridge**, and **Renderer Process**, backed by a shared type and constant system.
 
 ```
-launcher/
+script-mc-launcher/
 ├── src/
-│   ├── main/                    # Electron main process (Node.js)
-│   │   ├── index.ts             # Entry point, BrowserWindow setup
-│   │   ├── ipc/                 # IPC handlers (bridge to renderer)
-│   │   │   ├── auth.ts
-│   │   │   ├── instances.ts
-│   │   │   ├── install.ts
-│   │   │   ├── launch.ts
-│   │   │   └── mods.ts
-│   │   ├── core/                # All launcher logic
-│   │   │   ├── auth/
-│   │   │   │   └── microsoft.ts
-│   │   │   ├── meta/
-│   │   │   │   └── prism.ts     # Fetches from meta.prismlauncher.org
-│   │   │   ├── minecraft/
-│   │   │   │   ├── assets.ts
-│   │   │   │   ├── libraries.ts
-│   │   │   │   └── launcher.ts  # Builds JVM args, spawns Java process
-│   │   │   ├── loaders/
-│   │   │   │   ├── fabric.ts
-│   │   │   │   ├── quilt.ts
-│   │   │   │   ├── forge.ts
-│   │   │   │   └── neoforge.ts
-│   │   │   ├── java/
-│   │   │   │   └── runtime.ts   # Download + manage Java runtimes
-│   │   │   └── mods/
-│   │   │       ├── modrinth.ts
-│   │   │       └── curseforge.ts
-│   │   └── utils/
-│   │       ├── download.ts      # Downloader with progress + hash verify
-│   │       ├── fs.ts            # File system helpers
-│   │       └── zip.ts           # ZIP extraction helper
-│   ├── renderer/                # Electron renderer process (UI)
-│   │   ├── index.html
-│   │   ├── app.ts
-│   │   └── pages/
-│   │       ├── Home.ts
-│   │       ├── Instances.ts
-│   │       ├── ModBrowser.ts
-│   │       └── Settings.ts
-│   └── shared/
-│       └── types.ts             # Shared TS types between main + renderer
-├── package.json
-├── tsconfig.json
-└── electron-builder.json
+│   ├── main/                            # Electron Main Process (Node.js runtime)
+│   │   ├── index.ts                     # App lifecycle, single-instance lock, window manager
+│   │   ├── ipc/                         # IPC handler registrations (bridge endpoints)
+│   │   │   ├── auth.ts                  # Microsoft OAuth & offline account handlers
+│   │   │   ├── instances.ts             # CRUD, folder opening, duplicate, export
+│   │   │   ├── install.ts               # Loader installation handlers
+│   │   │   ├── launch.ts                # Game launch, process supervision, kill
+│   │   │   ├── mods.ts                  # Mod search, toggle, delete, version switch
+│   │   │   ├── modpacks.ts              # Modpack archive & online install
+│   │   │   ├── servers.ts               # Multiplayer servers.dat reader/writer & pinger
+│   │   │   ├── screenshots.ts           # Screenshots gallery scanner & clipboard
+│   │   │   ├── cloner.ts                # External launcher detection & deep cloner
+│   │   │   ├── meta.ts                  # Mojang & Prism metadata handlers
+│   │   │   ├── system.ts                # System specs & memory detection
+│   │   │   ├── discordRpc.ts            # Discord Rich Presence IPC bridge
+│   │   │   ├── updater.ts               # Auto-updater check & install handlers
+│   │   │   └── register.ts              # Central registry initializing all IPC handlers
+│   │   ├── core/                        # Launcher core business logic
+│   │   │   ├── auth/                    # OAuth window, Xbox Live, XSTS, tokens, DPAPI encryption
+│   │   │   ├── importers/               # Deep cloner for Prism, Modrinth, CurseForge, Vanilla
+│   │   │   ├── java/                    # Mojang JRE API client, runtime auto-downloader
+│   │   │   ├── loaders/                 # Fabric, Quilt, Forge, NeoForge resolvers
+│   │   │   ├── meta/                    # Mojang manifest & Prism Meta client (disk cache + TTL)
+│   │   │   ├── minecraft/               # Assets, libraries, natives, JVM args, Java spawner
+│   │   │   ├── modpacks/                # .mrpack & .zip manifest parser, override extractor
+│   │   │   ├── mods/                    # Modrinth API, CurseForge API, local mod manager
+│   │   │   └── servers/                 # NBT parser/writer for servers.dat & TCP pinger
+│   │   ├── services/                    # Stateful singleton services
+│   │   │   ├── instances.ts             # Instance state manager & config writer
+│   │   │   ├── auth.ts                  # Active account session manager
+│   │   │   ├── launch.ts                # Active process manager & log broadcaster
+│   │   │   ├── discordRpc.ts            # Discord RPC client lifecycle & presence formatter
+│   │   │   ├── paths.ts                 # Launcher data directories resolver
+│   │   │   └── system.ts                # Host RAM and CPU detector
+│   │   └── utils/                       # Low-level utilities
+│   │       ├── download.ts              # Concurrency-limited batch downloader + hash verify
+│   │       ├── fs.ts                    # Safe atomic file writer, directory copy/clean
+│   │       └── zip.ts                   # Zip extractor & archive tools
+│   ├── preload/                         # Secure Preload Scripts
+│   │   └── index.ts                     # contextBridge exposing window.launcherAPI
+│   ├── renderer/                        # Electron Renderer Process (React 19 UI)
+│   │   ├── index.html                   # Shell HTML
+│   │   └── src/
+│   │       ├── App.tsx                  # Root layout, router, tab state, global modals
+│   │       ├── main.tsx                 # React entry point
+│   │       ├── index.css                # Tailwind directives & global styling
+│   │       ├── components/              # Reusable UI components
+│   │       │   ├── TitleBar.tsx         # Frameless window drag region & window controls
+│   │       │   ├── Sidebar.tsx          # Main navigation bar with active badges
+│   │       │   ├── InstanceCard.tsx     # Instance tile with status, loader badge, launch
+│   │       │   ├── Toast.tsx            # Floating notification alerts
+│   │       │   └── modals/              # CreateInstance, EditInstance, AddServer, etc.
+│   │       └── pages/                   # Main view pages
+│   │           ├── Dashboard.tsx        # Quick launch, recent instances, stats
+│   │           ├── Instances.tsx        # Instance grid/list, filter, search, actions
+│   │           ├── InstanceDetail.tsx   # Per-instance RAM, JVM flags, mods, servers, screenshots
+│   │           ├── ModBrowser.tsx       # Modrinth + CurseForge browser with installed status
+│   │           ├── SkinStudio.tsx       # Interactive 3D skin viewer & preset applicator
+│   │           ├── Logs.tsx             # Live streaming console log viewer
+│   │           └── Settings.tsx         # Global JVM memory, custom paths, updater, accounts
+│   └── shared/                          # Shared Types & Constants (Isomorphic)
+│       ├── constants/
+│       │   ├── channels.ts              # IPC channel string constants
+│       │   └── defaults.ts              # Default memory, launcher version, API endpoints
+│       └── types/
+│           ├── instance.ts              # Instance, loader types, memory configs
+│           ├── auth.ts                  # UserAccount, AuthProfile, token payloads
+│           ├── launch.ts                # LaunchState, LaunchProgress, LogEntry
+│           ├── mods.ts                  # Mod, ModVersion, Modpack, InstalledMod
+│           ├── servers.ts               # ServerEntry, ServerPingResult
+│           ├── discord.ts               # Discord presence payload & page types
+│           ├── cloner.ts                # DetectedLauncher, ImportableInstance
+│           └── ipc.ts                   # Strongly typed LauncherAPI interface
+├── scripts/
+│   └── test-services.mjs                # Automated standalone sandbox test suite
+├── electron.vite.config.ts              # Vite configuration for main, preload, and renderer
+├── electron-builder.json                # Packaging configuration (NSIS, portable, icons)
+├── package.json                         # Dependencies and build scripts
+└── tsconfig.json                        # Root TypeScript configuration
 ```
 
 ---
 
-## Data Directories (Runtime)
+## 3. Data Directories & Sandboxing
 
+All user data is stored strictly in the launcher's root data directory:
+- **Windows:** `%APPDATA%\script-launcher\`
+- **Linux:** `~/.config/script-launcher/`
+- **macOS:** `~/Library/Application Support/script-launcher/`
+
+### Subdirectory Structure
 ```
-~/.launcher/                     # Or %APPDATA%\launcher on Windows
+<data-dir>/
 ├── instances/
-│   └── <instance-name>/
-│       ├── instance.json        # Instance config
-│       └── minecraft/           # Actual .minecraft folder
-│           ├── mods/
-│           ├── saves/
-│           └── config/
-├── libraries/                   # Shared MC libraries cache
-├── assets/                      # Shared MC assets cache
-├── java/                        # Managed Java runtimes
-│   ├── java-8/
-│   ├── java-17/
-│   └── java-21/
-└── meta-cache/                  # Cached JSON from Prism meta server
+│   └── <instance-id>/
+│       ├── instance.json                # Instance metadata, memory, loader config
+│       ├── mods.json                    # Managed mod metadata (version, source, hash)
+│       └── minecraft/                   # Isolated Minecraft game directory
+│           ├── mods/                    # Active .jar and disabled .jar.disabled
+│           ├── config/                  # Mod configuration files
+│           ├── saves/                   # Singleplayer worlds
+│           ├── resourcepacks/           # Resource packs
+│           ├── shaderpacks/             # Shader packs
+│           ├── screenshots/             # In-game captures
+│           └── servers.dat              # Multiplayer server list (NBT format)
+├── libraries/                           # Shared Minecraft & loader library cache
+├── assets/                              # Shared vanilla Minecraft assets
+│   ├── indexes/                         # Asset index JSON manifests
+│   └── objects/                         # 2-character prefix hash directories
+├── java/                                # Managed Mojang Java runtimes
+│   ├── jre-legacy/                      # Java 8 (MC < 1.17)
+│   ├── java-runtime-alpha/              # Java 16 (MC 1.17)
+│   ├── java-runtime-gamma/              # Java 17 (MC 1.18 - 1.20.4)
+│   └── java-runtime-delta/              # Java 21 (MC >= 1.20.5)
+├── meta-cache/                          # Cached Mojang & Prism JSON manifests with TTL
+├── auth.json                            # Encrypted OAuth tokens (DPAPI safeStorage)
+└── logs/                                # Launcher operational logs
 ```
 
 ---
 
-## Phase 1 — Foundation
+## 4. Coding Standards & Cleanliness
 
-**Goal:** Electron shell + config system + basic UI skeleton.
+### Rule 1: STRICT ZERO COMMENTS
+**Never write code comments anywhere in the codebase.**
+- Prohibited: Single-line `//`, multi-line `/* ... */`, and JSX `{/* ... */}` comments.
+- Applies across all files: TypeScript, TSX, JavaScript, CSS, HTML, and JSON.
+- Code must be clean and self-documenting. Use descriptive function names, explicit variable names, and clear control flow instead of explanatory comments.
+- Do not keep commented-out dead code. If code is unused or deprecated, delete it cleanly.
 
-### Tasks
+### Rule 2: Strict TypeScript & Type Safety
+- Never use `any` unless required for low-level third-party CJS/ESM interop. Wrap untyped interfaces in typed adapters immediately.
+- Every IPC channel and payload must have matching types in `src/shared/types/` and string constants in `src/shared/constants/channels.ts`.
+- Maintain strict null checks (`strict: true` in `tsconfig.json`). Safely handle `null` and `undefined` using optional chaining (`?.`) and nullish coalescing (`??`).
 
-- [ ] Init Electron project with TypeScript + ESM
-- [ ] Set up `electron-builder` for packaging
-- [ ] Create main window with basic routing between pages
-- [ ] Set up IPC bridge pattern (main ↔ renderer via `contextBridge`)
-- [ ] Implement `~/.launcher/` directory structure creation on first launch
-- [ ] Define `Instance` type in `shared/types.ts`:
-  ```ts
-  type Instance = {
-    id: string;
-    name: string;
-    mcVersion: string;
-    loader: "vanilla" | "fabric" | "quilt" | "forge" | "neoforge";
-    loaderVersion: string | null;
-    javaPath: string | null;
-    jvmArgs: string[];
-    ram: number; // MB
-    createdAt: string;
-  };
-  ```
-- [ ] Save/load instances from `instances/<id>/instance.json`
+### Rule 3: Process Isolation & Security
+- **Main Process:** Sole owner of filesystem, network requests, child processes, and OS APIs. Never pass raw Node.js modules (`fs`, `child_process`, `net`) to the renderer.
+- **Preload Bridge:** Use `contextBridge.exposeInMainWorld('launcherAPI', ...)` exclusively. Keep preload strictly typed, safe, and minimal.
+- **Renderer Process:** Runs with web sandboxing (`contextIsolation: true`, `nodeIntegration: false`). The renderer only accesses functionality through `window.launcherAPI.<domain>.<method>()`.
 
----
+### Rule 4: Exception Handling & App Stability
+- IPC handlers in the main process must **never throw uncaught exceptions** that could crash the application.
+- Always wrap IPC implementations in `try/catch` blocks and return structured responses (e.g. `{ success: true, ... }` or `{ success: false, error: error.message }`).
+- Handle network drops, slow connections, and corrupted manifests gracefully with automatic retries or descriptive user error messages.
 
-## Phase 2 — Microsoft Authentication
-
-**Goal:** Full Microsoft OAuth → Minecraft token flow.
-
-### The Token Chain (must implement in this order)
-
-1. Open Microsoft OAuth URL in a dedicated `BrowserWindow` (not shell)
-2. Capture the `code` from the redirect URL (`https://login.microsoftonline.com/...`)
-3. Exchange `code` for Microsoft access token + refresh token
-4. POST to XBox Live (`https://user.auth.xboxlive.com/user/authenticate`) with the MS token → get XBL token + UserHash
-5. POST to XSTS (`https://xsts.auth.xboxlive.com/xsts/authorize`) with XBL token → get XSTS token
-6. POST to Minecraft (`https://api.minecraftservices.com/authentication/login_with_xbox`) with XSTS token + UserHash → get Minecraft access token
-7. GET `https://api.minecraftservices.com/minecraft/profile` with the MC token → get UUID + username
-8. Store all tokens encrypted in `~/.launcher/auth.json`
-9. On startup: check token expiry, use refresh token to silently re-auth
-
-### Files
-
-- `src/main/core/auth/microsoft.ts` — full token chain
-- `src/main/ipc/auth.ts` — IPC handlers: `auth:login`, `auth:logout`, `auth:status`
-
-### Notes
-
-- Reference: `wiki.vg/Microsoft_Authentication_Scheme` — this is the canonical doc
-- Never store the Microsoft password, only OAuth tokens
-- Refresh token is valid for 90 days
+### Rule 5: File Operations & Path Handling
+- Always use Node's `path.join()` or `path.resolve()` for filesystem paths. Never concatenate paths with `+ '/'` or `+ '\\'`.
+- All writes to critical files (`instance.json`, `auth.json`, `mods.json`, `servers.dat`) must be atomic: write to a temporary file in the same directory first, then rename it over the target to prevent data corruption.
+- Always verify file integrity using checksum hashes (SHA-1 for Mojang assets and client jars, SHA-512 for Modrinth files).
 
 ---
 
-## Phase 3 — Minecraft Metadata + Vanilla Launch
+## 5. Mod Loader & Metadata Pipelines
 
-**Goal:** Download and launch vanilla Minecraft for any version.
+### Mojang Metadata
+- Manifest: `https://piston-meta.mojang.com/mc/game/version_manifest_v2.json`
+- Cache locally in `meta-cache/mojang/version_manifest.json` with a 1-hour TTL.
+- Parse version JSON to extract libraries, client download URL, asset index, main class, and JVM/game argument rules.
 
-### 3a — Version Metadata
-
-- [ ] Fetch version manifest from:
-      `https://piston-meta.mojang.com/mc/game/version_manifest_v2.json`
-- [ ] Cache it in `meta-cache/mojang/version_manifest.json`
-- [ ] For a chosen version, fetch its version JSON (URL is inside the manifest)
-  - Contains: `libraries`, `downloads` (client jar), `assetIndex`, `mainClass`, `arguments`
-- [ ] Parse and store locally
-
-### 3b — Asset Download
-
-- [ ] From version JSON, get `assetIndex.url` → download the asset index JSON
-- [ ] Asset index contains a map of `{ "path": { "hash": "...", "size": ... } }` for all game assets
-- [ ] Download each asset to `assets/objects/<first2ofhash>/<hash>`
-- [ ] Use SHA1 hash to verify each file before saving
-
-### 3c — Library Download
-
-- [ ] From version JSON `libraries` array: filter by OS rules, download each JAR
-- [ ] Verify SHA1 for each
-- [ ] Store at `libraries/<maven-path>` (convert Maven coordinates to path)
-- [ ] Handle native libraries (extract `.dll`/`.so`/`.dylib` to a `natives/` temp folder)
-
-### 3d — Client JAR
-
-- [ ] Download `client.jar` from version JSON `downloads.client`
-- [ ] Store at `libraries/com/mojang/minecraft/<version>/minecraft-<version>-client.jar`
-
-### 3e — Launch
-
-- [ ] Find correct Java for the MC version:
-  - MC < 1.17 → Java 8
-  - MC 1.17 → Java 16
-  - MC 1.18–1.20.4 → Java 17
-  - MC >= 1.20.5 → Java 21
-- [ ] Build JVM arguments from version JSON `arguments.jvm` (or `minecraftArguments` for legacy < 1.13)
-- [ ] Build game arguments from version JSON `arguments.game`
-- [ ] Replace template variables: `${auth_player_name}`, `${auth_uuid}`, `${auth_access_token}`, `${game_directory}`, `${assets_root}`, `${assets_index_name}`, `${version_name}`, `${version_type}`, `${natives_directory}`, `${classpath}`
-- [ ] Build classpath: all library JARs + client JAR joined by `:` (or `;` on Windows)
-- [ ] Spawn Java subprocess: `java [jvmArgs] -cp [classpath] [mainClass] [gameArgs]`
-- [ ] Stream stdout/stderr back to renderer via IPC for the console log view
-
----
-
-## Phase 4 — Prism Meta Server Integration
-
-**Goal:** Use Prism's metadata pipeline to get loader versions without touching Forge Maven directly.
-
-### How Prism Meta Works
-
+### Prism Meta Server
 - Base URL: `https://meta.prismlauncher.org/v1/`
-- `GET /index.json` → list of all available component UIDs with SHA256
-- `GET /<uid>/index.json` → list of all versions for that component
-- `GET /<uid>/<version>.json` → full version JSON for that specific component version
+- Component UIDs:
+  - Minecraft: `net.minecraft`
+  - Fabric: `net.fabricmc.fabric-loader`
+  - Quilt: `org.quiltmc.quilt-loader`
+  - Forge: `net.minecraftforge`
+  - NeoForge: `net.neoforged`
+- Fabric & Quilt: Merge loader libraries, replace `mainClass`, and inject loader arguments on top of the base Minecraft configuration.
+- Forge & NeoForge: Bootstrapped via Prism's `ForgeWrapper` library (`io.github.zekerzhayard.forgewrapper.installer.Main`).
 
-### UIDs to Use
+### Mojang Java Runtime API
+- Endpoint: `https://piston-meta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json`
+- Map Minecraft versions to runtimes:
+  - `< 1.17` → `jre-legacy` (Java 8)
+  - `1.17` → `java-runtime-alpha` (Java 16)
+  - `1.18` to `1.20.4` → `java-runtime-gamma` (Java 17)
+  - `>= 1.20.5` → `java-runtime-delta` (Java 21)
 
-| Loader    | UID                          |
-| --------- | ---------------------------- |
-| Minecraft | `net.minecraft`              |
-| Fabric    | `net.fabricmc.fabric-loader` |
-| Quilt     | `org.quiltmc.quilt-loader`   |
-| Forge     | `net.minecraftforge`         |
-| NeoForge  | `net.neoforged`              |
-| Java      | `net.minecraft.java`         |
+---
 
-### Files
+## 6. Git Workflow & Quality Assurance
 
-- `src/main/core/meta/prism.ts`
-  - `fetchIndex()` → returns all UIDs
-  - `fetchComponentVersions(uid)` → returns version list for that loader
-  - `fetchVersionJson(uid, version)` → returns the full component JSON
-  - Cache all responses in `meta-cache/` with TTL (e.g. 1 hour)
+### Branching Policy
+- `main` is the production branch. It must remain fully buildable, type-clean, and functional at all times.
+- All changes must be verified before pushing to `main`.
 
-### The Component JSON Format
+### Pre-Commit Verification Checklist
+Before committing and pushing changes, run the following verification pipeline in order:
 
-Each component JSON has:
-
-```json
-{
-  "uid": "net.fabricmc.fabric-loader",
-  "version": "0.15.11",
-  "requires": [{ "uid": "net.minecraft" }],
-  "libraries": [...],
-  "mainClass": "...",
-  "releaseTime": "..."
-}
+```bash
+npm run typecheck
+npm test
+npm run build
 ```
 
-Merge the loader component JSON on top of the base MC version JSON to get the final launch config.
+Every command must succeed with 0 errors before creating a commit.
+
+### Commit Message Conventions
+Use clear, concise, imperative conventional commit messages:
+- `feat: add multiplayer server ping and quick join`
+- `fix: resolve race condition in modpack override extraction`
+- `refactor: optimize concurrent download queue throttling`
+- `chore: bump version to 0.10.0 and update dependencies`
+- `docs: update readme with discord rich presence highlights`
 
 ---
 
-## Phase 5 — Mod Loader Installation
+## 7. README Maintenance Standards
 
-**Goal:** Install Fabric, Quilt, Forge, and NeoForge into an instance.
+`README.md` is the primary public storefront and documentation hub for the project. Keep it strictly synchronized with codebase changes:
 
-### Fabric & Quilt (Easy)
-
-- [ ] Fetch the loader component JSON from Prism meta (Phase 4)
-- [ ] Merge with the base MC version JSON:
-  - Combine `libraries` arrays
-  - Replace `mainClass` with loader's mainClass
-  - Merge `arguments`
-- [ ] Save merged JSON as the instance's launch config
-- [ ] Done — no separate installer step needed
-
-### Forge & NeoForge (Complex)
-
-Prism meta handles the hard part for you. Their server has already processed the installer JARs.
-
-- [ ] Fetch `net.minecraftforge` or `net.neoforged` version JSON from Prism meta
-- [ ] The JSON contains a `+forge` style entry with `install` data and post-processors
-- [ ] Download all listed libraries
-- [ ] Run the processors: these are Java JARs listed in the component JSON under `+forge`
-  - Spawn each processor as a Java subprocess with the listed args
-  - Processors do the binary patching, mapping remapping, etc.
-  - ForgeWrapper (maintained by Prism) handles the heavy lifting — it is listed as a library
-- [ ] After processors complete, the instance is ready to launch normally
-- [ ] For Forge/NeoForge launch: the mainClass will be `io.github.zekerzhayard.forgewrapper.installer.Main` (ForgeWrapper) which bootstraps Forge's own main class
-
-### Files
-
-- `src/main/loaders/fabric.ts` — fetchAndMerge(mcVersion, loaderVersion)
-- `src/main/loaders/quilt.ts` — same pattern as fabric
-- `src/main/loaders/forge.ts` — fetchAndInstall(mcVersion, loaderVersion)
-- `src/main/loaders/neoforge.ts` — same pattern as forge
+1. **Feature Highlights:** When a new capability is added (e.g. Server Management, Skin Studio, Discord RPC), document it thoroughly in the Highlights section with concise bullet points explaining real user value.
+2. **Roadmap Tracking:** Every completed milestone or major feature must have its corresponding checkbox marked `[x]` in the Roadmap section immediately.
+3. **Repository Tree:** Keep the directory tree diagram in the README accurate if directories are reorganized.
+4. **Prerequisites & Commands:** Keep prerequisites, scripts, and build instructions fully verified.
+5. **Tone:** Keep the tone confident, clean, informative, and human-crafted. Avoid marketing fluff or buzzwords.
 
 ---
 
-## Phase 6 — Java Runtime Management
+## 8. Release Process & Publishing Style
 
-**Goal:** Auto-download and manage the right Java for each MC version. Never ask the user to install Java.
+### Release Preparation Flow
+1. **Version Bump:** Update the version string in:
+   - `package.json` (`"version": "X.Y.Z"`)
+   - `src/shared/constants/defaults.ts` (`DEFAULT_LAUNCHER_VERSION = 'X.Y.Z'`)
+2. **Build Production Executables:**
+   ```bash
+   npm run package
+   ```
+   This executes `electron-vite build` followed by `electron-builder`, outputting artifacts into `dist/`.
+3. **Verify Build Artifacts in `dist/`:**
+   - Setup Installer: `Script-Minecraft-Launcher-Setup-X.Y.Z.exe`
+   - Blockmap file: `Script-Minecraft-Launcher-Setup-X.Y.Z.exe.blockmap`
+   - Portable binary: `Script.Minecraft.Launcher.X.Y.Z.exe`
+   - Auto-updater manifest: `latest.yml`
+4. **Git Commit & Push:**
+   ```bash
+   git add .
+   git commit -m "chore: release vX.Y.Z"
+   git push origin main
+   ```
+5. **Publish GitHub Release:**
+   Use GitHub CLI (`gh release create`) to publish the release tag:
+   ```bash
+   gh release create vX.Y.Z \
+     dist/Script-Minecraft-Launcher-Setup-X.Y.Z.exe \
+     dist/Script-Minecraft-Launcher-Setup-X.Y.Z.exe.blockmap \
+     dist/Script.Minecraft.Launcher.X.Y.Z.exe \
+     dist/latest.yml \
+     --title "Script Minecraft Launcher vX.Y.Z" \
+     --notes-file <release-notes-path>
+   ```
 
-### Mojang Java Runtimes API
-
-- Mojang hosts their own JRE builds for all platforms
-- Fetch: `https://piston-meta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json`
-- Returns available runtimes by platform: `java-runtime-alpha` (Java 16), `java-runtime-beta` (Java 17), `java-runtime-gamma` (Java 17.0.3+), `java-runtime-delta` (Java 17), `java-runtime-gamma-snapshot`, `jre-legacy` (Java 8)
-
-### Version → Runtime Mapping
-
-```ts
-function getRuntimeForVersion(mcVersion: string): string {
-  // Compare semver
-  if (mcVersion < "1.17") return "jre-legacy"; // Java 8
-  if (mcVersion < "1.18") return "java-runtime-alpha"; // Java 16
-  if (mcVersion < "1.20.5") return "java-runtime-gamma"; // Java 17
-  return "java-runtime-delta"; // Java 21
-}
-```
-
-### Files
-
-- `src/main/core/java/runtime.ts`
-  - `ensureJava(mcVersion)` → checks if correct Java exists in `~/.launcher/java/`, downloads if not
-  - `getJavaPath(mcVersion)` → returns path to `java` binary
-
----
-
-## Phase 7 — Mod Browser (Modrinth + CurseForge)
-
-**Goal:** Single unified mod browser that searches both platforms, filters by MC version and loader.
-
-### Modrinth API
-
-- Base: `https://api.modrinth.com/v2/`
-- No API key needed for read-only use
-- Key endpoints:
-  - `GET /search?query=<q>&facets=[["categories:<loader>"],["versions:<mcVersion>"],["project_type:mod"]]`
-  - `GET /project/<id>` — full mod info
-  - `GET /project/<id>/version?loaders=["fabric"]&game_versions=["1.20.1"]` — get versions
-- Response has `files[0].url` for direct download, `files[0].hashes.sha512` for verification
-
-### CurseForge API
-
-- Base: `https://api.curseforge.com/v1/`
-- Requires API key — get a free key at `console.curseforge.com`
-- Store key in launcher settings, never hardcode
-- Key endpoints:
-  - `GET /mods/search?gameId=432&searchFilter=<q>&modLoaderType=<loaderEnum>&gameVersion=<mcVersion>`
-  - Loader enum: Forge=1, Fabric=4, Quilt=5, NeoForge=6
-  - `GET /mods/<id>/files` — get available versions
-  - File objects include `downloadUrl` and `fileFingerprint`
-
-### Unified Layer
-
-- `src/main/core/mods/modrinth.ts` and `curseforge.ts` each implement the same interface:
-  ```ts
-  interface ModProvider {
-    search(
-      query: string,
-      mcVersion: string,
-      loader: string,
-    ): Promise<ModResult[]>;
-    getVersions(
-      modId: string,
-      mcVersion: string,
-      loader: string,
-    ): Promise<ModVersion[]>;
-    download(version: ModVersion, targetPath: string): Promise<void>;
-  }
-  ```
-- The IPC handler in `mods.ts` calls both providers, merges results, deduplicates by name
-
-### Mod Installation
-
-- [ ] Download JAR to `instances/<id>/minecraft/mods/<filename>`
-- [ ] Verify hash after download
-- [ ] Store installed mod metadata in `instances/<id>/mods.json`:
-  ```json
-  [
-    {
-      "name": "...",
-      "version": "...",
-      "source": "modrinth",
-      "id": "...",
-      "filename": "..."
-    }
-  ]
-  ```
-
----
-
-## Phase 8 — UI
-
-**Goal:** Clean, dark-themed launcher UI. Reference Music4All's dark sidebar UI pattern.
-
-### Pages
-
-- **Home** — recent instances, quick launch buttons, news feed (optional)
-- **Instances** — grid/list of instances, create new, edit, delete, launch
-- **Instance Detail** — mod list, loader info, java settings, per-instance RAM
-- **Mod Browser** — search bar, loader/version filters, tabbed Modrinth/CurseForge or unified, install button
-- **Settings** — global Java path override, CurseForge API key, RAM defaults, accounts
-
-### IPC Contract (main ↔ renderer)
-
-All IPC calls use `ipcMain.handle` / `ipcRenderer.invoke` pattern:
-
-```
-auth:login          → opens OAuth window, returns { username, uuid }
-auth:logout         → clears stored tokens
-auth:status         → returns current account or null
-
-instances:list      → returns Instance[]
-instances:create    → takes Instance config, returns id
-instances:delete    → takes id
-instances:launch    → takes id, returns void (streams logs via auth:log event)
-
-install:fabric      → { instanceId, mcVersion, loaderVersion }
-install:forge       → { instanceId, mcVersion, loaderVersion }
-install:neoforge    → { instanceId, mcVersion, loaderVersion }
-install:quilt       → { instanceId, mcVersion, loaderVersion }
-
-mods:search         → { query, mcVersion, loader, source: 'all'|'modrinth'|'curseforge' }
-mods:install        → { instanceId, modVersion }
-mods:list           → { instanceId } → ModEntry[]
-mods:remove         → { instanceId, filename }
-
-meta:mcVersions     → returns string[] of available MC versions
-meta:loaderVersions → { loader, mcVersion } → string[]
-```
-
----
-
-## Phase 9 — Download Manager
-
-**Goal:** Concurrent downloads with progress reporting, hash verification, retry logic.
-
-### Requirements
-
-- Download multiple files in parallel (limit to ~10 concurrent)
-- Verify SHA1/SHA256/SHA512 after download depending on source
-- Resume interrupted downloads (check file exists + correct size)
-- Report progress per-file and overall via IPC events to renderer
-
-### File
-
-- `src/main/utils/download.ts`
-  - `downloadFile(url, dest, expectedHash, hashAlgo)` — single file
-  - `downloadBatch(tasks: DownloadTask[])` — concurrent with queue
-  - Emits `download:progress` IPC events with `{ file, bytesReceived, totalBytes, overall }`
-
----
-
-## Implementation Order
-
-```
-Phase 1  →  Phase 2  →  Phase 3  →  Phase 4  →  Phase 5 (Fabric first)
-                                                         ↓
-Phase 8 (UI built alongside)   ←   Phase 7   ←   Phase 6
-                                                         ↓
-                                              Phase 5 (Forge/NeoForge)
-                                              Phase 9 (Download manager — integrate early)
-```
-
-Start Phase 9 (download manager) during Phase 3 since assets require it immediately.
-
----
-
-## Key External References
-
-| Resource                               | URL                                                                                                         |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Mojang version manifest                | `https://piston-meta.mojang.com/mc/game/version_manifest_v2.json`                                           |
-| Prism meta server                      | `https://meta.prismlauncher.org/v1/`                                                                        |
-| Prism meta source (Python scripts)     | `https://github.com/PrismLauncher/meta`                                                                     |
-| Prism meta-launcher (processed output) | `https://github.com/PrismLauncher/meta-launcher`                                                            |
-| Modrinth API docs                      | `https://docs.modrinth.com/`                                                                                |
-| CurseForge API console                 | `https://console.curseforge.com/`                                                                           |
-| Microsoft Auth flow                    | `https://wiki.vg/Microsoft_Authentication_Scheme`                                                           |
-| Launcher spec (how version JSONs work) | `https://wiki.vg/Game_files`                                                                                |
-| Mojang Java runtimes                   | `https://piston-meta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json` |
-
----
-
-## Key Constraints for the Agent
-
-- All file paths must be OS-aware. Use `path.join()` everywhere, never string concat paths.
-- All downloads must be verified with their hash before the file is used.
-- Java subprocess must be spawned with correct working directory set to the instance's `.minecraft/` folder.
-- IPC handlers in main process must never throw uncaught exceptions — wrap everything in try/catch and send structured error responses.
-- The renderer process has no direct filesystem or network access — all such operations go through IPC.
-- Tokens stored on disk must use Electron's `safeStorage` API for encryption.
-- Never hardcode the CurseForge API key — read from user settings.
-- Prism meta responses should be cached to disk with a TTL — don't hit the API on every UI refresh.
-- Instance directories are fully isolated — one instance's mods folder never affects another.
+### Release Notes Style Guide (STRICT)
+- **Authentic Human Voice:** Write in a natural, friendly, dev-to-user conversational tone.
+- **STRICTLY NO AI EMOJIS:** Do not use rocket emojis, sparkle emojis, fire emojis, or robotic AI formatting in release notes (e.g. no 🚀, ✨, 🔥, 🌟, 🎉). Keep it professional, genuine, and clean.
+- **Structured Sections:**
+  - **Greeting & Overview:** Brief warm intro stating what this version brings.
+  - **What is new in this release:** High-level overview of new features and capabilities.
+  - **Improvements & Fixes:** Polish, performance improvements, bug fixes, or stability enhancements.
+  - **Downloads Guide:** Clear breakdown explaining:
+    - `Script-Minecraft-Launcher-Setup-X.Y.Z.exe`: Recommended installer with desktop shortcuts and seamless background auto-updating.
+    - `Script.Minecraft.Launcher.X.Y.Z.exe`: Standalone portable version that runs without installation.
+- **No Duplicate Assets:** Never upload redundant files with conflicting naming conventions (e.g. do not upload both dotted and hyphenated filenames for the same binary). Always keep the asset set clean and matching `latest.yml`.

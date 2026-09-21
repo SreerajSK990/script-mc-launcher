@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Search,
   Download,
@@ -18,7 +18,8 @@ import {
   Loader2,
   ArrowUpDown,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ArrowUp
 } from 'lucide-react'
 import type { InstanceConfiguration, ModLoaderType } from '@shared/types/instance'
 import type {
@@ -77,7 +78,14 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
   const [currentPage, setCurrentPage] = useState(0)
   const [hasMoreResults, setHasMoreResults] = useState(true)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const PAGE_SIZE = 24
+  const [safetyLimit, setSafetyLimit] = useState(8)
+  const [showScrollTop, setShowScrollTop] = useState(false)
+  const PAGE_SIZE = 36
+
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+  const isFetchingRef = useRef(false)
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [selectedModForDetail, setSelectedModForDetail] = useState<ModSearchResult | null>(null)
   const [selectedModForVersions, setSelectedModForVersions] = useState<ModSearchResult | null>(null)
@@ -228,9 +236,10 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
 
   const executeSearch = useCallback(
     async (page = 0, isAppend = false) => {
-      if (!window.launcherAPI?.mods) return
+      if (!window.launcherAPI?.mods || isFetchingRef.current) return
 
       try {
+        isFetchingRef.current = true
         if (isAppend) {
           setIsLoadingMore(true)
         } else {
@@ -255,14 +264,12 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
         })
 
         if (isAppend) {
-          let addedCount = 0
           setSearchResults((prev) => {
             const existingKeys = new Set(prev.map((item) => `${item.source}:${item.id}`))
             const uniqueNew = results.filter((item) => !existingKeys.has(`${item.source}:${item.id}`))
-            addedCount = uniqueNew.length
             return [...prev, ...uniqueNew]
           })
-          setHasMoreResults(results.length >= PAGE_SIZE && addedCount > 0)
+          setHasMoreResults(results.length >= PAGE_SIZE)
         } else {
           setSearchResults(results)
           setHasMoreResults(results.length >= PAGE_SIZE)
@@ -275,6 +282,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
       } finally {
         setIsSearching(false)
         setIsLoadingMore(false)
+        isFetchingRef.current = false
       }
     },
     [searchQuery, selectedCategory, selectedSource, projectType, currentInstance]
@@ -282,24 +290,83 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
 
   useEffect(() => {
     setCurrentPage(0)
+    setSafetyLimit(8)
+    scrollContainerRef.current?.scrollTo({ top: 0 })
     const timer = setTimeout(() => {
       executeSearch(0, false)
     }, 300)
     return () => clearTimeout(timer)
   }, [executeSearch])
 
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    const container = scrollContainerRef.current
+    if (!sentinel || !container) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        if (entry?.isIntersecting) {
+          if (!hasMoreResults || isSearching || isLoadingMore || isFetchingRef.current) {
+            return
+          }
+          if (currentPage >= safetyLimit) {
+            return
+          }
+          if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current)
+          }
+          debounceTimerRef.current = setTimeout(() => {
+            executeSearch(currentPage + 1, true)
+          }, 200)
+        }
+      },
+      {
+        root: container,
+        rootMargin: '250px'
+      }
+    )
+
+    observer.observe(sentinel)
+
+    return () => {
+      observer.disconnect()
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+      }
+    }
+  }, [hasMoreResults, isSearching, isLoadingMore, currentPage, safetyLimit, executeSearch])
+
+  const handleContainerScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget
+    if (target.scrollTop > 500) {
+      if (!showScrollTop) setShowScrollTop(true)
+    } else {
+      if (showScrollTop) setShowScrollTop(false)
+    }
+  }
+
+  const handleScrollToTop = () => {
+    scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const handleContinueBrowsing = () => {
+    setSafetyLimit((prev) => prev + 8)
+    executeSearch(currentPage + 1, true)
+  }
+
   const handleLoadMore = () => {
-    if (isLoadingMore || isSearching || !hasMoreResults) return
+    if (isLoadingMore || isSearching || !hasMoreResults || isFetchingRef.current) return
     executeSearch(currentPage + 1, true)
   }
 
   const handleNextPage = () => {
-    if (isSearching || isLoadingMore || !hasMoreResults) return
+    if (isSearching || isLoadingMore || !hasMoreResults || isFetchingRef.current) return
     executeSearch(currentPage + 1, false)
   }
 
   const handlePrevPage = () => {
-    if (isSearching || isLoadingMore || currentPage <= 0) return
+    if (isSearching || isLoadingMore || currentPage <= 0 || isFetchingRef.current) return
     executeSearch(currentPage - 1, false)
   }
 
@@ -686,14 +753,14 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
                 </span>
                 {hasMoreResults && (
                   <span className="text-[11px] text-primary/80 font-medium">
-                    More results available below
+                    Scroll down for more results
                   </span>
                 )}
               </div>
             )}
           </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto pr-1.5 flex flex-col gap-4">
+          <div ref={scrollContainerRef} onScroll={handleContainerScroll} className="flex-1 min-h-0 overflow-y-auto pr-1.5 flex flex-col gap-4">
             {isSearching ? (
               <div className="flex-1 flex flex-col items-center justify-center py-24 text-slate-500 gap-3">
                 <RefreshCw size={28} className="animate-spin text-primary" />
@@ -825,6 +892,40 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
                   ))}
                 </div>
 
+                {isLoadingMore && (
+                  <div className="flex items-center justify-center py-6 gap-2 text-slate-400 text-xs">
+                    <Loader2 size={16} className="animate-spin text-primary" />
+                    <span>Loading more {projectType === 'modpack' ? 'modpacks' : 'mods'}...</span>
+                  </div>
+                )}
+
+                {currentPage >= safetyLimit && hasMoreResults && (
+                  <div className="flex flex-col items-center justify-center py-6 gap-2.5 border-t border-border-subtle/40 mt-2">
+                    <p className="text-xs text-slate-400">
+                      Showing <span className="font-semibold text-white">{searchResults.length}</span> items. Paused to conserve memory.
+                    </p>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={Download}
+                      onClick={handleContinueBrowsing}
+                      className="text-xs font-semibold"
+                    >
+                      Continue Browsing
+                    </Button>
+                  </div>
+                )}
+
+                {hasMoreResults && currentPage < safetyLimit && (
+                  <div ref={sentinelRef} className="h-6 w-full" />
+                )}
+
+                {!hasMoreResults && searchResults.length > 0 && (
+                  <div className="py-8 text-center text-xs text-slate-500 font-medium border-t border-border-subtle/30 mt-2">
+                    End of catalog • Showing all {searchResults.length} {projectType === 'modpack' ? 'modpacks' : 'mods'}
+                  </div>
+                )}
+
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 pb-8 border-t border-border-subtle/50 mt-2">
                   <div className="text-xs text-slate-400">
                     Page <span className="font-semibold text-white">{currentPage + 1}</span> • Showing{' '}
@@ -868,6 +969,17 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
                     </div>
                   </div>
                 </div>
+
+                {showScrollTop && (
+                  <button
+                    type="button"
+                    onClick={handleScrollToTop}
+                    className="fixed bottom-6 right-8 bg-background-card/90 hover:bg-background-surface border border-border-subtle hover:border-primary/50 text-slate-300 hover:text-white p-2.5 rounded-full shadow-lg backdrop-blur-md transition-all duration-200 z-30 group"
+                    title="Scroll to top"
+                  >
+                    <ArrowUp size={18} className="group-hover:-translate-y-0.5 transition-transform" />
+                  </button>
+                )}
               </>
             )}
           </div>

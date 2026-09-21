@@ -20,6 +20,7 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
   - Search thousands of mods on Modrinth with zero API keys or setup needed.
   - Optional CurseForge API integration if you have an API key.
   - Automatically filters mods to match your selected instance's Minecraft version and mod loader.
+  - **Rate-Safe Infinite Scrolling:** Smooth catalog browsing powered by `IntersectionObserver` with automated pre-fetching, concurrency guards, debounce protection, and a memory safety cap; browse deeply without arbitrary page limits.
   - **Live "Installed" Status Badges:** Mod cards in Mod Browser automatically indicate when a mod is already installed in the selected instance with a clean green status badge.
   - **In-App Version Switching:** Change or upgrade any mod's version directly from the Instance Details mods tab or the Mod Browser with one click; automatically removes old `.jar` / `.jar.disabled` files and updates configurations.
   - One-click mod installation directly into your instance's `mods/` folder with SHA-512 hash verification.
@@ -155,6 +156,7 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 - [x] **Auto-Updater:** Differential background updates from GitHub Releases with restart prompts and manual checks
 - [x] **Multiplayer Server Management:** Direct `servers.dat` management, real-time server ping, and one-click quick join
 - [x] **Discord Rich Presence (RPC):** Live status updates, in-game elapsed timers, loader badges, and interactive GitHub link button
+- [x] **Infinite Scroll Mod Browser:** Smooth auto-fetching with API rate limiting, concurrency locking, and memory protection
 
 ---
 
