@@ -1,13 +1,26 @@
 import { join } from 'node:path'
 import { promises as fs } from 'node:fs'
 import { randomUUID } from 'node:crypto'
-import type { SkinEntry, SkinModelType, PlayerSkinSearchResult, ApplySkinResult } from '@shared/types/skins'
-import { getSkinsDirectory } from '@main/services/paths'
+import type {
+  SkinEntry,
+  SkinModelType,
+  PlayerSkinSearchResult,
+  ApplySkinResult,
+  CapeEntry,
+  ApplyCapeResult
+} from '@shared/types/skins'
+import { getSkinsDirectory, getCapesDirectory } from '@main/services/paths'
 import { readJsonFile, writeJsonFileAtomic } from '@main/utils/filesystem'
 import { PRESET_SKINS } from './presetSkins'
+import { PRESET_CAPES } from './presetCapes'
 import { getCurrentAuthState } from '@main/services/auth'
 import { saveStoredAccounts } from '@main/core/auth/storage'
-import { uploadSkinToMojang, fetchMinecraftProfile } from '@main/core/auth/tokens'
+import {
+  uploadSkinToMojang,
+  fetchMinecraftProfile,
+  equipMojangCape,
+  unequipMojangCape
+} from '@main/core/auth/tokens'
 
 interface SkinsConfigFile {
   activeSkinId: string | null
@@ -257,4 +270,222 @@ export async function searchPlayerSkin(username: string): Promise<PlayerSkinSear
     model
   }
 }
+
+interface CapesConfigFile {
+  activeCapeId: string | null
+  capes: CapeEntry[]
+}
+
+function getCapesConfigFile(): string {
+  return join(getCapesDirectory(), 'capes.json')
+}
+
+async function loadCapesConfig(): Promise<CapesConfigFile> {
+  const configFile = getCapesConfigFile()
+  const data = await readJsonFile<CapesConfigFile>(configFile)
+  if (data && Array.isArray(data.capes)) {
+    return data
+  }
+  return {
+    activeCapeId: null,
+    capes: []
+  }
+}
+
+async function saveCapesConfig(cfg: CapesConfigFile): Promise<void> {
+  await writeJsonFileAtomic(getCapesConfigFile(), cfg)
+}
+
+export async function listAllCapes(): Promise<{ activeCapeId: string | null; capes: CapeEntry[] }> {
+  const cfg = await loadCapesConfig()
+  const mojangCapes: CapeEntry[] = []
+
+  try {
+    const authState = await getCurrentAuthState()
+    const activeAcc = authState.activeAccount
+    if (activeAcc && activeAcc.accountType === 'microsoft' && activeAcc.accessToken) {
+      const profile = await fetchMinecraftProfile(activeAcc.accessToken)
+      if (profile.capes && Array.isArray(profile.capes)) {
+        for (const c of profile.capes) {
+          const isActive = c.state === 'ACTIVE'
+          if (isActive && !cfg.activeCapeId) {
+            cfg.activeCapeId = c.id
+          }
+          mojangCapes.push({
+            id: c.id,
+            name: (c as { alias?: string }).alias ? `${(c as { alias?: string }).alias} Cape` : 'Mojang Cape',
+            alias: (c as { alias?: string }).alias,
+            textureUrl: c.url.replace(/^http:/, 'https:'),
+            source: 'mojang',
+            active: isActive
+          })
+        }
+      }
+    }
+  } catch {
+  }
+
+  const allCapes = [...mojangCapes, ...PRESET_CAPES, ...cfg.capes]
+  return {
+    activeCapeId: cfg.activeCapeId,
+    capes: allCapes
+  }
+}
+
+export async function setActiveCape(capeId: string | null): Promise<ApplyCapeResult> {
+  const cfg = await loadCapesConfig()
+
+  if (!capeId) {
+    cfg.activeCapeId = null
+    await saveCapesConfig(cfg)
+
+    try {
+      const authState = await getCurrentAuthState()
+      const activeAcc = authState.activeAccount
+      if (activeAcc && activeAcc.accountType === 'microsoft' && activeAcc.accessToken) {
+        await unequipMojangCape(activeAcc.accessToken)
+      }
+    } catch {
+    }
+
+    return {
+      success: true,
+      equippedToMojang: true,
+      message: 'Cape unequipped successfully.'
+    }
+  }
+
+  const { capes } = await listAllCapes()
+  const targetCape = capes.find((c) => c.id === capeId)
+  if (!targetCape) {
+    return {
+      success: false,
+      equippedToMojang: false,
+      message: 'Selected cape not found.'
+    }
+  }
+
+  cfg.activeCapeId = capeId
+  await saveCapesConfig(cfg)
+
+  if (targetCape.source === 'mojang') {
+    try {
+      const authState = await getCurrentAuthState()
+      const activeAcc = authState.activeAccount
+      if (activeAcc && activeAcc.accountType === 'microsoft' && activeAcc.accessToken) {
+        await equipMojangCape(activeAcc.accessToken, targetCape.id)
+        return {
+          success: true,
+          equippedToMojang: true,
+          message: `Cape "${targetCape.name}" equipped to your Minecraft account!`
+        }
+      }
+    } catch (err: any) {
+      return {
+        success: true,
+        equippedToMojang: false,
+        message: `Cape selected locally, but Mojang equip failed: ${err.message}`
+      }
+    }
+  }
+
+  return {
+    success: true,
+    equippedToMojang: false,
+    message: `Cape "${targetCape.name}" selected for preview.`
+  }
+}
+
+export async function saveCustomCape(params: {
+  name: string
+  textureData: string
+}): Promise<CapeEntry> {
+  const capesDir = getCapesDirectory()
+  const id = `custom_cape_${randomUUID().replace(/-/g, '')}`
+  const filename = `${id}.png`
+  const targetPath = join(capesDir, filename)
+
+  if (params.textureData.startsWith('data:image/')) {
+    const base64Data = params.textureData.split(',')[1]
+    const buffer = Buffer.from(base64Data, 'base64')
+    await fs.writeFile(targetPath, buffer)
+  } else if (params.textureData.startsWith('http://') || params.textureData.startsWith('https://')) {
+    const res = await fetch(params.textureData)
+    if (!res.ok) {
+      throw new Error(`Failed to download cape: HTTP ${res.status}`)
+    }
+    const buffer = Buffer.from(await res.arrayBuffer())
+    await fs.writeFile(targetPath, buffer)
+  } else {
+    await fs.copyFile(params.textureData, targetPath)
+  }
+
+  const newCape: CapeEntry = {
+    id,
+    name: params.name.trim() || 'Custom Cape',
+    textureUrl: targetPath,
+    source: 'custom',
+    createdAt: new Date().toISOString()
+  }
+
+  const cfg = await loadCapesConfig()
+  cfg.capes.push(newCape)
+  await saveCapesConfig(cfg)
+
+  return newCape
+}
+
+export async function deleteCustomCape(capeId: string): Promise<boolean> {
+  const cfg = await loadCapesConfig()
+  const targetIndex = cfg.capes.findIndex((c) => c.id === capeId)
+  if (targetIndex === -1) {
+    return false
+  }
+
+  const targetCape = cfg.capes[targetIndex]
+  if (targetCape.textureUrl && !targetCape.textureUrl.startsWith('http')) {
+    try {
+      await fs.unlink(targetCape.textureUrl)
+    } catch {
+    }
+  }
+
+  cfg.capes.splice(targetIndex, 1)
+  if (cfg.activeCapeId === capeId) {
+    cfg.activeCapeId = null
+  }
+  await saveCapesConfig(cfg)
+  return true
+}
+
+export async function fetchOptifineCape(username: string): Promise<CapeEntry | null> {
+  const trimmed = username.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  const optifineUrl = `http://optifine.net/capes/${encodeURIComponent(trimmed)}.png`
+  try {
+    const resp = await fetch(optifineUrl)
+    if (!resp.ok) {
+      return null
+    }
+
+    const buf = Buffer.from(await resp.arrayBuffer())
+    if (buf.length < 50) {
+      return null
+    }
+
+    const dataUrl = `data:image/png;base64,${buf.toString('base64')}`
+    return {
+      id: `optifine_${trimmed.toLowerCase()}`,
+      name: `${trimmed}'s OptiFine Cape`,
+      textureUrl: dataUrl,
+      source: 'optifine'
+    }
+  } catch {
+    return null
+  }
+}
+
 

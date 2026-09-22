@@ -24,3 +24,22 @@ export interface ApplySkinResult {
   message: string
 }
 
+export type BackEquipmentType = 'none' | 'cape' | 'elytra'
+
+export interface CapeEntry {
+  id: string
+  name: string
+  textureUrl: string
+  source: 'mojang' | 'preset' | 'optifine' | 'custom'
+  active?: boolean
+  alias?: string
+  createdAt?: string
+}
+
+export interface ApplyCapeResult {
+  success: boolean
+  equippedToMojang: boolean
+  message: string
+}
+
+

@@ -62,6 +62,10 @@ export function getSkinsDirectory(): string {
   return join(getLauncherRootDirectory(), 'skins')
 }
 
+export function getCapesDirectory(): string {
+  return join(getLauncherRootDirectory(), 'capes')
+}
+
 export async function initializeLauncherDirectories(): Promise<void> {
   const root = getLauncherRootDirectory()
   await ensureDirectoryExists(root)
@@ -72,5 +76,7 @@ export async function initializeLauncherDirectories(): Promise<void> {
   await ensureDirectoryExists(getMetaCacheDirectory())
   await ensureDirectoryExists(getFontsDirectory())
   await ensureDirectoryExists(getSkinsDirectory())
+  await ensureDirectoryExists(getCapesDirectory())
 }
+
 

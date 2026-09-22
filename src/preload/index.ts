@@ -160,7 +160,12 @@ const launcherAPI: LauncherAPI = {
     apply: (skinId: string) => ipcRenderer.invoke(IPC_CHANNELS.SKINS_APPLY, skinId),
     save: (params: any) => ipcRenderer.invoke(IPC_CHANNELS.SKINS_SAVE, params),
     delete: (skinId: string) => ipcRenderer.invoke(IPC_CHANNELS.SKINS_DELETE, skinId),
-    searchPlayer: (username: string) => ipcRenderer.invoke(IPC_CHANNELS.SKINS_SEARCH_PLAYER, username)
+    searchPlayer: (username: string) => ipcRenderer.invoke(IPC_CHANNELS.SKINS_SEARCH_PLAYER, username),
+    listCapes: () => ipcRenderer.invoke(IPC_CHANNELS.SKINS_LIST_CAPES),
+    applyCape: (capeId: string | null) => ipcRenderer.invoke(IPC_CHANNELS.SKINS_APPLY_CAPE, capeId),
+    saveCape: (params: any) => ipcRenderer.invoke(IPC_CHANNELS.SKINS_SAVE_CAPE, params),
+    deleteCape: (capeId: string) => ipcRenderer.invoke(IPC_CHANNELS.SKINS_DELETE_CAPE, capeId),
+    searchOptifineCape: (username: string) => ipcRenderer.invoke(IPC_CHANNELS.SKINS_SEARCH_OPTIFINE_CAPE, username)
   },
   gameSettings: {
     get: (instanceId: string) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET_GAME, instanceId),

@@ -87,6 +87,12 @@ export const IPC_CHANNELS = {
   SKINS_SEARCH_PLAYER: 'skins:search-player',
   SKINS_APPLY: 'skins:apply',
   SKINS_GET_ACTIVE: 'skins:get-active',
+  SKINS_LIST_CAPES: 'skins:list-capes',
+  SKINS_APPLY_CAPE: 'skins:apply-cape',
+  SKINS_SAVE_CAPE: 'skins:save-cape',
+  SKINS_DELETE_CAPE: 'skins:delete-cape',
+  SKINS_SEARCH_OPTIFINE_CAPE: 'skins:search-optifine-cape',
+
 
   SETTINGS_GET_GAME: 'settings:get-game',
   SETTINGS_SAVE_GAME: 'settings:save-game',

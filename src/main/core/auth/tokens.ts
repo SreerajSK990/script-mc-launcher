@@ -236,3 +236,38 @@ export async function uploadSkinToMojang(
   return true
 }
 
+export async function equipMojangCape(mcAccessToken: string, capeId: string): Promise<boolean> {
+  const response = await fetch('https://api.minecraftservices.com/minecraft/profile/capes/active', {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${mcAccessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ capeId })
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '')
+    throw new Error(`Failed to equip cape on Mojang: ${response.status} - ${errorText}`)
+  }
+
+  return true
+}
+
+export async function unequipMojangCape(mcAccessToken: string): Promise<boolean> {
+  const response = await fetch('https://api.minecraftservices.com/minecraft/profile/capes/active', {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${mcAccessToken}`
+    }
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '')
+    throw new Error(`Failed to unequip cape on Mojang: ${response.status} - ${errorText}`)
+  }
+
+  return true
+}
+
+

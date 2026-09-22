@@ -7,13 +7,15 @@ import {
   IdleAnimation,
   WaveAnimation
 } from 'skinview3d'
-import type { SkinModelType } from '@shared/types/skins'
+import type { SkinModelType, BackEquipmentType } from '@shared/types/skins'
 
 export type SkinAnimationType = 'idle' | 'walk' | 'run' | 'fly' | 'wave' | 'none'
 
 interface SkinViewer3DProps {
   skinUrl: string
   model?: SkinModelType
+  capeUrl?: string | null
+  backEquipment?: BackEquipmentType
   width?: number
   height?: number
   animation?: SkinAnimationType
@@ -24,6 +26,8 @@ interface SkinViewer3DProps {
 export const SkinViewer3D: React.FC<SkinViewer3DProps> = ({
   skinUrl,
   model = 'classic',
+  capeUrl = null,
+  backEquipment = 'cape',
   width = 300,
   height = 420,
   animation = 'walk',
@@ -46,7 +50,6 @@ export const SkinViewer3D: React.FC<SkinViewer3DProps> = ({
     viewer.autoRotate = autoRotate
     viewer.autoRotateSpeed = 1.0
 
-    // Apply animation
     applyAnimation(viewer, animation)
 
     if (skinUrl) {
@@ -62,6 +65,16 @@ export const SkinViewer3D: React.FC<SkinViewer3DProps> = ({
         })
     }
 
+    if (capeUrl && backEquipment !== 'none') {
+      viewer
+        .loadCape(capeUrl, {
+          backEquipment: backEquipment === 'elytra' ? 'elytra' : 'cape'
+        })
+        .catch((err) => {
+          console.warn('Initial cape load failed:', err)
+        })
+    }
+
     viewerRef.current = viewer
 
     return () => {
@@ -70,7 +83,6 @@ export const SkinViewer3D: React.FC<SkinViewer3DProps> = ({
     }
   }, [])
 
-  // Update skin texture or model
   useEffect(() => {
     if (!viewerRef.current || !skinUrl) return
     viewerRef.current
@@ -87,19 +99,39 @@ export const SkinViewer3D: React.FC<SkinViewer3DProps> = ({
       })
   }, [skinUrl, model])
 
-  // Update animation
+  useEffect(() => {
+    if (!viewerRef.current) return
+    if (capeUrl && backEquipment !== 'none') {
+      try {
+        const res = viewerRef.current.loadCape(capeUrl, {
+          backEquipment: backEquipment === 'elytra' ? 'elytra' : 'cape'
+        })
+        if (res && typeof res.catch === 'function') {
+          res.catch((err) => {
+            console.warn('Failed to update cape in 3D viewer:', err)
+          })
+        }
+      } catch (err) {
+        console.warn('Failed to update cape in 3D viewer:', err)
+      }
+    } else {
+      try {
+        viewerRef.current.loadCape(null)
+      } catch {}
+    }
+  }, [capeUrl, backEquipment])
+
+
   useEffect(() => {
     if (!viewerRef.current) return
     applyAnimation(viewerRef.current, animation)
   }, [animation])
 
-  // Update autoRotate
   useEffect(() => {
     if (!viewerRef.current) return
     viewerRef.current.autoRotate = autoRotate
   }, [autoRotate])
 
-  // Resize canvas when width/height changes
   useEffect(() => {
     if (!viewerRef.current) return
     viewerRef.current.setSize(width, height)

@@ -33,7 +33,14 @@ import type {
   AddServerPayload,
   RemoveServerPayload
 } from './servers'
-import type { SkinEntry, SkinModelType, PlayerSkinSearchResult, ApplySkinResult } from './skins'
+import type {
+  SkinEntry,
+  SkinModelType,
+  PlayerSkinSearchResult,
+  ApplySkinResult,
+  CapeEntry,
+  ApplyCapeResult
+} from './skins'
 import type { SetDiscordActivityPayload } from './discord'
 
 export interface WindowControlActions {
@@ -184,6 +191,11 @@ export interface SkinActions {
   }) => Promise<SkinEntry>
   delete: (skinId: string) => Promise<boolean>
   searchPlayer: (username: string) => Promise<PlayerSkinSearchResult>
+  listCapes: () => Promise<{ activeCapeId: string | null; capes: CapeEntry[] }>
+  applyCape: (capeId: string | null) => Promise<ApplyCapeResult>
+  saveCape: (params: { name: string; textureData: string }) => Promise<CapeEntry>
+  deleteCape: (capeId: string) => Promise<boolean>
+  searchOptifineCape: (username: string) => Promise<CapeEntry | null>
 }
 
 export interface GameSettingsActions {

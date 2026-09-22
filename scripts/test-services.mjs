@@ -531,7 +531,7 @@ async function runTests() {
 
   const { installDroppedModFiles } = await import('../src/main/core/mods/drop.ts')
   const { getInstanceServers, getInstanceWorlds } = await import('../src/main/core/minecraft/servers.ts')
-  const { listAllSkins, saveSkin, setActiveSkin, deleteSkin } = await import('../src/main/core/system/skins.ts')
+  const { listAllSkins, saveSkin, setActiveSkin, deleteSkin, listAllCapes, saveCustomCape, setActiveCape, deleteCustomCape } = await import('../src/main/core/system/skins.ts')
 
   // 1. Dropped mod test
   const dropTestInstance = await createNewInstance({
@@ -605,6 +605,42 @@ async function runTests() {
     throw new Error('Custom skin was not deleted!')
   }
   console.log('Verified skin deletion.')
+
+  const initialCapes = await listAllCapes()
+  if (initialCapes.capes.length < 14) {
+    throw new Error('Expected at least 14 official preset capes!')
+  }
+  console.log('Verified official preset capes count:', initialCapes.capes.length)
+
+  const savedCape = await saveCustomCape({
+    name: 'Champion Cape',
+    textureData: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+  })
+  if (savedCape.name !== 'Champion Cape' || savedCape.source !== 'custom') {
+    throw new Error('Failed to save custom cape!')
+  }
+  console.log('Saved custom cape successfully:', savedCape.id)
+
+  await setActiveCape(savedCape.id)
+  const capesAfterSet = await listAllCapes()
+  if (capesAfterSet.activeCapeId !== savedCape.id) {
+    throw new Error('Active cape ID was not updated!')
+  }
+  console.log('Verified active cape update.')
+
+  await setActiveCape(null)
+  const capesAfterUnequip = await listAllCapes()
+  if (capesAfterUnequip.activeCapeId !== null) {
+    throw new Error('Active cape was not unequipped!')
+  }
+  console.log('Verified cape unequip.')
+
+  await deleteCustomCape(savedCape.id)
+  const capesAfterDelete = await listAllCapes()
+  if (capesAfterDelete.capes.some((c) => c.id === savedCape.id)) {
+    throw new Error('Custom cape was not deleted!')
+  }
+  console.log('Verified cape deletion.')
 
   const initialSettings = await readGameSettings(dropTestInstance.id)
   if (initialSettings.vanilla.renderDistance !== 12 || initialSettings.hasOptionsTxt) {
