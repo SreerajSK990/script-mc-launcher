@@ -14,7 +14,9 @@ import {
   Coffee,
   Sparkles,
   RotateCcw,
-  Loader2
+  Loader2,
+  Eye,
+  EyeOff
 } from 'lucide-react'
 import type { SystemEnvironment } from '@shared/types/system'
 import type { UpdateStatus, UpdateProgressEvent, UpdateInfo } from '@shared/types/updater'
@@ -47,6 +49,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ systemEnv }) => {
   const [updateProgress, setUpdateProgress] = useState<UpdateProgressEvent | null>(null)
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   const [downloadedUpdateInfo, setDownloadedUpdateInfo] = useState<UpdateInfo | null>(null)
+  const [redactIps, setRedactIps] = useState(() => {
+    return localStorage.getItem('script_launcher_redact_ips') !== 'false'
+  })
+
+  const toggleRedactIps = () => {
+    setRedactIps((prev) => {
+      const next = !prev
+      localStorage.setItem('script_launcher_redact_ips', String(next))
+      return next
+    })
+  }
 
   useEffect(() => {
     if (!window.launcherAPI?.updater) return
@@ -414,6 +427,37 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ systemEnv }) => {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+
+        <div className="pt-6 border-t border-border-subtle/60">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                <ShieldCheck size={16} className="text-emerald-400" />
+                Privacy & Streamer Mode
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Protect sensitive multiplayer server IP addresses and ports from leaking
+              </p>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-background-darkest border border-border-subtle flex items-center justify-between">
+            <div>
+              <span className="text-sm font-medium text-slate-200 block">Redact Server IP Addresses</span>
+              <span className="text-xs text-slate-400">
+                Masks multiplayer server IPs on the dashboard and instance server tabs (click eye icon to peek)
+              </span>
+            </div>
+            <Button
+              variant={redactIps ? 'primary' : 'ghost'}
+              size="sm"
+              icon={redactIps ? EyeOff : Eye}
+              onClick={toggleRedactIps}
+            >
+              {redactIps ? 'Redacted' : 'Visible'}
+            </Button>
           </div>
         </div>
 

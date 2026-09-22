@@ -5,7 +5,9 @@ import {
   Compass,
   Users,
   RefreshCw,
-  Loader2
+  Loader2,
+  Eye,
+  EyeOff
 } from 'lucide-react'
 import type { InstanceConfiguration } from '@shared/types/instance'
 import type { SystemEnvironment } from '@shared/types/system'
@@ -41,6 +43,31 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const [quickPlayTargets, setQuickPlayTargets] = useState<QuickPlayTarget[]>([])
   const [pingStatuses, setPingStatuses] = useState<Record<string, ServerPingStatus>>({})
   const [isPinging, setIsPinging] = useState(false)
+  const [redactIps, setRedactIps] = useState(() => {
+    return localStorage.getItem('script_launcher_redact_ips') !== 'false'
+  })
+  const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set())
+
+  const toggleRedactIps = () => {
+    setRedactIps((prev) => {
+      const next = !prev
+      localStorage.setItem('script_launcher_redact_ips', String(next))
+      return next
+    })
+    setRevealedIds(new Set())
+  }
+
+  const toggleRevealTarget = (targetId: string) => {
+    setRevealedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(targetId)) {
+        next.delete(targetId)
+      } else {
+        next.add(targetId)
+      }
+      return next
+    })
+  }
 
   const loadQuickPlayTargets = useCallback(async () => {
     if (!window.launcherAPI?.servers) return
@@ -153,16 +180,28 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </p>
           </div>
 
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={isPinging ? Loader2 : RefreshCw}
-            isLoading={isPinging}
-            onClick={loadQuickPlayTargets}
-            title="Refresh server status"
-          >
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={redactIps ? EyeOff : Eye}
+              onClick={toggleRedactIps}
+              title={redactIps ? 'Show all server IPs' : 'Redact all server IPs (Streamer Mode)'}
+            >
+              {redactIps ? 'IPs Hidden' : 'Show IPs'}
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={isPinging ? Loader2 : RefreshCw}
+              isLoading={isPinging}
+              onClick={loadQuickPlayTargets}
+              title="Refresh server status"
+            >
+              Refresh
+            </Button>
+          </div>
         </div>
 
         {quickPlayTargets.length === 0 ? (
@@ -216,10 +255,34 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                           )}
                         </div>
 
-                        <p className="text-xs text-slate-400 font-mono truncate mt-0.5">
-                          {target.ip}
-                          {target.port !== 25565 ? `:${target.port}` : ''}
-                        </p>
+                        {(() => {
+                          const isHidden = redactIps ? !revealedIds.has(target.id) : false
+                          return (
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <p className="text-xs text-slate-400 font-mono truncate">
+                                {isHidden ? (
+                                  <span className="tracking-widest text-slate-500 select-none">••••••••••••</span>
+                                ) : (
+                                  <>
+                                    {target.ip}
+                                    {target.port !== 25565 ? `:${target.port}` : ''}
+                                  </>
+                                )}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  toggleRevealTarget(target.id)
+                                }}
+                                className="text-slate-500 hover:text-slate-300 transition-colors p-0.5 rounded focus:outline-none shrink-0"
+                                title={isHidden ? 'Reveal server IP' : 'Hide server IP'}
+                              >
+                                {isHidden ? <Eye size={11} /> : <EyeOff size={11} />}
+                              </button>
+                            </div>
+                          )
+                        })()}
 
                         {ping?.motd && (
                           <p className="text-[11px] text-slate-400 truncate mt-1">

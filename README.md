@@ -41,6 +41,7 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
   - Built-in server pinger displays real-time latency (ms), online player counts, version requirements, and MOTD.
   - One-click "Join Server" boots Minecraft with `--quickPlayMultiplayer` and connects you straight to the server immediately.
   - Test server ping connection in real-time inside the "Add Server" modal before saving.
+  - **Server IP Redaction (Streamer Mode):** Masks sensitive multiplayer server IP addresses and ports across dashboard quick-play cards and instance server lists (`••••••••••••`) with one-click eye toggle peek buttons to prevent leaking private addresses or home IPs during livestreams.
 - **In-App Screenshots Gallery:**
   - Visual gallery scanning each instance's `screenshots/` directory automatically.
   - High-resolution Lightbox modal viewer for full-screen inspection.
@@ -161,6 +162,7 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 - [x] **Discord Rich Presence (RPC):** Live status updates, in-game elapsed timers, loader badges, and interactive GitHub link button
 - [x] **Infinite Scroll Mod Browser:** Smooth auto-fetching with API rate limiting, concurrency locking, and memory protection
 - [x] **Snapshot & Historical Versions:** Full access to Mojang snapshots, release candidates, and historical beta/alpha versions with loader compatibility safety
+- [x] **Server IP Privacy & Streamer Mode:** Server IP redaction on dashboard and instance management with one-click reveal toggles
 
 ---
 

@@ -8,7 +8,9 @@ import {
   Wifi,
   WifiOff,
   RefreshCw,
-  Loader2
+  Loader2,
+  Eye,
+  EyeOff
 } from 'lucide-react'
 import type { InstanceConfiguration } from '@shared/types/instance'
 import type { MinecraftServerEntry, ServerPingStatus } from '@shared/types/servers'
@@ -36,6 +38,31 @@ export const InstanceServersSection: React.FC<InstanceServersSectionProps> = ({
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [editingServer, setEditingServer] = useState<MinecraftServerEntry | null>(null)
   const [serverToDelete, setServerToDelete] = useState<MinecraftServerEntry | null>(null)
+  const [redactIps, setRedactIps] = useState(() => {
+    return localStorage.getItem('script_launcher_redact_ips') !== 'false'
+  })
+  const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set())
+
+  const toggleRedactIps = () => {
+    setRedactIps((prev) => {
+      const next = !prev
+      localStorage.setItem('script_launcher_redact_ips', String(next))
+      return next
+    })
+    setRevealedIds(new Set())
+  }
+
+  const toggleRevealServer = (serverId: string) => {
+    setRevealedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(serverId)) {
+        next.delete(serverId)
+      } else {
+        next.add(serverId)
+      }
+      return next
+    })
+  }
 
   const loadServers = useCallback(async () => {
     if (!window.launcherAPI?.servers) return
@@ -120,6 +147,16 @@ export const InstanceServersSection: React.FC<InstanceServersSectionProps> = ({
         </div>
 
         <div className="flex items-center gap-2.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={redactIps ? EyeOff : Eye}
+            onClick={toggleRedactIps}
+            title={redactIps ? 'Show all server IPs' : 'Redact all server IPs (Streamer Mode)'}
+          >
+            {redactIps ? 'IPs Hidden' : 'Show IPs'}
+          </Button>
+
           <Button
             variant="ghost"
             size="sm"
@@ -217,9 +254,31 @@ export const InstanceServersSection: React.FC<InstanceServersSectionProps> = ({
                       </div>
                     </div>
 
-                    <p className="text-xs font-mono text-slate-400 truncate mt-0.5">
-                      {server.port && server.port !== 25565 ? `${server.ip}:${server.port}` : server.ip}
-                    </p>
+                    {(() => {
+                      const isHidden = redactIps ? !revealedIds.has(server.id) : false
+                      return (
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <p className="text-xs font-mono text-slate-400 truncate">
+                            {isHidden ? (
+                              <span className="tracking-widest text-slate-500 select-none">••••••••••••</span>
+                            ) : (
+                              server.port && server.port !== 25565 ? `${server.ip}:${server.port}` : server.ip
+                            )}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleRevealServer(server.id)
+                            }}
+                            className="text-slate-500 hover:text-slate-300 transition-colors p-0.5 rounded focus:outline-none shrink-0"
+                            title={isHidden ? 'Reveal server IP' : 'Hide server IP'}
+                          >
+                            {isHidden ? <Eye size={11} /> : <EyeOff size={11} />}
+                          </button>
+                        </div>
+                      )
+                    })()}
 
                     {isOnline && (
                       <div className="mt-2 text-[11px] font-mono text-slate-400 flex items-center justify-between">
