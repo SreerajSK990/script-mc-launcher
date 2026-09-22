@@ -12,7 +12,10 @@ import {
   disbandGroup,
   deleteGroup,
   saveInstanceCustomIcon,
-  toggleInstanceFavorite
+  toggleInstanceFavorite,
+  repairInstance,
+  backupInstanceSaves,
+  cloneInstance
 } from '@main/services/instances'
 import { getInstancePath } from '@main/services/paths'
 
@@ -64,6 +67,18 @@ export function registerInstanceIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.INSTANCES_TOGGLE_FAVORITE, async (_event, instanceId: string) => {
     return await toggleInstanceFavorite(instanceId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.INSTANCES_REPAIR, async (_event, instanceId: string) => {
+    return await repairInstance(instanceId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.INSTANCES_BACKUP_SAVES, async (_event, instanceId: string) => {
+    return await backupInstanceSaves(instanceId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.INSTANCES_CLONE, async (_event, instanceId: string, customName?: string) => {
+    return await cloneInstance(instanceId, customName)
   })
 }
 

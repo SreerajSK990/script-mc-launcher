@@ -25,7 +25,8 @@ import {
   Loader2,
   Dices,
   Upload,
-  Server
+  Server,
+  Wrench
 } from 'lucide-react'
 import type { InstanceConfiguration, ModLoaderType } from '@shared/types/instance'
 import type { InstalledModRecord, ModUpdateInfo } from '@shared/types/mods'
@@ -36,6 +37,7 @@ import { ConfirmModal } from '@renderer/components/common/ConfirmModal'
 import { ChangeModVersionModal } from '@renderer/components/mods/ChangeModVersionModal'
 import { MinecraftSettingsEditor } from '@renderer/components/settings/MinecraftSettingsEditor'
 import { InstanceServersSection } from '@renderer/components/servers/InstanceServersSection'
+import { InstanceInstallationSection } from '@renderer/components/instances/InstanceInstallationSection'
 import {
   getMinecraftIconById,
   getRandomMinecraftIcon
@@ -49,9 +51,10 @@ interface InstanceDetailPageProps {
   onOpenFolder: (instanceId: string) => void
   onBrowseMods: (instance: InstanceConfiguration) => void
   onInstanceUpdated: (updated: InstanceConfiguration) => void
+  onNotification?: (message: string) => void
 }
 
-type DetailSubTab = 'config' | 'mods' | 'servers' | 'screenshots' | 'mcSettings'
+type DetailSubTab = 'config' | 'installation' | 'mods' | 'servers' | 'screenshots' | 'mcSettings'
 
 const RAM_PRESETS = [
   { label: '2 GB', mb: 2048 },
@@ -113,7 +116,8 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
   onQuickPlay,
   onOpenFolder,
   onBrowseMods,
-  onInstanceUpdated
+  onInstanceUpdated,
+  onNotification
 }) => {
   const [activeTab, setActiveTab] = useState<DetailSubTab>('config')
 
@@ -460,9 +464,20 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
                 {instance.loaderType}
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Minecraft {instance.minecraftVersion} • {(ramMb / 1024).toFixed(1)} GB RAM
-            </p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-xs text-slate-400">
+                Minecraft {instance.minecraftVersion} • {(ramMb / 1024).toFixed(1)} GB RAM
+              </span>
+              <button
+                type="button"
+                onClick={() => setActiveTab('installation')}
+                className="text-[10px] px-2 py-0.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/20 font-medium transition-colors cursor-pointer flex items-center gap-1"
+                title="Edit Platform & Minecraft Version"
+              >
+                <Wrench size={10} />
+                <span>Change Version</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -500,6 +515,18 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
         >
           <SlidersHorizontal size={16} />
           <span>Configuration & Settings</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('installation')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+            activeTab === 'installation'
+              ? 'bg-primary/10 text-primary border border-primary/20'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-background-card'
+          }`}
+        >
+          <Wrench size={16} />
+          <span>Installation</span>
         </button>
 
         <button
@@ -828,6 +855,14 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
             </Button>
           </div>
         </div>
+      )}
+
+      {activeTab === 'installation' && (
+        <InstanceInstallationSection
+          instance={instance}
+          onInstanceUpdated={onInstanceUpdated}
+          onNotification={(msg) => onNotification?.(msg)}
+        />
       )}
 
       {activeTab === 'mods' && (

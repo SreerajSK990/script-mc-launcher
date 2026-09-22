@@ -63,6 +63,9 @@ export interface InstanceActions {
   deleteGroup: (groupName: string) => Promise<void>
   saveCustomIcon: (instanceId: string, dataUrl: string) => Promise<string>
   toggleFavorite: (instanceId: string) => Promise<InstanceConfiguration>
+  repair: (instanceId: string) => Promise<{ success: boolean; message: string }>
+  backupSaves: (instanceId: string) => Promise<{ success: boolean; backupPath: string }>
+  clone: (instanceId: string, customName?: string) => Promise<InstanceConfiguration>
 }
 
 

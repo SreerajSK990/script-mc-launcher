@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { CheckCircle2, AlertTriangle, AlertCircle, Info, X } from 'lucide-react'
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info'
 
 export interface ToastNotificationProps {
+  id?: string | number
   message: string | null
   type?: ToastType
   durationMs?: number
@@ -11,12 +12,18 @@ export interface ToastNotificationProps {
 }
 
 export const ToastNotification: React.FC<ToastNotificationProps> = ({
+  id,
   message,
   type = 'success',
   durationMs = 5000,
   onClose
 }) => {
   const [progress, setProgress] = useState(100)
+  const onCloseRef = useRef(onClose)
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
 
   useEffect(() => {
     if (!message) return
@@ -29,12 +36,12 @@ export const ToastNotification: React.FC<ToastNotificationProps> = ({
       setProgress(remainingPct)
       if (remainingPct <= 0) {
         clearInterval(interval)
-        onClose()
+        onCloseRef.current()
       }
     }, 50)
 
     return () => clearInterval(interval)
-  }, [message, durationMs, onClose])
+  }, [id, message, durationMs])
 
   if (!message) return null
 

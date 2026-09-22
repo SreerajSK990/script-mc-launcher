@@ -28,7 +28,13 @@ const launcherAPI: LauncherAPI = {
     saveCustomIcon: (instanceId: string, dataUrl: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_SAVE_CUSTOM_ICON, instanceId, dataUrl),
     toggleFavorite: (instanceId: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_TOGGLE_FAVORITE, instanceId)
+      ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_TOGGLE_FAVORITE, instanceId),
+    repair: (instanceId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_REPAIR, instanceId),
+    backupSaves: (instanceId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_BACKUP_SAVES, instanceId),
+    clone: (instanceId: string, customName?: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_CLONE, instanceId, customName)
   },
 
 

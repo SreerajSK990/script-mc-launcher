@@ -7,12 +7,15 @@ import type {
   UpdateInstancePayload
 } from '@shared/types/instance'
 import { DEFAULT_INSTANCE_SETTINGS } from '@shared/constants/defaults'
+import AdmZip from 'adm-zip'
 import {
   getInstancesDirectory,
   getInstancePath,
   getInstanceConfigPath,
-  getInstanceMinecraftPath
+  getInstanceMinecraftPath,
+  getMetaCacheDirectory
 } from '@main/services/paths'
+import { isInstanceRunning } from '@main/services/launch'
 import {
   ensureDirectoryExists,
   readJsonFile,
@@ -221,6 +224,111 @@ export async function toggleInstanceFavorite(instanceId: string): Promise<Instan
     id: instanceId,
     isFavorite: updatedFavorite
   })
+}
+
+export async function repairInstance(instanceId: string): Promise<{ success: boolean; message: string }> {
+  const instance = await getInstanceById(instanceId)
+  if (!instance) {
+    throw new Error(`Instance ${instanceId} does not exist.`)
+  }
+
+  if (isInstanceRunning(instanceId)) {
+    throw new Error('Cannot repair an instance while it is actively running. Please close the game first.')
+  }
+
+  const nativesDir = join(getInstancePath(instanceId), 'natives')
+  if (await doesPathExist(nativesDir)) {
+    await removeDirectorySafely(nativesDir)
+  }
+
+  const metaCacheDir = getMetaCacheDirectory()
+  const versionMetaFile = join(metaCacheDir, `version-${instance.minecraftVersion}.json`)
+  if (await doesPathExist(versionMetaFile)) {
+    try {
+      await fs.unlink(versionMetaFile)
+    } catch {}
+  }
+
+  return {
+    success: true,
+    message: `Instance "${instance.name}" repaired successfully. Dependencies and runtime libraries will be verified and re-downloaded on next launch.`
+  }
+}
+
+export async function backupInstanceSaves(instanceId: string): Promise<{ success: boolean; backupPath: string }> {
+  const instance = await getInstanceById(instanceId)
+  if (!instance) {
+    throw new Error(`Instance ${instanceId} does not exist.`)
+  }
+
+  const savesDir = join(getInstanceMinecraftPath(instanceId), 'saves')
+  const savesExist = await doesPathExist(savesDir)
+  if (!savesExist) {
+    return {
+      success: true,
+      backupPath: 'No saves directory found to backup.'
+    }
+  }
+
+  const backupsDir = join(getInstancePath(instanceId), 'backups')
+  await ensureDirectoryExists(backupsDir)
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const backupFileName = `saves-backup-${timestamp}.zip`
+  const backupFilePath = join(backupsDir, backupFileName)
+
+  const zip = new AdmZip()
+  zip.addLocalFolder(savesDir)
+  zip.writeZip(backupFilePath)
+
+  return {
+    success: true,
+    backupPath: backupFilePath
+  }
+}
+
+export async function cloneInstance(
+  instanceId: string,
+  customName?: string
+): Promise<InstanceConfiguration> {
+  const source = await getInstanceById(instanceId)
+  if (!source) {
+    throw new Error(`Instance ${instanceId} does not exist.`)
+  }
+
+  const newName = customName?.trim() || `${source.name} (Backup)`
+  const newInstance = await createNewInstance({
+    name: newName,
+    minecraftVersion: source.minecraftVersion,
+    loaderType: source.loaderType,
+    loaderVersion: source.loaderVersion,
+    ramAllocationMegabytes: source.ramAllocationMegabytes,
+    jvmArguments: source.jvmArguments,
+    icon: source.icon,
+    group: source.group
+  })
+
+  const sourceMinecraftDir = getInstanceMinecraftPath(source.id)
+  const targetMinecraftDir = getInstanceMinecraftPath(newInstance.id)
+
+  if (await doesPathExist(sourceMinecraftDir)) {
+    await ensureDirectoryExists(targetMinecraftDir)
+    const items = await fs.readdir(sourceMinecraftDir)
+    for (const item of items) {
+      if (item === 'crash-reports' || item === 'logs' || item === '.fabric' || item === '.quilt') {
+        continue
+      }
+      const srcItem = join(sourceMinecraftDir, item)
+      const dstItem = join(targetMinecraftDir, item)
+      try {
+        await fs.cp(srcItem, dstItem, { recursive: true })
+      } catch (copyErr) {
+        console.warn(`Failed to copy item during clone: ${item}`, copyErr)
+      }
+    }
+  }
+
+  return newInstance
 }
 
 

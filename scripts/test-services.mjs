@@ -6,7 +6,16 @@ const testSandboxDir = join(tmpdir(), `.scriptlauncher-test-${Date.now()}`)
 process.env.LAUNCHER_DATA_DIR = testSandboxDir
 
 import { getLauncherRootDirectory, initializeLauncherDirectories } from '../src/main/services/paths.ts'
-import { createNewInstance, listAllInstances, getInstanceById, deleteInstanceById } from '../src/main/services/instances.ts'
+import {
+  createNewInstance,
+  listAllInstances,
+  getInstanceById,
+  deleteInstanceById,
+  updateExistingInstance,
+  repairInstance,
+  backupInstanceSaves,
+  cloneInstance
+} from '../src/main/services/instances.ts'
 import { getSystemEnvironment } from '../src/main/services/system.ts'
 import {
   loginWithOfflineAccount,
@@ -733,6 +742,36 @@ async function runTests() {
   }
   console.log('Verified instance servers.dat management (add, list, remove).')
 
+  const clonedForUpgrade = await cloneInstance(dropTestInstance.id, 'Cloned For Upgrade Test')
+  if (clonedForUpgrade.name !== 'Cloned For Upgrade Test' || clonedForUpgrade.minecraftVersion !== '1.20.1') {
+    throw new Error('Failed to clone instance for upgrade test!')
+  }
+  console.log('Verified cloneInstance for upgrade backup.')
+
+  const backupSavesResult = await backupInstanceSaves(dropTestInstance.id)
+  if (!backupSavesResult.success) {
+    throw new Error('Failed to backup instance saves!')
+  }
+  console.log('Verified backupInstanceSaves successfully.')
+
+  const upgraded = await updateExistingInstance({
+    id: dropTestInstance.id,
+    minecraftVersion: '1.21.1',
+    loaderType: 'forge',
+    loaderVersion: '51.0.33'
+  })
+  if (upgraded.minecraftVersion !== '1.21.1' || upgraded.loaderType !== 'forge' || upgraded.loaderVersion !== '51.0.33') {
+    throw new Error('Failed to update instance game version and mod loader!')
+  }
+  console.log('Verified updateExistingInstance with new MC version and loader.')
+
+  const repairResult = await repairInstance(dropTestInstance.id)
+  if (!repairResult.success) {
+    throw new Error('Failed to repair instance!')
+  }
+  console.log('Verified repairInstance successfully.')
+
+  await deleteInstanceById(clonedForUpgrade.id)
   await deleteInstanceById(dropTestInstance.id)
   console.log('--- All Launcher Cloner, Modpack, Screenshot, Dropped Mods, Servers, and Skins Verifications Passed! ---')
 }

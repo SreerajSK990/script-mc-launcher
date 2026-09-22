@@ -65,6 +65,12 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
   - Complete **Cape System**: toggle between **None**, **Cape**, and **Elytra** 3D back equipment.
   - Equip owned Mojang account capes, official historic Minecon/event presets (Minecon 2011–2016, 15th Anniversary, Founder's, Cherry, MCC, etc.), or community OptiFine capes via live username search.
   - Local custom skin and cape `.png` drag-and-drop import.
+- **Instance Installation & Version Upgrading:**
+  - Modrinth-style installation settings panel with live platform selection (Vanilla, Fabric, Forge, NeoForge, Quilt).
+  - Effortless Minecraft version switching with current version highlighting (`★ (Current)`) and automatic snapshot/pre-release detection.
+  - Dynamic loader build selector querying Prism Meta for compatible loader releases with recommended badges.
+  - 4 safety backup strategies before upgrading: **Backup Both** (clones instance & archives saves), **Backup Instance only**, **Backup Saves only**, or **No backup**.
+  - One-click **Instance Repair** to purge broken natives, clear stale metadata caches, and re-verify integrity on next launch.
 - **Discord Rich Presence (RPC):** Dynamic presence powered by `@xhayper/discord-rpc` showing what page you're browsing (Dashboard, Instances, Mod Browser, Skins, Settings), which instance you're configuring, and live in-game status with elapsed playtime, mod loader badges, and a direct GitHub link button.
 - **Zero Button Emojis & Modern UI:** Clean, human-designed dark interface using Lucide SVG icons that uses your full screen properly instead of cramming everything into the center.
 
@@ -171,6 +177,7 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 - [x] **Snapshot & Historical Versions:** Full access to Mojang snapshots, release candidates, and historical beta/alpha versions with loader compatibility safety
 - [x] **Server IP Privacy & Streamer Mode:** Server IP redaction on dashboard and instance management with one-click reveal toggles
 - [x] **Interactive 3D Skin & Cape Studio:** Real-time 3D skin and cape preview with walk/fly animations, classic/slim models, elytra switching, Minecon presets, and OptiFine lookup
+- [x] **Instance Installation & Version Upgrading:** Change game versions, switch mod loaders, 4 safety backup strategies, and one-click instance repair
 
 ---
 

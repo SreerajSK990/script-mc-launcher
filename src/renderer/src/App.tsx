@@ -34,7 +34,7 @@ export const App: React.FC = () => {
   const [isImportModpackModalOpen, setIsImportModpackModalOpen] = useState(false)
   const [isImportLauncherModalOpen, setIsImportLauncherModalOpen] = useState(false)
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false)
-  const [activeNotification, setActiveNotification] = useState<string | null>(null)
+  const [activeNotification, setActiveNotification] = useState<{ id: number; message: string } | null>(null)
 
   const [activeLaunchingInstance, setActiveLaunchingInstance] = useState<InstanceConfiguration | null>(null)
   const [launchProgress, setLaunchProgress] = useState<LaunchProgressEvent | null>(null)
@@ -61,7 +61,11 @@ export const App: React.FC = () => {
   }
 
   const showNotification = useCallback((message: string) => {
-    setActiveNotification(message)
+    setActiveNotification({ id: Date.now(), message })
+  }, [])
+
+  const handleCloseNotification = useCallback(() => {
+    setActiveNotification(null)
   }, [])
 
   const fetchInstances = useCallback(async () => {
@@ -411,6 +415,7 @@ export const App: React.FC = () => {
                     setSelectedDetailInstance(updated)
                     setInstances((prev) => prev.map((i) => (i.id === updated.id ? updated : i)))
                   }}
+                  onNotification={showNotification}
                 />
               ) : (
                 <InstancesPage
@@ -510,9 +515,10 @@ export const App: React.FC = () => {
       />
 
       <ToastNotification
-        message={activeNotification}
+        id={activeNotification?.id}
+        message={activeNotification?.message ?? null}
         durationMs={5000}
-        onClose={() => setActiveNotification(null)}
+        onClose={handleCloseNotification}
       />
 
       <UpdateReadyModal
