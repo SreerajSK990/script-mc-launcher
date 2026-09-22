@@ -9,6 +9,7 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 ## Highlights
 
 - **Complete Instance Isolation:** Every instance has its own dedicated directory (`instances/<id>/minecraft/`). Mods, configs, resource packs, and saves stay strictly inside that instance. No shared messy `.minecraft` folder.
+- **Snapshots & Historical Minecraft Versions:** Full access to all official development snapshots, Release Candidates, Pre-releases, and historical Beta and Alpha versions alongside stable releases. Built-in version-type filters in the instance creation modal and smart loader compatibility warnings.
 - **All Major Mod Loaders Supported:**
   - **Vanilla** (all releases and legacy versions)
   - **Fabric** (auto-configured with KnotClient)
@@ -55,6 +56,7 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
   - Deep file cloning of configs, mods, resource packs, and shader packs with an optional toggle to clone singleplayer world saves.
   - Zero symlink risks: instances are completely copied into isolated folders so neither launcher ever affects the other.
 - **Dedicated Live Logs View:** Full-window terminal tab in the sidebar with live stdout/stderr streaming, log search filtering, log level filters (All, Info, Warn, Error), auto-scroll, copy to clipboard, and instant "Stop Game" controls.
+- **Silent Background Auto-Updater:** Automatically checks for launcher updates in the background every 15 minutes without interrupting gameplay. Updates download silently with one-click restart installation (zero setup wizard popups).
 - **Discord Rich Presence (RPC):** Dynamic presence powered by `@xhayper/discord-rpc` showing what page you're browsing (Dashboard, Instances, Mod Browser, Skins, Settings), which instance you're configuring, and live in-game status with elapsed playtime, mod loader badges, and a direct GitHub link button.
 - **Zero Button Emojis & Modern UI:** Clean, human-designed dark interface using Lucide SVG icons that uses your full screen properly instead of cramming everything into the center.
 
@@ -154,9 +156,11 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 - [x] **External Launcher Cloning:** Direct import and cloning from Prism, Modrinth, CurseForge, and Vanilla launchers
 - [x] **Production Packaging:** Custom launcher icon, Windows NSIS `.exe` installer, and standalone portable executable via `electron-builder`
 - [x] **Auto-Updater:** Differential background updates from GitHub Releases with restart prompts and manual checks
+- [x] **Silent Background Auto-Updater:** Automated 15-minute background update checks and one-click silent installer execution
 - [x] **Multiplayer Server Management:** Direct `servers.dat` management, real-time server ping, and one-click quick join
 - [x] **Discord Rich Presence (RPC):** Live status updates, in-game elapsed timers, loader badges, and interactive GitHub link button
 - [x] **Infinite Scroll Mod Browser:** Smooth auto-fetching with API rate limiting, concurrency locking, and memory protection
+- [x] **Snapshot & Historical Versions:** Full access to Mojang snapshots, release candidates, and historical beta/alpha versions with loader compatibility safety
 
 ---
 

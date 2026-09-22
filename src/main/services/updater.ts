@@ -62,6 +62,9 @@ autoUpdater.on('error', (err) => {
   broadcastStatus('error', err?.message || 'Unknown update error')
 })
 
+const BACKGROUND_CHECK_INTERVAL_MS = 15 * 60 * 1000
+let backgroundCheckTimer: NodeJS.Timeout | null = null
+
 export function initializeAutoUpdater(window: BrowserWindow): void {
   targetWindow = window
 
@@ -69,6 +72,14 @@ export function initializeAutoUpdater(window: BrowserWindow): void {
     setTimeout(() => {
       autoUpdater.checkForUpdates().catch(() => {})
     }, 15000)
+
+    if (backgroundCheckTimer) {
+      clearInterval(backgroundCheckTimer)
+    }
+
+    backgroundCheckTimer = setInterval(() => {
+      autoUpdater.checkForUpdates().catch(() => {})
+    }, BACKGROUND_CHECK_INTERVAL_MS)
   }
 }
 
@@ -101,5 +112,5 @@ export async function checkForUpdatesManual(): Promise<UpdateCheckResult> {
 }
 
 export function quitAndInstallUpdate(): void {
-  autoUpdater.quitAndInstall(false, true)
+  autoUpdater.quitAndInstall(true, true)
 }

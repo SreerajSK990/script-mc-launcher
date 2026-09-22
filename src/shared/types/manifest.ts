@@ -8,6 +8,12 @@ export interface VersionManifestEntry {
   complianceLevel: number
 }
 
+export interface MinecraftVersionEntry {
+  id: string
+  type: 'release' | 'snapshot' | 'old_beta' | 'old_alpha'
+  releaseTime: string
+}
+
 export interface VersionManifest {
   latest: {
     release: string

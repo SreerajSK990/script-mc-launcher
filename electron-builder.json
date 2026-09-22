@@ -30,9 +30,9 @@
     ]
   },
   "nsis": {
-    "oneClick": false,
+    "oneClick": true,
     "perMachine": false,
-    "allowToChangeInstallationDirectory": true,
+    "allowToChangeInstallationDirectory": false,
     "deleteAppDataOnUninstall": false,
     "installerIcon": "build/icon.ico",
     "uninstallerIcon": "build/icon.ico",

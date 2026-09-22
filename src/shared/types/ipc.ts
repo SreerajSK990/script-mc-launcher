@@ -18,6 +18,7 @@ import type {
   InstallRemoteModpackPayload
 } from './modpack'
 import type { ScreenshotEntry } from './screenshot'
+import type { MinecraftVersionEntry } from './manifest'
 import type {
   DiscoveredExternalInstance,
   CloneInstancePayload,
@@ -77,7 +78,7 @@ export interface LaunchActions {
 }
 
 export interface MetaActions {
-  getVersions: () => Promise<string[]>
+  getVersions: () => Promise<MinecraftVersionEntry[]>
   getLoaderVersions: (loader: ModLoaderType, minecraftVersion: string) => Promise<string[]>
 }
 

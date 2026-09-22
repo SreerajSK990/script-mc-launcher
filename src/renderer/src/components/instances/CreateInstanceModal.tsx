@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Plus, Dices, Upload, Sparkles, Folder } from 'lucide-react'
 import type { CreateInstancePayload, ModLoaderType } from '@shared/types/instance'
+import type { MinecraftVersionEntry } from '@shared/types/manifest'
 import { Modal } from '@renderer/components/common/Modal'
 import { Button } from '@renderer/components/common/Button'
 import {
@@ -15,17 +16,17 @@ interface CreateInstanceModalProps {
   onCreate: (payload: CreateInstancePayload) => Promise<void>
 }
 
-const FALLBACK_MINECRAFT_VERSIONS = [
-  '1.21.1',
-  '1.21',
-  '1.20.6',
-  '1.20.4',
-  '1.20.1',
-  '1.19.4',
-  '1.18.2',
-  '1.16.5',
-  '1.12.2',
-  '1.8.9'
+const FALLBACK_VERSION_ENTRIES: MinecraftVersionEntry[] = [
+  { id: '1.21.1', type: 'release', releaseTime: '2024-08-08' },
+  { id: '1.21', type: 'release', releaseTime: '2024-06-13' },
+  { id: '1.20.6', type: 'release', releaseTime: '2024-04-29' },
+  { id: '1.20.4', type: 'release', releaseTime: '2023-12-07' },
+  { id: '1.20.1', type: 'release', releaseTime: '2023-06-12' },
+  { id: '1.19.4', type: 'release', releaseTime: '2023-03-14' },
+  { id: '1.18.2', type: 'release', releaseTime: '2022-02-28' },
+  { id: '1.16.5', type: 'release', releaseTime: '2021-01-15' },
+  { id: '1.12.2', type: 'release', releaseTime: '2017-09-18' },
+  { id: '1.8.9', type: 'release', releaseTime: '2015-12-03' }
 ]
 
 const MOD_LOADERS: Array<{ id: ModLoaderType; label: string; description: string }> = [
@@ -43,7 +44,9 @@ export const CreateInstanceModal: React.FC<CreateInstanceModalProps> = ({
 }) => {
   const [name, setName] = useState('')
   const [minecraftVersion, setMinecraftVersion] = useState('1.21.1')
-  const [availableVersions, setAvailableVersions] = useState<string[]>(FALLBACK_MINECRAFT_VERSIONS)
+  const [allVersions, setAllVersions] = useState<MinecraftVersionEntry[]>(FALLBACK_VERSION_ENTRIES)
+  const [showSnapshots, setShowSnapshots] = useState(false)
+  const [showHistorical, setShowHistorical] = useState(false)
   const [loaderType, setLoaderType] = useState<ModLoaderType>('vanilla')
   const [loaderVersion, setLoaderVersion] = useState<string | null>(null)
   const [availableLoaderVersions, setAvailableLoaderVersions] = useState<string[]>([])
@@ -74,24 +77,39 @@ export const CreateInstanceModal: React.FC<CreateInstanceModalProps> = ({
   }, [isOpen])
 
 
+  const filteredVersions = allVersions.filter((v) => {
+    if (v.type === 'release') return true
+    if (showSnapshots && v.type === 'snapshot') return true
+    if (showHistorical && (v.type === 'old_beta' || v.type === 'old_alpha')) return true
+    return false
+  })
+
+  const selectedVersionEntry = allVersions.find((v) => v.id === minecraftVersion)
+
   useEffect(() => {
     const loadVersions = async () => {
       if (window.launcherAPI?.meta) {
         try {
           const versions = await window.launcherAPI.meta.getVersions()
           if (versions && versions.length > 0) {
-            setAvailableVersions(versions)
-            if (!versions.includes(minecraftVersion)) {
-              setMinecraftVersion(versions[0])
+            setAllVersions(versions)
+            const defaultRelease = versions.find((v) => v.type === 'release')?.id || versions[0]?.id
+            if (defaultRelease && !versions.some((v) => v.id === minecraftVersion)) {
+              setMinecraftVersion(defaultRelease)
             }
           }
         } catch {
-          // Fallback to defaults if offline
         }
       }
     }
     loadVersions()
   }, [])
+
+  useEffect(() => {
+    if (filteredVersions.length > 0 && !filteredVersions.some((v) => v.id === minecraftVersion)) {
+      setMinecraftVersion(filteredVersions[0].id)
+    }
+  }, [showSnapshots, showHistorical, filteredVersions, minecraftVersion])
 
   useEffect(() => {
     if (loaderType === 'vanilla') {
@@ -310,20 +328,50 @@ export const CreateInstanceModal: React.FC<CreateInstanceModalProps> = ({
 
 
         <div>
-          <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-            Minecraft Version
-          </label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+              Minecraft Version
+            </label>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-1.5 cursor-pointer text-xs text-slate-400 hover:text-slate-200 select-none">
+                <input
+                  type="checkbox"
+                  checked={showSnapshots}
+                  onChange={(e) => setShowSnapshots(e.target.checked)}
+                  className="rounded border-border-subtle bg-background-darkest text-emerald-500 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                />
+                <span>Snapshots</span>
+              </label>
+
+              <label className="flex items-center gap-1.5 cursor-pointer text-xs text-slate-400 hover:text-slate-200 select-none">
+                <input
+                  type="checkbox"
+                  checked={showHistorical}
+                  onChange={(e) => setShowHistorical(e.target.checked)}
+                  className="rounded border-border-subtle bg-background-darkest text-emerald-500 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                />
+                <span>Historical</span>
+              </label>
+            </div>
+          </div>
+
           <select
             value={minecraftVersion}
             onChange={(e) => setMinecraftVersion(e.target.value)}
             className="w-full px-3.5 py-2.5 rounded-xl bg-background-darkest border border-border-subtle focus:border-emerald-500 focus:outline-none text-slate-100 text-sm font-mono"
           >
-            {availableVersions.map((version) => (
-              <option key={version} value={version}>
-                {version}
+            {filteredVersions.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.id} {v.type === 'snapshot' ? '• [Snapshot]' : v.type === 'old_beta' ? '• [Beta]' : v.type === 'old_alpha' ? '• [Alpha]' : ''}
               </option>
             ))}
           </select>
+
+          {selectedVersionEntry?.type === 'snapshot' && (loaderType === 'forge' || loaderType === 'neoforge') && (
+            <p className="text-[11px] text-amber-400/90 mt-1.5 flex items-center gap-1">
+              <span>Notice: Forge and NeoForge primarily target official releases. Vanilla or Fabric are recommended for snapshots.</span>
+            </p>
+          )}
         </div>
 
         <div>

@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { promises as fs } from 'node:fs'
 import { MOJANG_METADATA_CONFIG } from '@shared/constants/mojang'
-import type { VersionManifest, VersionPackage } from '@shared/types/manifest'
+import type { VersionManifest, VersionPackage, MinecraftVersionEntry } from '@shared/types/manifest'
 import { getMetaCacheDirectory } from '@main/services/paths'
 import { readJsonFile, writeJsonFileAtomic, doesPathExist } from '@main/utils/filesystem'
 
@@ -75,4 +75,13 @@ export async function getAvailableReleaseVersions(): Promise<string[]> {
   return manifest.versions
     .filter((v) => v.type === 'release')
     .map((v) => v.id)
+}
+
+export async function getAvailableMinecraftVersions(): Promise<MinecraftVersionEntry[]> {
+  const manifest = await fetchMojangVersionManifest()
+  return manifest.versions.map((v) => ({
+    id: v.id,
+    type: v.type,
+    releaseTime: v.releaseTime
+  }))
 }
