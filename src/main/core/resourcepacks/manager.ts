@@ -140,6 +140,11 @@ export async function installResourcePackToInstance(payload: InstallModPayload):
   await ensureDirectoryExists(packsDir)
 
   const destination = join(packsDir, payload.versionFile.filename)
+
+  if (!payload.versionFile.downloadUrl) {
+    throw new Error('Direct download is not available for this version. Please use "Download from Website".')
+  }
+
   const hashAlgo = payload.versionFile.sha512 ? 'sha512' : 'sha1'
   const expectedHash = payload.versionFile.sha512 || payload.versionFile.sha1
 

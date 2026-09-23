@@ -26,7 +26,8 @@ export interface ModVersionFile {
   versionNumber: string
   gameVersions: string[]
   loaders: ModLoaderType[]
-  downloadUrl: string
+  downloadUrl: string | null
+  websiteUrl?: string
   filename: string
   sizeBytes: number
   sha512?: string

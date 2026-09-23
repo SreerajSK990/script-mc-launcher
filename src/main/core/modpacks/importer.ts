@@ -281,7 +281,7 @@ export async function importModpackArchive(
         })
 
         installedMods.push({
-          id: String(file.id),
+          id: String(file.modId || file.id),
           name: file.displayName || file.fileName.replace(/\.jar$/i, ''),
           version: file.fileName,
           filename: file.fileName,

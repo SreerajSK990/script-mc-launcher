@@ -252,36 +252,72 @@ export async function getCurseForgeFiles(
     })
 
     if (!response.ok) {
+      if (/^\d+$/.test(modId)) {
+        try {
+          const fileCheck = await fetch(`${CURSEFORGE_API_BASE}/mods/files`, {
+            method: 'POST',
+            headers: {
+              'x-api-key': apiKey,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ fileIds: [Number(modId)] })
+          })
+          if (fileCheck.ok) {
+            const fileJson = (await fileCheck.json()) as { data: CurseForgeFile[] }
+            const realModId = fileJson.data?.[0]?.modId
+            if (realModId && String(realModId) !== modId) {
+              return await getCurseForgeFiles(String(realModId), minecraftVersion, loader)
+            }
+          }
+        } catch {
+          return []
+        }
+      }
       return []
     }
 
     const json = (await response.json()) as { data: CurseForgeFile[] }
     const files = json.data || []
 
-    const results: ModVersionFile[] = files
-      .filter((file) => file.downloadUrl)
-      .map((file) => {
-        const sha1Obj = file.hashes?.find((h) => h.algo === 1)
+    const results: ModVersionFile[] = files.map((file) => {
+      const sha1Obj = file.hashes?.find((h) => h.algo === 1)
 
-        let releaseType: 'release' | 'beta' | 'alpha' = 'release'
-        if (file.releaseType === 2) releaseType = 'beta'
-        else if (file.releaseType === 3) releaseType = 'alpha'
+      let releaseType: 'release' | 'beta' | 'alpha' = 'release'
+      if (file.releaseType === 2) releaseType = 'beta'
+      else if (file.releaseType === 3) releaseType = 'alpha'
 
-        return {
-          id: String(file.id),
-          projectId: modId,
-          name: file.displayName,
-          versionNumber: file.fileName,
-          gameVersions: file.gameVersions,
-          loaders: loader ? [loader] : (['forge', 'fabric'] as ModLoaderType[]),
-          downloadUrl: file.downloadUrl!,
-          filename: file.fileName,
-          sizeBytes: file.fileLength,
-          sha1: sha1Obj?.value,
-          releaseType,
-          datePublished: file.fileDate
-        }
-      })
+      const fileLoaders: ModLoaderType[] = []
+      for (const gv of file.gameVersions || []) {
+        const lower = gv.toLowerCase()
+        if (lower === 'fabric' && !fileLoaders.includes('fabric')) fileLoaders.push('fabric')
+        if (lower === 'forge' && !fileLoaders.includes('forge')) fileLoaders.push('forge')
+        if (lower === 'neoforge' && !fileLoaders.includes('neoforge')) fileLoaders.push('neoforge')
+        if (lower === 'quilt' && !fileLoaders.includes('quilt')) fileLoaders.push('quilt')
+      }
+
+      const loaders =
+        fileLoaders.length > 0
+          ? fileLoaders
+          : loader
+            ? [loader]
+            : (['forge', 'fabric'] as ModLoaderType[])
+
+      return {
+        id: String(file.id),
+        projectId: String(file.modId || modId),
+        name: file.displayName,
+        versionNumber: file.fileName,
+        gameVersions: file.gameVersions,
+        loaders,
+        downloadUrl: file.downloadUrl || null,
+        websiteUrl: `https://www.curseforge.com/projects/${file.modId || modId}/files/${file.id}`,
+        filename: file.fileName,
+        sizeBytes: file.fileLength,
+        sha1: sha1Obj?.value,
+        releaseType,
+        datePublished: file.fileDate
+      }
+    })
 
     await setCachedData(cacheKey, results)
     return results

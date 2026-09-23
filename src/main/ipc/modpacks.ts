@@ -45,6 +45,9 @@ export function registerModpackIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle(
     IPC_CHANNELS.MODPACKS_INSTALL_REMOTE,
     async (_event, payload: InstallRemoteModpackPayload) => {
+      if (!payload.versionFile.downloadUrl) {
+        throw new Error('Direct download is not available for this modpack version.')
+      }
       return await downloadAndInstallRemoteModpack(
         payload.versionFile.downloadUrl,
         payload.versionFile.filename,

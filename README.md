@@ -24,6 +24,9 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
   - **Rate-Safe Infinite Scrolling:** Smooth catalog browsing powered by `IntersectionObserver` with automated pre-fetching, concurrency guards, debounce protection, and a memory safety cap; browse deeply without arbitrary page limits.
   - **Live "Installed" Status Badges:** Mod cards in Mod Browser automatically indicate when a mod is already installed in the selected instance with a clean green status badge.
   - **In-App Version Switching:** Change or upgrade any mod's version directly from the Instance Details mods tab or the Mod Browser with one click; automatically removes old `.jar` / `.jar.disabled` files and updates configurations.
+  - **Enhanced Version Listing & Web Downloads:** All mod releases are preserved including files where authors restrict automated 3rd-party downloads (`downloadUrl: null`). Displays a one-click **"Download on Web"** button with browser redirection to the exact CurseForge or Modrinth release page, accompanied by an inline **"Mods Folder"** shortcut to drop downloaded `.jar` files in with zero hassle.
+  - **High-Density Version Modal:** Real-time channel filtering (`All`, `Release`, `Beta`, `Alpha`), "Show all MC versions" toggle, relative publication dates, loader compatibility pills (`NeoForge`, `Forge`, `Fabric`, `Quilt`), and collapsible in-app changelog previews.
+  - **CurseForge Modpack Resolution & Self-Healing:** Automatic detection and recovery of canonical mod project IDs from legacy modpack imports to prevent mismatched version listings.
   - One-click mod installation directly into your instance's `mods/` folder with SHA-512 hash verification.
   - In-app mod manager to toggle mods on/off (`.jar.disabled`) or delete them without digging through File Explorer.
   - **Batch Mod Update Engine:** Check all installed mods for compatible updates in a single lightning-fast network call using Modrinth's SHA-512 batch hash endpoint (`/v2/version_files/update`) and CurseForge version checks; view update version jumps (`v{current} → v{latest}`), update individual mods, or click "Update All" with live progress tracking.
@@ -189,6 +192,7 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 - [x] **Instance Installation & Version Upgrading:** Change game versions, switch mod loaders, 4 safety backup strategies, and one-click instance repair
 - [x] **Resource Pack (Texture Pack) Browser & Manager:** Modrinth & CurseForge search, resolution filters, in-app management, drag-and-drop installer, and pack metadata extraction
 - [x] **Batch Mod Update Engine:** SHA-512 batch hash lookup, per-mod update badges, one-click individual update, and batch "Update All" with live progress
+- [x] **Enhanced Version Listing & Web Download Engine:** External browser download for restricted CurseForge files, channel filters (Release/Beta/Alpha), loader badges, changelog accordions, and modpack project ID self-healing
 
 ---
 

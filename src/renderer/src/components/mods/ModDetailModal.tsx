@@ -469,6 +469,12 @@ export const ModDetailModal: React.FC<ModDetailModalProps> = ({
                               >
                                 {ver.releaseType}
                               </span>
+                              {!ver.downloadUrl && (
+                                <span className="text-[9px] uppercase font-mono px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold flex items-center gap-1">
+                                  <Globe size={10} />
+                                  External Only
+                                </span>
+                              )}
                               <span className="text-[10px] text-slate-400 font-mono">
                                 {formatDateAgo(ver.datePublished)}
                               </span>
@@ -493,15 +499,34 @@ export const ModDetailModal: React.FC<ModDetailModalProps> = ({
                             </div>
                           </div>
 
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            icon={isVerInstalling ? Loader2 : Download}
-                            isLoading={isVerInstalling}
-                            onClick={() => handleInstallClick(ver)}
-                          >
-                            Install
-                          </Button>
+                          {ver.downloadUrl ? (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              icon={isVerInstalling ? Loader2 : Download}
+                              isLoading={isVerInstalling}
+                              onClick={() => handleInstallClick(ver)}
+                            >
+                              Install
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              icon={ExternalLink}
+                              onClick={() =>
+                                handleOpenExternal(
+                                  ver.websiteUrl ||
+                                    (mod.source === 'curseforge'
+                                      ? `https://www.curseforge.com/projects/${ver.projectId}/files/${ver.id}`
+                                      : `https://modrinth.com/mod/${ver.projectId}/version/${ver.id}`)
+                                )
+                              }
+                              title="Download on website in browser"
+                            >
+                              Download on Web
+                            </Button>
+                          )}
                         </div>
                       )
                     })}
