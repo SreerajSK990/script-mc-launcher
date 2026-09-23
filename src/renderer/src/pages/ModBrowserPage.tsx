@@ -20,7 +20,8 @@ import {
   ArrowUpDown,
   ChevronLeft,
   ChevronRight,
-  ArrowUp
+  ArrowUp,
+  ArrowUpCircle
 } from 'lucide-react'
 import type { InstanceConfiguration, ModLoaderType } from '@shared/types/instance'
 import type {
@@ -28,7 +29,8 @@ import type {
   ModVersionFile,
   InstalledModRecord,
   InstalledResourcePackRecord,
-  ModSource
+  ModSource,
+  ModUpdateInfo
 } from '@shared/types/mods'
 import type { ModpackImportProgressEvent } from '@shared/types/modpack'
 import { Button } from '@renderer/components/common/Button'
@@ -120,6 +122,11 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
   const [installedPacks, setInstalledPacks] = useState<InstalledResourcePackRecord[]>([])
   const [isLoadingInstalled, setIsLoadingInstalled] = useState(false)
   const [selectedInstalledModForChange, setSelectedInstalledModForChange] = useState<InstalledModRecord | null>(null)
+  const [modUpdates, setModUpdates] = useState<ModUpdateInfo[]>([])
+  const [isCheckingUpdates, setIsCheckingUpdates] = useState(false)
+  const [isUpdatingAll, setIsUpdatingAll] = useState(false)
+  const [updatingModId, setUpdatingModId] = useState<string | null>(null)
+  const [updateProgress, setUpdateProgress] = useState<{ message: string; current: number; total: number } | null>(null)
 
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean
@@ -250,6 +257,88 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
     }
   }, [selectedInstanceId])
 
+  const handleCheckUpdates = useCallback(
+    async (forceRefresh = true) => {
+      if (!selectedInstanceId || !window.launcherAPI?.mods) return
+      setIsCheckingUpdates(true)
+      try {
+        const updates = await window.launcherAPI.mods.checkUpdates(selectedInstanceId, forceRefresh)
+        setModUpdates(updates)
+        if (forceRefresh) {
+          if (updates.length === 0) {
+            onNotification('All installed mods are up to date!')
+          } else {
+            onNotification(`Found updates for ${updates.length} mod(s)!`)
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to check for mod updates:', err)
+      } finally {
+        setIsCheckingUpdates(false)
+      }
+    },
+    [selectedInstanceId, onNotification]
+  )
+
+  const handleUpdateSingleMod = async (update: ModUpdateInfo) => {
+    if (!selectedInstanceId || !window.launcherAPI?.mods) return
+    setUpdatingModId(update.modId)
+    try {
+      await window.launcherAPI.mods.install({
+        instanceId: selectedInstanceId,
+        versionFile: update.versionFile,
+        modMetadata: {
+          id: update.modId,
+          name: update.name,
+          source: update.source
+        },
+        oldFilename: update.currentFilename
+      })
+      onNotification(`Successfully updated ${update.name} to ${update.latestVersion}!`)
+      setModUpdates((prev) => prev.filter((u) => u.modId !== update.modId))
+      await fetchInstalledMods()
+    } catch (err: any) {
+      console.error('Failed to update mod:', err)
+      onNotification(err.message || 'Failed to update mod.')
+    } finally {
+      setUpdatingModId(null)
+    }
+  }
+
+  const handleUpdateAllMods = async () => {
+    if (!selectedInstanceId || !window.launcherAPI?.mods || modUpdates.length === 0) return
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Update All Mods',
+      message: `Are you sure you want to update all ${modUpdates.length} mods to their latest compatible versions? Outdated JAR files will be safely replaced.`,
+      confirmLabel: 'Update All',
+      variant: 'primary',
+      onConfirm: async () => {
+        closeConfirmDialog()
+        setIsUpdatingAll(true)
+        setUpdateProgress({ message: 'Starting update...', current: 0, total: modUpdates.length })
+
+        const unsub = window.launcherAPI!.mods.onUpdateProgress((p) => {
+          setUpdateProgress(p)
+        })
+
+        try {
+          const res = await window.launcherAPI!.mods.updateAll(selectedInstanceId, modUpdates)
+          onNotification(`Successfully updated ${res.updatedCount} mods!`)
+          setModUpdates([])
+          await fetchInstalledMods()
+        } catch (err: any) {
+          console.error('Failed to update all mods:', err)
+          onNotification(err.message || 'Failed to update all mods.')
+        } finally {
+          unsub()
+          setIsUpdatingAll(false)
+          setUpdateProgress(null)
+        }
+      }
+    })
+  }
+
   const getInstalledItemForProject = useCallback(
     (project: ModSearchResult): InstalledModRecord | InstalledResourcePackRecord | undefined => {
       if (!selectedInstanceId) return undefined
@@ -318,11 +407,13 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
   useEffect(() => {
     if (!selectedInstanceId) return
     if (projectType === 'mod') {
-      fetchInstalledMods()
+      fetchInstalledMods().then(() => {
+        handleCheckUpdates(false)
+      })
     } else if (projectType === 'resourcepack') {
       fetchInstalledPacks()
     }
-  }, [selectedInstanceId, fetchInstalledMods, fetchInstalledPacks, projectType])
+  }, [selectedInstanceId, fetchInstalledMods, fetchInstalledPacks, projectType, handleCheckUpdates])
 
   const executeSearch = useCallback(
     async (page = 0, isAppend = false) => {
@@ -1277,7 +1368,34 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              {projectType === 'mod' && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={isCheckingUpdates ? Loader2 : RefreshCw}
+                    isLoading={isCheckingUpdates}
+                    onClick={() => handleCheckUpdates(true)}
+                    title="Check for mod updates"
+                  >
+                    {isCheckingUpdates ? 'Checking Updates...' : 'Check Updates'}
+                  </Button>
+
+                  {modUpdates.length > 0 && (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      icon={isUpdatingAll ? Loader2 : ArrowUpCircle}
+                      isLoading={isUpdatingAll}
+                      onClick={handleUpdateAllMods}
+                    >
+                      Update All ({modUpdates.length})
+                    </Button>
+                  )}
+                </>
+              )}
+
               <Button
                 variant="secondary"
                 size="sm"
@@ -1299,6 +1417,26 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
               />
             </div>
           </div>
+
+          {updateProgress && (
+            <div className="bg-background-card border border-emerald-500/30 p-4 rounded-2xl flex flex-col gap-2 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-200 font-medium flex items-center gap-2">
+                  <Loader2 size={14} className="animate-spin text-emerald-400" />
+                  {updateProgress.message}
+                </span>
+                <span className="text-emerald-400 font-mono font-semibold">
+                  {updateProgress.current} / {updateProgress.total}
+                </span>
+              </div>
+              <div className="w-full h-2 bg-background-darkest rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 transition-all duration-300"
+                  style={{ width: `${(updateProgress.current / updateProgress.total) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
 
           <div className="flex-1 min-h-0 overflow-y-auto pr-1">
             {isLoadingInstalled ? (
@@ -1431,75 +1569,101 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
               </div>
             ) : (
               <div className="flex flex-col gap-2 pb-6">
-                {installedMods.map((mod) => (
-                  <div
-                    key={mod.filename}
-                    className={`p-3.5 rounded-2xl border transition-all duration-150 flex items-center justify-between gap-3 ${
-                      mod.enabled
-                        ? 'bg-background-card border-border-subtle hover:border-border-strong hover:bg-background-surface/50'
-                        : 'bg-background-darkest/50 border-border-subtle/50 opacity-60'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div
-                        className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${
-                          mod.enabled
-                            ? 'bg-primary/10 border-primary/20 text-primary'
-                            : 'bg-slate-800 border-slate-700 text-slate-500'
-                        }`}
-                      >
-                        <Package size={17} />
-                      </div>
+                {installedMods.map((mod) => {
+                  const update = modUpdates.find(
+                    (u) => u.currentFilename === mod.filename || u.modId === mod.id
+                  )
+                  const isUpdatingThis = updatingModId === update?.modId
 
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold text-slate-100 truncate">
-                            {mod.name}
-                          </span>
-                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-background-darkest text-slate-400 border border-border-subtle">
-                            {mod.version}
+                  return (
+                    <div
+                      key={mod.filename}
+                      className={`p-3.5 rounded-2xl border transition-all duration-150 flex items-center justify-between gap-3 ${
+                        mod.enabled
+                          ? 'bg-background-card border-border-subtle hover:border-border-strong hover:bg-background-surface/50'
+                          : 'bg-background-darkest/50 border-border-subtle/50 opacity-60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${
+                            mod.enabled
+                              ? 'bg-primary/10 border-primary/20 text-primary'
+                              : 'bg-slate-800 border-slate-700 text-slate-500'
+                          }`}
+                        >
+                          <Package size={17} />
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-slate-100 truncate">
+                              {mod.name}
+                            </span>
+                            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-background-darkest text-slate-400 border border-border-subtle">
+                              {mod.version}
+                            </span>
+                            {update && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0 flex items-center gap-1">
+                                <ArrowUpCircle size={11} />
+                                Update: v{update.latestVersion}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[11px] text-slate-500 font-mono block truncate">
+                            {mod.filename} • {formatFileSize(mod.fileSizeBytes)}
                           </span>
                         </div>
-                        <span className="text-[11px] text-slate-500 font-mono block truncate">
-                          {mod.filename} • {formatFileSize(mod.fileSizeBytes)}
-                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => handleToggleMod(mod)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                            mod.enabled
+                              ? 'bg-primary/15 border-primary/30 text-primary hover:bg-primary/20'
+                              : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          {mod.enabled ? 'Enabled' : 'Disabled'}
+                        </button>
+
+                        {update && (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            icon={isUpdatingThis ? Loader2 : ArrowUpCircle}
+                            isLoading={isUpdatingThis}
+                            onClick={() => handleUpdateSingleMod(update)}
+                            title={`Update to ${update.latestVersion}`}
+                          >
+                            Update
+                          </Button>
+                        )}
+
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={ArrowUpDown}
+                          onClick={() => setSelectedInstalledModForChange(mod)}
+                          title="Change mod version"
+                        >
+                          Change Version
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon={Trash2}
+                          onClick={() => handleDeleteMod(mod)}
+                          title="Delete Mod"
+                        >
+                          Remove
+                        </Button>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={() => handleToggleMod(mod)}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                          mod.enabled
-                            ? 'bg-primary/15 border-primary/30 text-primary hover:bg-primary/20'
-                            : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        {mod.enabled ? 'Enabled' : 'Disabled'}
-                      </button>
-
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        icon={ArrowUpDown}
-                        onClick={() => setSelectedInstalledModForChange(mod)}
-                        title="Change mod version"
-                      >
-                        Change Version
-                      </Button>
-
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={Trash2}
-                        onClick={() => handleDeleteMod(mod)}
-                        title="Delete Mod"
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>

@@ -119,7 +119,7 @@ export interface ModActions {
   deleteInstalled: (instanceId: string, filename: string) => Promise<boolean>
   setCurseForgeKey: (key: string | null) => Promise<boolean>
   getCurseForgeKey: () => Promise<string | null>
-  checkUpdates: (instanceId: string) => Promise<ModUpdateInfo[]>
+  checkUpdates: (instanceId: string, forceRefresh?: boolean) => Promise<ModUpdateInfo[]>
   updateAll: (
     instanceId: string,
     updates: ModUpdateInfo[]

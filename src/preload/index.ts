@@ -97,7 +97,8 @@ const launcherAPI: LauncherAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.MODS_DELETE_INSTALLED, instanceId, filename),
     setCurseForgeKey: (key) => ipcRenderer.invoke(IPC_CHANNELS.MODS_SET_CURSEFORGE_KEY, key),
     getCurseForgeKey: () => ipcRenderer.invoke(IPC_CHANNELS.MODS_GET_CURSEFORGE_KEY),
-    checkUpdates: (instanceId) => ipcRenderer.invoke(IPC_CHANNELS.MODS_CHECK_UPDATES, instanceId),
+    checkUpdates: (instanceId, forceRefresh) =>
+      ipcRenderer.invoke(IPC_CHANNELS.MODS_CHECK_UPDATES, instanceId, forceRefresh),
     updateAll: (instanceId, updates) =>
       ipcRenderer.invoke(IPC_CHANNELS.MODS_UPDATE_ALL, instanceId, updates),
     installDropped: (instanceId, filePaths) =>

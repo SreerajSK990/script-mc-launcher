@@ -26,6 +26,7 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
   - **In-App Version Switching:** Change or upgrade any mod's version directly from the Instance Details mods tab or the Mod Browser with one click; automatically removes old `.jar` / `.jar.disabled` files and updates configurations.
   - One-click mod installation directly into your instance's `mods/` folder with SHA-512 hash verification.
   - In-app mod manager to toggle mods on/off (`.jar.disabled`) or delete them without digging through File Explorer.
+  - **Batch Mod Update Engine:** Check all installed mods for compatible updates in a single lightning-fast network call using Modrinth's SHA-512 batch hash endpoint (`/v2/version_files/update`) and CurseForge version checks; view update version jumps (`v{current} → v{latest}`), update individual mods, or click "Update All" with live progress tracking.
 - **Integrated Resource Pack (Texture Pack) Browser & Manager:**
   - Search and discover thousands of texture and resource packs across Modrinth and CurseForge without leaving the launcher.
   - **Resolution & Style Filters:** Filter packs instantly by texture resolution (16x, 32x, 64x+) or artistic style (Faithful, Realistic, Medieval, Modern, Futuristic, RPG, Steampunk, Themed).
@@ -121,7 +122,7 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 │   ├── preload/                 # Secure contextBridge API exposing window.launcherAPI
 │   └── shared/                  # Shared types (instances, auth, launch, mods, externalLauncher, ipc)
 ├── scripts/
-│   └── test-services.mjs        # Automated sandbox test suite (Phases 1–8 + Cloner & Resource Packs)
+│   └── test-services.mjs        # Automated sandbox test suite (Phases 1–9 + Batch Mod Updates)
 ├── package.json
 └── tsconfig.json
 ```
@@ -187,6 +188,7 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 - [x] **Interactive 3D Skin & Cape Studio:** Real-time 3D skin and cape preview with walk/fly animations, classic/slim models, elytra switching, Minecon presets, and OptiFine lookup
 - [x] **Instance Installation & Version Upgrading:** Change game versions, switch mod loaders, 4 safety backup strategies, and one-click instance repair
 - [x] **Resource Pack (Texture Pack) Browser & Manager:** Modrinth & CurseForge search, resolution filters, in-app management, drag-and-drop installer, and pack metadata extraction
+- [x] **Batch Mod Update Engine:** SHA-512 batch hash lookup, per-mod update badges, one-click individual update, and batch "Update All" with live progress
 
 ---
 

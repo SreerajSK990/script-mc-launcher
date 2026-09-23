@@ -73,14 +73,17 @@ export function registerModsIpcHandlers(mainWindow?: BrowserWindow): void {
     return getCurseForgeApiKey()
   })
 
-  ipcMain.handle(IPC_CHANNELS.MODS_CHECK_UPDATES, async (_event, instanceId: string) => {
-    try {
-      return await checkForModUpdates(instanceId)
-    } catch (err) {
-      console.warn('Failed to check for mod updates:', err)
-      return []
+  ipcMain.handle(
+    IPC_CHANNELS.MODS_CHECK_UPDATES,
+    async (_event, instanceId: string, forceRefresh?: boolean) => {
+      try {
+        return await checkForModUpdates(instanceId, forceRefresh)
+      } catch (err) {
+        console.warn('Failed to check for mod updates:', err)
+        return []
+      }
     }
-  })
+  )
 
   ipcMain.handle(
     IPC_CHANNELS.MODS_UPDATE_ALL,

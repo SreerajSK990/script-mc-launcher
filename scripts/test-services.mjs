@@ -850,10 +850,65 @@ async function runTests() {
     console.log('CurseForge Resource Pack search skipped due to network/API limit.')
   }
 
+  console.log('--- Phase 9 Batch Mod Update Verification ---')
+  const { checkForModUpdates, updateAllMods } = await import('../src/main/core/mods/updates.ts')
+  const updateTestInstance = await createNewInstance({
+    name: 'UpdateTest',
+    minecraftVersion: '1.20.1',
+    loaderType: 'fabric'
+  })
+
+  const emptyUpdates = await checkForModUpdates(updateTestInstance.id, true)
+  if (!Array.isArray(emptyUpdates) || emptyUpdates.length !== 0) {
+    throw new Error('Expected 0 updates for empty instance!')
+  }
+  console.log('Verified empty instance update check returns empty array.')
+
+  const mockUpdates = [
+    {
+      modId: 'sodium',
+      name: 'Sodium',
+      currentVersion: 'mc1.20.1-0.5.8',
+      currentFilename: 'sodium-fabric-0.5.8.jar',
+      latestVersion: '0.5.11',
+      source: 'modrinth',
+      versionFile: {
+        id: 'ver-test-123',
+        projectId: 'sodium',
+        name: 'Sodium 0.5.11',
+        versionNumber: '0.5.11',
+        gameVersions: ['1.20.1'],
+        loaders: ['fabric'],
+        downloadUrl: 'https://cdn.modrinth.com/data/AANobbMI/versions/test/sodium.jar',
+        filename: 'sodium-fabric-0.5.11.jar',
+        sizeBytes: 1024,
+        releaseType: 'release',
+        datePublished: new Date().toISOString()
+      },
+      releaseType: 'release'
+    }
+  ]
+
+  let progressCalled = false
+  const progressCalls = []
+  const updateAllResult = await updateAllMods(updateTestInstance.id, mockUpdates, (prog) => {
+    progressCalled = true
+    progressCalls.push(prog)
+  })
+
+  if (!updateAllResult.success) {
+    throw new Error('updateAllMods failed!')
+  }
+  if (!progressCalled || progressCalls.length === 0) {
+    throw new Error('updateAllMods did not trigger progress events!')
+  }
+  console.log('Verified updateAllMods execution and progress reporting.')
+
+  await deleteInstanceById(updateTestInstance.id)
   await deleteInstanceById(rpTestInstance.id)
   await deleteInstanceById(clonedForUpgrade.id)
   await deleteInstanceById(dropTestInstance.id)
-  console.log('--- All Launcher Cloner, Modpack, Screenshot, Dropped Mods, Resource Packs, Servers, and Skins Verifications Passed! ---')
+  console.log('--- All Launcher Cloner, Modpack, Screenshot, Dropped Mods, Resource Packs, Mod Updates, Servers, and Skins Verifications Passed! ---')
 }
 
 runTests()

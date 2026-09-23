@@ -189,12 +189,21 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
     }
   }, [instance.id])
 
-  const checkForUpdates = useCallback(async () => {
+  const checkForUpdates = useCallback(async (forceRefresh = false) => {
     if (!window.launcherAPI?.mods) return
     setIsCheckingUpdates(true)
     try {
-      const updates = await window.launcherAPI.mods.checkUpdates(instance.id)
+      const updates = await window.launcherAPI.mods.checkUpdates(instance.id, forceRefresh)
       setModUpdates(updates)
+      if (forceRefresh) {
+        if (updates.length === 0) {
+          setModsFeedbackMessage('All installed mods are up to date!')
+          setTimeout(() => setModsFeedbackMessage(null), 3000)
+        } else {
+          setModsFeedbackMessage(`Found updates for ${updates.length} mod(s)!`)
+          setTimeout(() => setModsFeedbackMessage(null), 4000)
+        }
+      }
     } catch (err) {
       console.warn('Failed to check for mod updates:', err)
     } finally {
@@ -920,7 +929,7 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
                 size="sm"
                 icon={isCheckingUpdates ? Loader2 : RefreshCw}
                 isLoading={isCheckingUpdates}
-                onClick={checkForUpdates}
+                onClick={() => checkForUpdates(true)}
                 title="Check for mod updates"
               >
                 {isCheckingUpdates ? 'Checking Updates...' : 'Check Updates'}
