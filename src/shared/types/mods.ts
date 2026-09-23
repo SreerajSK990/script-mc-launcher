@@ -13,7 +13,7 @@ export interface ModSearchResult {
   source: ModSource
   categories: string[]
   loaders: ModLoaderType[]
-  projectType?: 'mod' | 'modpack'
+  projectType?: 'mod' | 'modpack' | 'resourcepack'
   latestVersion?: string
   clientSide?: 'required' | 'optional' | 'unsupported'
   serverSide?: 'required' | 'optional' | 'unsupported'
@@ -50,11 +50,25 @@ export interface InstalledModRecord {
   loader?: ModLoaderType
 }
 
+export interface InstalledResourcePackRecord {
+  id: string
+  name: string
+  version: string
+  filename: string
+  source: ModSource
+  iconUrl?: string
+  installedAt: string
+  enabled: boolean
+  fileSizeBytes: number
+  gameVersion?: string
+  description?: string
+}
+
 export interface ModSearchParams {
   query?: string
   minecraftVersion?: string
   loader?: ModLoaderType
-  projectType?: 'mod' | 'modpack'
+  projectType?: 'mod' | 'modpack' | 'resourcepack'
   source?: 'all' | 'modrinth' | 'curseforge'
   category?: string
   limit?: number

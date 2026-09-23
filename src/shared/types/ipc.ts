@@ -8,6 +8,7 @@ import type {
   ModSearchParams,
   InstallModPayload,
   InstalledModRecord,
+  InstalledResourcePackRecord,
   ModSource,
   ModUpdateInfo,
   ModDetail
@@ -140,6 +141,18 @@ export interface ModpackActions {
   onProgress: (callback: (event: ModpackImportProgressEvent) => void) => () => void
 }
 
+export interface ResourcePackActions {
+  listInstalled: (instanceId: string) => Promise<InstalledResourcePackRecord[]>
+  install: (payload: InstallModPayload) => Promise<InstalledResourcePackRecord>
+  toggleInstalled: (instanceId: string, filename: string, enable: boolean) => Promise<boolean>
+  deleteInstalled: (instanceId: string, filename: string) => Promise<boolean>
+  installDropped: (
+    instanceId: string,
+    filePaths: string[]
+  ) => Promise<{ success: boolean; installedPacks: InstalledResourcePackRecord[] }>
+  openFolder: (instanceId: string) => Promise<void>
+}
+
 export interface ScreenshotActions {
   list: (instanceId: string) => Promise<ScreenshotEntry[]>
   delete: (instanceId: string, filename: string) => Promise<boolean>
@@ -241,6 +254,7 @@ export interface LauncherAPI {
   system: SystemActions
   mods: ModActions
   modpacks: ModpackActions
+  resourcepacks: ResourcePackActions
   screenshots: ScreenshotActions
   externalLaunchers: ExternalLauncherActions
   java: JavaActions

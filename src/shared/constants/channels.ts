@@ -55,6 +55,13 @@ export const IPC_CHANNELS = {
   MODPACKS_INSTALL_REMOTE: 'modpacks:install-remote',
   MODPACKS_PROGRESS_EVENT: 'modpacks:progress',
 
+  RESOURCEPACKS_LIST_INSTALLED: 'resourcepacks:list-installed',
+  RESOURCEPACKS_INSTALL: 'resourcepacks:install',
+  RESOURCEPACKS_TOGGLE_INSTALLED: 'resourcepacks:toggle-installed',
+  RESOURCEPACKS_DELETE_INSTALLED: 'resourcepacks:delete-installed',
+  RESOURCEPACKS_INSTALL_DROPPED: 'resourcepacks:install-dropped',
+  RESOURCEPACKS_OPEN_FOLDER: 'resourcepacks:open-folder',
+
   SCREENSHOTS_LIST: 'screenshots:list',
   SCREENSHOTS_DELETE: 'screenshots:delete',
   SCREENSHOTS_OPEN_FOLDER: 'screenshots:open-folder',

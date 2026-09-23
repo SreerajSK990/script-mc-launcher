@@ -273,7 +273,6 @@ async function runTests() {
     ramAllocationMegabytes: 4096
   })
 
-  // Test manual mod registration in instance mods manager
   const { writeJsonFileAtomic } = await import('../src/main/utils/filesystem.ts')
   const { getModsMetadataPath } = await import('../src/main/core/mods/manager.ts')
 
@@ -307,7 +306,6 @@ async function runTests() {
   const { default: AdmZip } = await import('adm-zip')
   const { promises: fs } = await import('node:fs')
 
-  // 1. Test Modrinth .mrpack import
   const mrpackZip = new AdmZip()
   mrpackZip.addFile(
     'modrinth.index.json',
@@ -349,7 +347,6 @@ async function runTests() {
   }
   console.log('Verified Modrinth overrides extraction.')
 
-  // 2. Test CurseForge .zip import
   const curseZip = new AdmZip()
   curseZip.addFile(
     'manifest.json',
@@ -381,7 +378,6 @@ async function runTests() {
   const importedCurseInstance = await importModpackArchive(cursePath)
   console.log('Imported CurseForge Instance:', importedCurseInstance.name)
 
-  // 3. Test Screenshots Service
   const screenshotsDir = getScreenshotsDirectory(importedMrpackInstance.id)
   await fs.mkdir(screenshotsDir, { recursive: true })
   const dummyPngPath = join(screenshotsDir, '2026-09-20_12.00.00.png')
@@ -403,7 +399,6 @@ async function runTests() {
   }
   console.log('Verified screenshot deletion.')
 
-  // 4. Test Instance Details & Settings Update
   const updatedInstance = await updateExistingInstance({
     id: importedMrpackInstance.id,
     ramAllocationMegabytes: 8192,
@@ -429,7 +424,6 @@ async function runTests() {
   } = await import('../src/main/core/importers/externalLaunchers.ts')
   const { doesPathExist } = await import('../src/main/utils/filesystem.ts')
 
-  // 1. Create mock Prism instance directory
   const mockPrismDir = join(testSandboxDir, 'mock-prism-instance')
   await fs.mkdir(mockPrismDir, { recursive: true })
   await fs.mkdir(join(mockPrismDir, '.minecraft', 'mods'), { recursive: true })
@@ -460,7 +454,6 @@ async function runTests() {
   }
   console.log('Parsed Prism Instance successfully:', parsedPrism.name)
 
-  // 2. Create mock CurseForge instance directory
   const mockCurseDir = join(testSandboxDir, 'mock-curse-instance')
   await fs.mkdir(mockCurseDir, { recursive: true })
   await fs.mkdir(join(mockCurseDir, 'mods'), { recursive: true })
@@ -481,7 +474,6 @@ async function runTests() {
   }
   console.log('Parsed CurseForge Instance successfully:', parsedCurse.name)
 
-  // 3. Create mock Modrinth profile (with disk inference from logs and mods)
   const mockModrinthDir = join(testSandboxDir, 'mock-modrinth-profile')
   await fs.mkdir(join(mockModrinthDir, 'logs'), { recursive: true })
   await fs.mkdir(join(mockModrinthDir, 'mods'), { recursive: true })
@@ -503,14 +495,12 @@ async function runTests() {
   }
   console.log('Parsed Modrinth Profile successfully:', parsedModrinth.name, `(${parsedModrinth.minecraftVersion} ${parsedModrinth.loaderType})`)
 
-  // 3. Test scanCustomDirectory
   const customScanned = await scanCustomDirectory(mockPrismDir)
   if (customScanned.length === 0 || customScanned[0].name !== 'Prism Epic Pack') {
     throw new Error('Failed to scan custom directory!')
   }
   console.log('Verified custom directory scanner.')
 
-  // 4. Test Cloning Prism instance with world saves
   const clonedInstance = await cloneExternalInstance({
     sourceInstance: parsedPrism,
     customName: 'Imported Prism World',
@@ -522,13 +512,11 @@ async function runTests() {
     throw new Error('Cloned instance RAM allocation mismatch!')
   }
 
-  // Verify mods copied
   const clonedModPath = join(testSandboxDir, 'instances', clonedInstance.id, 'minecraft', 'mods', 'sodium.jar')
   if (!(await doesPathExist(clonedModPath))) {
     throw new Error('Cloned instance is missing copied mod jar!')
   }
 
-  // Verify save copied
   const clonedSavePath = join(testSandboxDir, 'instances', clonedInstance.id, 'minecraft', 'saves', 'MyWorld', 'level.dat')
   if (!(await doesPathExist(clonedSavePath))) {
     throw new Error('Cloned instance is missing copied world save!')
@@ -542,7 +530,6 @@ async function runTests() {
   const { getInstanceServers, getInstanceWorlds } = await import('../src/main/core/minecraft/servers.ts')
   const { listAllSkins, saveSkin, setActiveSkin, deleteSkin, listAllCapes, saveCustomCape, setActiveCape, deleteCustomCape } = await import('../src/main/core/system/skins.ts')
 
-  // 1. Dropped mod test
   const dropTestInstance = await createNewInstance({
     name: 'Drop Mod Test Instance',
     minecraftVersion: '1.20.1',
@@ -570,7 +557,6 @@ async function runTests() {
   }
   console.log('Installed dropped mod successfully:', dropResult.installedMods[0].name)
 
-  // 2. Server & World Scanner Test
   const testWorldDir = join(testSandboxDir, 'instances', dropTestInstance.id, 'minecraft', 'saves', 'SurvivalWorld')
   await fs.mkdir(testWorldDir, { recursive: true })
   await fs.writeFile(join(testWorldDir, 'level.dat'), Buffer.from('mock-level-dat'))
@@ -582,7 +568,6 @@ async function runTests() {
   }
   console.log('Discovered singleplayer world with icon:', worlds[0].name)
 
-  // 3. Skins System Test
   const initialSkins = await listAllSkins()
   if (initialSkins.skins.length < 9) {
     throw new Error('Expected at least 9 official preset skins!')
@@ -771,25 +756,116 @@ async function runTests() {
   }
   console.log('Verified repairInstance successfully.')
 
+  console.log('--- Phase 8 Resource Packs Verification ---')
+  const rpTestInstance = await createNewInstance({
+    name: 'Vanilla Resource Pack Test',
+    minecraftVersion: '1.21.1',
+    loaderType: 'vanilla',
+    ramAllocationMegabytes: 2048
+  })
+
+  const {
+    listInstalledResourcePacks,
+    toggleResourcePackEnabled,
+    deleteInstalledResourcePack,
+    installDroppedResourcePacks
+  } = await import('../src/main/core/resourcepacks/manager.ts')
+  const { searchCurseForge } = await import('../src/main/core/mods/curseforge.ts')
+
+  const dummyPackZip = join(testSandboxDir, 'TestPack.zip')
+  const zip = new AdmZip()
+  zip.addFile(
+    'pack.mcmeta',
+    Buffer.from(
+      JSON.stringify({
+        pack: {
+          pack_format: 34,
+          description: 'A custom test texture pack'
+        }
+      })
+    )
+  )
+  zip.writeZip(dummyPackZip)
+
+  const dropPackResult = await installDroppedResourcePacks(rpTestInstance.id, [dummyPackZip])
+  if (!dropPackResult.success || dropPackResult.installedPacks.length !== 1) {
+    throw new Error('Failed to install dropped resource pack!')
+  }
+  console.log('Installed dropped resource pack successfully:', dropPackResult.installedPacks[0].name)
+
+  const listedPacks = await listInstalledResourcePacks(rpTestInstance.id)
+  if (listedPacks.length !== 1 || listedPacks[0].name !== 'TestPack' || listedPacks[0].description !== 'A custom test texture pack') {
+    throw new Error('Listed resource pack does not match expected pack metadata!')
+  }
+  console.log('Verified listed resource pack metadata and mcmeta parsing.')
+
+  const toggledOffSuccess = await toggleResourcePackEnabled(rpTestInstance.id, 'TestPack.zip', false)
+  if (!toggledOffSuccess) {
+    throw new Error('Failed to disable resource pack!')
+  }
+  const packsAfterDisable = await listInstalledResourcePacks(rpTestInstance.id)
+  if (packsAfterDisable.length !== 1 || packsAfterDisable[0].enabled !== false) {
+    throw new Error('Resource pack was not disabled!')
+  }
+  console.log('Verified resource pack disable toggle.')
+
+  const toggledOnSuccess = await toggleResourcePackEnabled(rpTestInstance.id, 'TestPack.zip', true)
+  if (!toggledOnSuccess) {
+    throw new Error('Failed to enable resource pack!')
+  }
+  const packsAfterEnable = await listInstalledResourcePacks(rpTestInstance.id)
+  if (packsAfterEnable.length !== 1 || packsAfterEnable[0].enabled !== true) {
+    throw new Error('Resource pack was not enabled!')
+  }
+  console.log('Verified resource pack enable toggle.')
+
+  const deletedPack = await deleteInstalledResourcePack(rpTestInstance.id, 'TestPack.zip')
+  if (!deletedPack) {
+    throw new Error('Failed to delete resource pack!')
+  }
+  const remainingPacks = await listInstalledResourcePacks(rpTestInstance.id)
+  if (remainingPacks.length !== 0) {
+    throw new Error('Expected 0 resource packs after deletion!')
+  }
+  console.log('Verified resource pack deletion.')
+
+  const modrinthRPResults = await searchModrinth({
+    query: 'faithful',
+    projectType: 'resourcepack',
+    limit: 3
+  })
+  if (modrinthRPResults.length === 0 || modrinthRPResults[0].projectType !== 'resourcepack') {
+    throw new Error('Modrinth resource pack search failed or returned wrong project type!')
+  }
+  console.log(`Verified Modrinth Resource Pack search: found ${modrinthRPResults.length} hits (First: ${modrinthRPResults[0].name})`)
+
+  try {
+    const curseForgeRPResults = await searchCurseForge({
+      query: 'faithful',
+      projectType: 'resourcepack',
+      limit: 3
+    })
+    console.log(`Verified CurseForge Resource Pack search: found ${curseForgeRPResults.length} hits`)
+  } catch {
+    console.log('CurseForge Resource Pack search skipped due to network/API limit.')
+  }
+
+  await deleteInstanceById(rpTestInstance.id)
   await deleteInstanceById(clonedForUpgrade.id)
   await deleteInstanceById(dropTestInstance.id)
-  console.log('--- All Launcher Cloner, Modpack, Screenshot, Dropped Mods, Servers, and Skins Verifications Passed! ---')
+  console.log('--- All Launcher Cloner, Modpack, Screenshot, Dropped Mods, Resource Packs, Servers, and Skins Verifications Passed! ---')
 }
 
 runTests()
   .then(() => {
     try {
       rmSync(testSandboxDir, { recursive: true, force: true })
-    } catch {
-      // Ignore cleanup error
-    }
+    } catch {}
   })
   .catch((err) => {
     try {
       rmSync(testSandboxDir, { recursive: true, force: true })
-    } catch {
-      // Ignore cleanup error
-    }
+    } catch {}
     console.error('Test failed:', err)
     process.exit(1)
   })

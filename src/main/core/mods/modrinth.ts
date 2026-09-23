@@ -56,10 +56,15 @@ const SEARCH_CACHE_TTL = 15 * 60 * 1000
 const VERSIONS_CACHE_TTL = 30 * 60 * 1000
 
 export async function searchModrinth(params: ModSearchParams): Promise<ModSearchResult[]> {
-  const projectType = params.projectType === 'modpack' ? 'modpack' : 'mod'
+  let projectType = 'mod'
+  if (params.projectType === 'modpack') {
+    projectType = 'modpack'
+  } else if (params.projectType === 'resourcepack') {
+    projectType = 'resourcepack'
+  }
   const facets: string[][] = [[`project_type:${projectType}`]]
 
-  if (params.loader) {
+  if (params.loader && projectType === 'mod') {
     facets.push([`categories:${params.loader.toLowerCase()}`])
   }
 
@@ -67,7 +72,7 @@ export async function searchModrinth(params: ModSearchParams): Promise<ModSearch
     facets.push([`versions:${params.minecraftVersion}`])
   }
 
-  if (params.category) {
+  if (params.category && params.category !== 'all') {
     facets.push([`categories:${params.category.toLowerCase()}`])
   }
 
@@ -124,7 +129,7 @@ export async function searchModrinth(params: ModSearchParams): Promise<ModSearch
       source: 'modrinth',
       categories: nonLoaderCategories,
       loaders: matchedLoaders,
-      projectType,
+      projectType: projectType as 'mod' | 'modpack' | 'resourcepack',
       latestVersion: hit.latest_version,
       clientSide: hit.client_side,
       serverSide: hit.server_side

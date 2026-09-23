@@ -123,6 +123,17 @@ const launcherAPI: LauncherAPI = {
       }
     }
   },
+  resourcepacks: {
+    listInstalled: (instanceId) => ipcRenderer.invoke(IPC_CHANNELS.RESOURCEPACKS_LIST_INSTALLED, instanceId),
+    install: (payload) => ipcRenderer.invoke(IPC_CHANNELS.RESOURCEPACKS_INSTALL, payload),
+    toggleInstalled: (instanceId, filename, enable) =>
+      ipcRenderer.invoke(IPC_CHANNELS.RESOURCEPACKS_TOGGLE_INSTALLED, instanceId, filename, enable),
+    deleteInstalled: (instanceId, filename) =>
+      ipcRenderer.invoke(IPC_CHANNELS.RESOURCEPACKS_DELETE_INSTALLED, instanceId, filename),
+    installDropped: (instanceId, filePaths) =>
+      ipcRenderer.invoke(IPC_CHANNELS.RESOURCEPACKS_INSTALL_DROPPED, instanceId, filePaths),
+    openFolder: (instanceId) => ipcRenderer.invoke(IPC_CHANNELS.RESOURCEPACKS_OPEN_FOLDER, instanceId)
+  },
   screenshots: {
     list: (instanceId) => ipcRenderer.invoke(IPC_CHANNELS.SCREENSHOTS_LIST, instanceId),
     delete: (instanceId, filename) => ipcRenderer.invoke(IPC_CHANNELS.SCREENSHOTS_DELETE, instanceId, filename),

@@ -4,6 +4,7 @@ import type { ModSearchResult, ModVersionFile, ModSearchParams, ModDetail } from
 const CURSEFORGE_API_BASE = 'https://api.curseforge.com/v1'
 const MINECRAFT_GAME_ID = 432
 const MODS_CLASS_ID = 6
+const RESOURCEPACKS_CLASS_ID = 12
 const MODPACKS_CLASS_ID = 4471
 
 import { updateLauncherSettings } from '@main/services/settings'
@@ -137,7 +138,12 @@ export async function searchCurseForge(params: ModSearchParams): Promise<ModSear
 
   const queryParams = new URLSearchParams()
   queryParams.set('gameId', String(MINECRAFT_GAME_ID))
-  const classId = params.projectType === 'modpack' ? MODPACKS_CLASS_ID : MODS_CLASS_ID
+  let classId = MODS_CLASS_ID
+  if (params.projectType === 'modpack') {
+    classId = MODPACKS_CLASS_ID
+  } else if (params.projectType === 'resourcepack') {
+    classId = RESOURCEPACKS_CLASS_ID
+  }
   queryParams.set('classId', String(classId))
 
   if (params.query?.trim()) {
@@ -148,9 +154,11 @@ export async function searchCurseForge(params: ModSearchParams): Promise<ModSear
     queryParams.set('gameVersion', params.minecraftVersion)
   }
 
-  const loaderEnum = convertLoaderToCurseForgeEnum(params.loader)
-  if (loaderEnum) {
-    queryParams.set('modLoaderType', String(loaderEnum))
+  if (params.projectType !== 'resourcepack') {
+    const loaderEnum = convertLoaderToCurseForgeEnum(params.loader)
+    if (loaderEnum) {
+      queryParams.set('modLoaderType', String(loaderEnum))
+    }
   }
 
   queryParams.set('pageSize', String(params.limit || 24))
@@ -198,7 +206,7 @@ export async function searchCurseForge(params: ModSearchParams): Promise<ModSear
         source: 'curseforge' as const,
         categories: mod.categories.map((c) => c.name),
         loaders: Array.from(loaders) as ModLoaderType[],
-        projectType: (params.projectType === 'modpack' ? 'modpack' : 'mod') as 'mod' | 'modpack'
+        projectType: (params.projectType || 'mod') as 'mod' | 'modpack' | 'resourcepack'
       }
     })
 

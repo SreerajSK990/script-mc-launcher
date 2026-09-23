@@ -9,6 +9,7 @@ import {
   SlidersHorizontal,
   Package,
   Boxes,
+  Palette,
   Layers,
   Sparkles,
   X,
@@ -26,6 +27,7 @@ import type {
   ModSearchResult,
   ModVersionFile,
   InstalledModRecord,
+  InstalledResourcePackRecord,
   ModSource
 } from '@shared/types/mods'
 import type { ModpackImportProgressEvent } from '@shared/types/modpack'
@@ -40,6 +42,7 @@ interface ModBrowserPageProps {
   onOpenFolder: (instanceId: string) => void
   onNotification: (message: string) => void
   initialInstanceId?: string
+  initialProjectType?: 'mod' | 'modpack' | 'resourcepack'
   onInstanceCreated?: (instance: InstanceConfiguration) => void
 }
 
@@ -54,14 +57,30 @@ const CATEGORIES = [
   { id: 'decoration', label: 'Decoration & Building' }
 ]
 
+const RESOURCEPACK_CATEGORIES = [
+  { id: 'all', label: 'All Categories' },
+  { id: '16x', label: '16x' },
+  { id: '32x', label: '32x' },
+  { id: '64x', label: '64x+' },
+  { id: 'faithful', label: 'Faithful' },
+  { id: 'realistic', label: 'Realistic' },
+  { id: 'simplistic', label: 'Simplistic' },
+  { id: 'medieval', label: 'Medieval' },
+  { id: 'mod-support', label: 'Mod Support' },
+  { id: 'utility', label: 'Utility & GUI' }
+]
+
 export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
   instances,
   onOpenFolder,
   onNotification,
   initialInstanceId,
+  initialProjectType,
   onInstanceCreated
 }) => {
-  const [projectType, setProjectType] = useState<'mod' | 'modpack'>('mod')
+  const [projectType, setProjectType] = useState<'mod' | 'modpack' | 'resourcepack'>(
+    initialProjectType || 'mod'
+  )
   const [activeSubTab, setActiveSubTab] = useState<'browse' | 'installed'>('browse')
   const [selectedInstanceId, setSelectedInstanceId] = useState<string>(
     initialInstanceId ||
@@ -98,6 +117,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
   const [isInstallingModpack, setIsInstallingModpack] = useState(false)
 
   const [installedMods, setInstalledMods] = useState<InstalledModRecord[]>([])
+  const [installedPacks, setInstalledPacks] = useState<InstalledResourcePackRecord[]>([])
   const [isLoadingInstalled, setIsLoadingInstalled] = useState(false)
   const [selectedInstalledModForChange, setSelectedInstalledModForChange] = useState<InstalledModRecord | null>(null)
 
@@ -139,23 +159,43 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
       .filter((p): p is string => Boolean(p && (p.toLowerCase().endsWith('.jar') || p.toLowerCase().endsWith('.zip'))))
 
     if (validPaths.length === 0) {
-      onNotification('Please drop valid .jar or .zip Minecraft mod files.')
+      onNotification(
+        projectType === 'resourcepack'
+          ? 'Please drop valid .zip Minecraft resource pack files.'
+          : 'Please drop valid .jar or .zip Minecraft mod files.'
+      )
       return
     }
 
     try {
-      if (window.launcherAPI?.mods?.installDropped) {
-        const res = await window.launcherAPI.mods.installDropped(currentInstance.id, validPaths)
-        if (res.success) {
-          onNotification(`Successfully installed ${res.installedMods.length} dropped mod(s) into "${currentInstance.name}"!`)
-          fetchInstalledMods()
-        } else {
-          onNotification('No valid mod files found in dropped items.')
+      if (projectType === 'resourcepack') {
+        if (window.launcherAPI?.resourcepacks?.installDropped) {
+          const res = await window.launcherAPI.resourcepacks.installDropped(currentInstance.id, validPaths)
+          if (res.success) {
+            onNotification(
+              `Successfully installed ${res.installedPacks.length} dropped resource pack(s) into "${currentInstance.name}"!`
+            )
+            fetchInstalledPacks()
+          } else {
+            onNotification('No valid resource pack files found in dropped items.')
+          }
+        }
+      } else {
+        if (window.launcherAPI?.mods?.installDropped) {
+          const res = await window.launcherAPI.mods.installDropped(currentInstance.id, validPaths)
+          if (res.success) {
+            onNotification(
+              `Successfully installed ${res.installedMods.length} dropped mod(s) into "${currentInstance.name}"!`
+            )
+            fetchInstalledMods()
+          } else {
+            onNotification('No valid mod files found in dropped items.')
+          }
         }
       }
     } catch (err) {
-      console.error('Failed to install dropped mods:', err)
-      onNotification('Failed to install dropped mods.')
+      console.error('Failed to install dropped files:', err)
+      onNotification('Failed to install dropped files.')
     }
   }
 
@@ -167,6 +207,12 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
       setSelectedInstanceId(preferred.id)
     }
   }, [instances, selectedInstanceId, initialInstanceId])
+
+  useEffect(() => {
+    if (initialProjectType) {
+      setProjectType(initialProjectType)
+    }
+  }, [initialProjectType])
 
   useEffect(() => {
     if (!window.launcherAPI?.modpacks) return
@@ -191,48 +237,92 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
     }
   }, [selectedInstanceId])
 
-  const getInstalledModForProject = useCallback(
-    (project: ModSearchResult): InstalledModRecord | undefined => {
-      if (projectType !== 'mod' || !selectedInstanceId) return undefined
+  const fetchInstalledPacks = useCallback(async () => {
+    if (!selectedInstanceId || !window.launcherAPI?.resourcepacks) return
+    try {
+      setIsLoadingInstalled(true)
+      const list = await window.launcherAPI.resourcepacks.listInstalled(selectedInstanceId)
+      setInstalledPacks(list)
+    } catch (error) {
+      console.error('Failed to list installed resource packs:', error)
+    } finally {
+      setIsLoadingInstalled(false)
+    }
+  }, [selectedInstanceId])
+
+  const getInstalledItemForProject = useCallback(
+    (project: ModSearchResult): InstalledModRecord | InstalledResourcePackRecord | undefined => {
+      if (!selectedInstanceId) return undefined
 
       const projId = project.id.toLowerCase()
       const projSlug = (project.slug || '').toLowerCase()
       const projName = project.name.toLowerCase()
       const projClean = projName.replace(/[^a-z0-9]/g, '')
 
-      return installedMods.find((inst) => {
-        const instId = inst.id.toLowerCase()
-        const instName = inst.name.toLowerCase()
-        const instClean = instName.replace(/[^a-z0-9]/g, '')
-        const instFile = inst.filename.toLowerCase()
+      if (projectType === 'resourcepack') {
+        return installedPacks.find((inst) => {
+          const instId = inst.id.toLowerCase()
+          const instName = inst.name.toLowerCase()
+          const instClean = instName.replace(/[^a-z0-9]/g, '')
+          const instFile = inst.filename.toLowerCase()
 
-        if (instId === projId || (projSlug && instId === projSlug)) return true
+          if (instId === projId || (projSlug && instId === projSlug)) return true
+          if (instName === projName || (projClean.length >= 3 && instClean === projClean)) return true
+          if (
+            projSlug &&
+            (instFile.startsWith(projSlug + '-') ||
+              instFile.startsWith(projSlug + '_') ||
+              instFile.startsWith(projSlug + '+') ||
+              instFile === `${projSlug}.zip`)
+          ) {
+            return true
+          }
+          if (projClean.length >= 4 && instFile.startsWith(projClean)) {
+            return true
+          }
+          return false
+        })
+      }
 
-        if (instName === projName || (projClean.length >= 3 && instClean === projClean)) return true
+      if (projectType === 'mod') {
+        return installedMods.find((inst) => {
+          const instId = inst.id.toLowerCase()
+          const instName = inst.name.toLowerCase()
+          const instClean = instName.replace(/[^a-z0-9]/g, '')
+          const instFile = inst.filename.toLowerCase()
 
-        if (
-          projSlug &&
-          (instFile.startsWith(projSlug + '-') ||
-            instFile.startsWith(projSlug + '_') ||
-            instFile.startsWith(projSlug + '+'))
-        ) {
-          return true
-        }
-        if (projClean.length >= 4 && instFile.startsWith(projClean)) {
-          return true
-        }
+          if (instId === projId || (projSlug && instId === projSlug)) return true
+          if (instName === projName || (projClean.length >= 3 && instClean === projClean)) return true
+          if (
+            projSlug &&
+            (instFile.startsWith(projSlug + '-') ||
+              instFile.startsWith(projSlug + '_') ||
+              instFile.startsWith(projSlug + '+'))
+          ) {
+            return true
+          }
+          if (projClean.length >= 4 && instFile.startsWith(projClean)) {
+            return true
+          }
+          return false
+        })
+      }
 
-        return false
-      })
+      return undefined
     },
-    [projectType, selectedInstanceId, installedMods]
+    [projectType, selectedInstanceId, installedMods, installedPacks]
   )
 
+  const getInstalledModForProject = getInstalledItemForProject
+
   useEffect(() => {
-    if (selectedInstanceId && projectType === 'mod') {
+    if (!selectedInstanceId) return
+    if (projectType === 'mod') {
       fetchInstalledMods()
+    } else if (projectType === 'resourcepack') {
+      fetchInstalledPacks()
     }
-  }, [selectedInstanceId, fetchInstalledMods, projectType])
+  }, [selectedInstanceId, fetchInstalledMods, fetchInstalledPacks, projectType])
 
   const executeSearch = useCallback(
     async (page = 0, isAppend = false) => {
@@ -254,7 +344,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
           category: selectedCategory !== 'all' ? selectedCategory : undefined,
           source: selectedSource,
           projectType,
-          minecraftVersion: projectType === 'mod' ? currentInstance?.minecraftVersion : undefined,
+          minecraftVersion: projectType === 'modpack' ? undefined : currentInstance?.minecraftVersion,
           loader:
             projectType === 'mod' && currentInstance?.loaderType !== 'vanilla'
               ? currentInstance?.loaderType
@@ -380,12 +470,15 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
 
     try {
       if (window.launcherAPI?.mods) {
-        const versions = await window.launcherAPI.mods.getVersions(
+        let versions = await window.launcherAPI.mods.getVersions(
           mod.id,
           mod.source,
-          projectType === 'mod' ? currentInstance?.minecraftVersion : undefined,
+          projectType === 'modpack' ? undefined : currentInstance?.minecraftVersion,
           projectType === 'mod' && currentInstance?.loaderType !== 'vanilla' ? currentInstance?.loaderType : undefined
         )
+        if (versions.length === 0 && projectType === 'resourcepack') {
+          versions = await window.launcherAPI.mods.getVersions(mod.id, mod.source).catch(() => [])
+        }
         setAvailableVersions(versions)
       }
     } catch (error) {
@@ -396,31 +489,53 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
   }
 
   const handleInstallModVersion = async (version: ModVersionFile, oldFilename?: string) => {
-    if (!selectedInstanceId || !selectedModForVersions || !window.launcherAPI?.mods) return
+    if (!selectedInstanceId || !selectedModForVersions) return
 
     try {
       setInstallingVersionId(version.id)
-      await window.launcherAPI.mods.install({
-        instanceId: selectedInstanceId,
-        versionFile: version,
-        modMetadata: {
-          id: selectedModForVersions.id,
-          name: selectedModForVersions.name,
-          source: selectedModForVersions.source,
-          iconUrl: selectedModForVersions.iconUrl
-        },
-        oldFilename
-      })
+      if (selectedModForVersions.projectType === 'resourcepack') {
+        if (!window.launcherAPI?.resourcepacks) return
+        await window.launcherAPI.resourcepacks.install({
+          instanceId: selectedInstanceId,
+          versionFile: version,
+          modMetadata: {
+            id: selectedModForVersions.id,
+            name: selectedModForVersions.name,
+            source: selectedModForVersions.source,
+            iconUrl: selectedModForVersions.iconUrl
+          },
+          oldFilename
+        })
+        onNotification(
+          oldFilename
+            ? `Switched ${selectedModForVersions.name} to version ${version.versionNumber || version.name}!`
+            : `Installed ${selectedModForVersions.name} successfully.`
+        )
+        await fetchInstalledPacks()
+      } else {
+        if (!window.launcherAPI?.mods) return
+        await window.launcherAPI.mods.install({
+          instanceId: selectedInstanceId,
+          versionFile: version,
+          modMetadata: {
+            id: selectedModForVersions.id,
+            name: selectedModForVersions.name,
+            source: selectedModForVersions.source,
+            iconUrl: selectedModForVersions.iconUrl
+          },
+          oldFilename
+        })
 
-      onNotification(
-        oldFilename
-          ? `Switched ${selectedModForVersions.name} to version ${version.versionNumber || version.name}!`
-          : `Installed ${selectedModForVersions.name} successfully.`
-      )
-      await fetchInstalledMods()
+        onNotification(
+          oldFilename
+            ? `Switched ${selectedModForVersions.name} to version ${version.versionNumber || version.name}!`
+            : `Installed ${selectedModForVersions.name} successfully.`
+        )
+        await fetchInstalledMods()
+      }
       setSelectedModForVersions(null)
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to install mod'
+      const message = error instanceof Error ? error.message : 'Failed to install'
       onNotification(message)
     } finally {
       setInstallingVersionId(null)
@@ -471,13 +586,43 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
       return
     }
 
-    if (!selectedInstanceId || !window.launcherAPI?.mods) {
+    if (!selectedInstanceId) {
       onNotification('Please select a target instance first.')
       return
     }
 
+    if (mod.projectType === 'resourcepack') {
+      if (!window.launcherAPI?.resourcepacks) return
+      try {
+        const installedRec = getInstalledItemForProject(mod)
+        await window.launcherAPI.resourcepacks.install({
+          instanceId: selectedInstanceId,
+          versionFile: version,
+          modMetadata: {
+            id: mod.id,
+            name: mod.name,
+            source: mod.source,
+            iconUrl: mod.iconUrl
+          },
+          oldFilename: installedRec?.filename
+        })
+        onNotification(
+          installedRec
+            ? `Updated ${mod.name} to ${version.versionNumber || version.name}!`
+            : `Installed ${mod.name} successfully.`
+        )
+        await fetchInstalledPacks()
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to install resource pack'
+        onNotification(message)
+      }
+      return
+    }
+
+    if (!window.launcherAPI?.mods) return
+
     try {
-      const installedRec = getInstalledModForProject(mod)
+      const installedRec = getInstalledItemForProject(mod)
       await window.launcherAPI.mods.install({
         instanceId: selectedInstanceId,
         versionFile: version,
@@ -534,6 +679,47 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
     })
   }
 
+  const handleTogglePack = async (pack: InstalledResourcePackRecord) => {
+    if (!selectedInstanceId || !window.launcherAPI?.resourcepacks) return
+    try {
+      await window.launcherAPI.resourcepacks.toggleInstalled(selectedInstanceId, pack.filename, !pack.enabled)
+      await fetchInstalledPacks()
+      onNotification(`${pack.name} ${!pack.enabled ? 'enabled' : 'disabled'}.`)
+    } catch (error) {
+      console.error('Failed to toggle resource pack:', error)
+    }
+  }
+
+  const handleDeletePack = (pack: InstalledResourcePackRecord) => {
+    if (!selectedInstanceId || !window.launcherAPI?.resourcepacks) return
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Remove Resource Pack',
+      message: `Are you sure you want to remove ${pack.name}? This will delete "${pack.filename}" from this instance.`,
+      confirmLabel: 'Remove Pack',
+      variant: 'danger',
+      onConfirm: async () => {
+        closeConfirmDialog()
+        try {
+          await window.launcherAPI?.resourcepacks.deleteInstalled(selectedInstanceId, pack.filename)
+          await fetchInstalledPacks()
+          onNotification(`Removed ${pack.name}.`)
+        } catch (error) {
+          console.error('Failed to delete resource pack:', error)
+        }
+      }
+    })
+  }
+
+  const handleOpenPacksFolder = async () => {
+    if (!selectedInstanceId || !window.launcherAPI?.resourcepacks) return
+    try {
+      await window.launcherAPI.resourcepacks.openFolder(selectedInstanceId)
+    } catch (error) {
+      console.error('Failed to open resource packs folder:', error)
+    }
+  }
+
   const formatDownloads = (num: number): string => {
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`
     if (num >= 1000) return `${(num / 1000).toFixed(0)}K`
@@ -562,12 +748,22 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
     >
       {isDraggingMods && (
         <div className="absolute inset-0 z-50 bg-background-dark/85 backdrop-blur-sm border-2 border-dashed border-primary rounded-2xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-150 pointer-events-none">
-          <Package size={48} className="text-primary animate-bounce mb-3" />
-          <h3 className="text-lg font-bold text-white">Drop Minecraft Mods Here</h3>
+          {projectType === 'resourcepack' ? (
+            <Palette size={48} className="text-primary animate-bounce mb-3" />
+          ) : (
+            <Package size={48} className="text-primary animate-bounce mb-3" />
+          )}
+          <h3 className="text-lg font-bold text-white">
+            {projectType === 'resourcepack'
+              ? 'Drop Minecraft Resource Packs Here'
+              : 'Drop Minecraft Mods Here'}
+          </h3>
           <p className="text-xs text-slate-300 mt-1">
             {currentInstance
-              ? `Release .jar or .zip files to install them directly into "${currentInstance.name}"`
-              : 'Select an instance first to install dropped mods'}
+              ? `Release ${
+                  projectType === 'resourcepack' ? '.zip' : '.jar or .zip'
+                } files to install them directly into "${currentInstance.name}"`
+              : 'Select an instance first to install dropped files'}
           </p>
         </div>
       )}
@@ -577,14 +773,24 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
           <h2 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
             {projectType === 'modpack' ? (
               <Package size={24} className="text-primary" />
+            ) : projectType === 'resourcepack' ? (
+              <Palette size={24} className="text-primary" />
             ) : (
               <Boxes size={24} className="text-primary" />
             )}
-            <span>{projectType === 'modpack' ? 'Modpack Browser' : 'Mod Browser'}</span>
+            <span>
+              {projectType === 'modpack'
+                ? 'Modpack Browser'
+                : projectType === 'resourcepack'
+                ? 'Resource Pack Browser'
+                : 'Mod Browser'}
+            </span>
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
             {projectType === 'modpack'
               ? 'Discover and install complete curated modpacks directly from Modrinth and CurseForge'
+              : projectType === 'resourcepack'
+              ? 'Discover, download, and manage resource packs directly for your Minecraft instances'
               : 'Discover, download, and manage mods directly for your Minecraft instances'}
           </p>
         </div>
@@ -595,6 +801,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
               onClick={() => {
                 setProjectType('mod')
                 setActiveSubTab('browse')
+                setSelectedCategory('all')
               }}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 ${
                 projectType === 'mod'
@@ -607,8 +814,24 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
             </button>
             <button
               onClick={() => {
+                setProjectType('resourcepack')
+                setActiveSubTab('browse')
+                setSelectedCategory('all')
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                projectType === 'resourcepack'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Palette size={14} />
+              <span>Resource Packs</span>
+            </button>
+            <button
+              onClick={() => {
                 setProjectType('modpack')
                 setActiveSubTab('browse')
+                setSelectedCategory('all')
               }}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 ${
                 projectType === 'modpack'
@@ -621,7 +844,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
             </button>
           </div>
 
-          {projectType === 'mod' ? (
+          {projectType !== 'modpack' ? (
             <div className="flex items-center gap-2 bg-background-darkest border border-border-subtle p-1.5 rounded-xl">
               <span className="text-xs text-slate-400 pl-2">Target Instance:</span>
               {instances.length === 0 ? (
@@ -647,7 +870,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
             </div>
           )}
 
-          {projectType === 'mod' && (
+          {projectType !== 'modpack' && (
             <div className="flex items-center gap-1 bg-background-darkest border border-border-subtle p-1 rounded-xl">
               <button
                 onClick={() => setActiveSubTab('browse')}
@@ -657,7 +880,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                Browse Mods
+                {projectType === 'resourcepack' ? 'Browse Packs' : 'Browse Mods'}
               </button>
               <button
                 onClick={() => setActiveSubTab('installed')}
@@ -669,7 +892,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
               >
                 <span>Installed</span>
                 <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-primary/20 text-primary">
-                  {installedMods.length}
+                  {projectType === 'resourcepack' ? installedPacks.length : installedMods.length}
                 </span>
               </button>
             </div>
@@ -688,7 +911,9 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
                   placeholder={
                     projectType === 'modpack'
                       ? 'Search modpacks on Modrinth / CurseForge...'
-                      : 'Search mods on Modrinth...'
+                      : projectType === 'resourcepack'
+                      ? 'Search resource packs on Modrinth / CurseForge...'
+                      : 'Search mods on Modrinth / CurseForge...'
                   }
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -712,6 +937,20 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
                     className="bg-background-darkest text-slate-200 text-xs px-3 py-2 rounded-xl border border-border-subtle focus:outline-none focus:border-primary"
                   >
                     {CATEGORIES.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {projectType === 'resourcepack' && (
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="bg-background-darkest text-slate-200 text-xs px-3 py-2 rounded-xl border border-border-subtle focus:outline-none focus:border-primary"
+                  >
+                    {RESOURCEPACK_CATEGORIES.map((cat) => (
                       <option key={cat.id} value={cat.id}>
                         {cat.label}
                       </option>
@@ -749,7 +988,13 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
             {!isSearching && searchResults.length > 0 && (
               <div className="flex items-center justify-between px-1">
                 <span className="text-[11px] text-slate-400 font-mono">
-                  Showing {searchResults.length} {projectType === 'modpack' ? 'modpacks' : 'mods'} (Page {currentPage + 1})
+                  Showing {searchResults.length}{' '}
+                  {projectType === 'modpack'
+                    ? 'modpacks'
+                    : projectType === 'resourcepack'
+                    ? 'resource packs'
+                    : 'mods'}{' '}
+                  (Page {currentPage + 1})
                 </span>
                 {hasMoreResults && (
                   <span className="text-[11px] text-primary/80 font-medium">
@@ -765,14 +1010,26 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
               <div className="flex-1 flex flex-col items-center justify-center py-24 text-slate-500 gap-3">
                 <RefreshCw size={28} className="animate-spin text-primary" />
                 <p className="text-xs">
-                  {projectType === 'modpack' ? 'Searching modpacks...' : 'Searching mods...'}
+                  {projectType === 'modpack'
+                    ? 'Searching modpacks...'
+                    : projectType === 'resourcepack'
+                    ? 'Searching resource packs...'
+                    : 'Searching mods...'}
                 </p>
               </div>
             ) : searchResults.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center py-20 text-slate-500 gap-2 border border-dashed border-border-subtle rounded-2xl">
-                <Package size={32} className="text-slate-600 mb-1" />
+                {projectType === 'resourcepack' ? (
+                  <Palette size={32} className="text-slate-600 mb-1" />
+                ) : (
+                  <Package size={32} className="text-slate-600 mb-1" />
+                )}
                 <p className="text-sm font-medium text-slate-400">
-                  {projectType === 'modpack' ? 'No modpacks found' : 'No mods found'}
+                  {projectType === 'modpack'
+                    ? 'No modpacks found'
+                    : projectType === 'resourcepack'
+                    ? 'No resource packs found'
+                    : 'No mods found'}
                 </p>
                 <p className="text-xs text-slate-600">
                   Try refining your search query or selecting a different source
@@ -800,7 +1057,13 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
                             />
                           ) : (
                             <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shrink-0">
-                              {projectType === 'modpack' ? <Package size={18} /> : <Boxes size={18} />}
+                              {projectType === 'modpack' ? (
+                                <Package size={18} />
+                              ) : projectType === 'resourcepack' ? (
+                                <Palette size={18} />
+                              ) : (
+                                <Boxes size={18} />
+                              )}
                             </div>
                           )}
 
@@ -830,14 +1093,20 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
                         </p>
 
                         <div className="flex flex-wrap gap-1 mb-3">
-                          {item.loaders.slice(0, 3).map((loader) => (
-                            <span
-                              key={loader}
-                              className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-background-darkest text-slate-400 border border-border-subtle"
-                            >
-                              {loader}
+                          {projectType === 'resourcepack' ? (
+                            <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-background-darkest text-emerald-400 border border-emerald-500/20">
+                              Vanilla & Modded
                             </span>
-                          ))}
+                          ) : (
+                            item.loaders.slice(0, 3).map((loader) => (
+                              <span
+                                key={loader}
+                                className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-background-darkest text-slate-400 border border-border-subtle"
+                              >
+                                {loader}
+                              </span>
+                            ))
+                          )}
                           {item.categories.slice(0, 2).map((cat) => (
                             <span
                               key={cat}
@@ -855,7 +1124,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
                         </span>
 
                         {(() => {
-                          const installedRecord = getInstalledModForProject(item)
+                          const installedRecord = getInstalledItemForProject(item)
                           if (installedRecord) {
                             return (
                               <Button
@@ -895,7 +1164,15 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
                 {isLoadingMore && (
                   <div className="flex items-center justify-center py-6 gap-2 text-slate-400 text-xs">
                     <Loader2 size={16} className="animate-spin text-primary" />
-                    <span>Loading more {projectType === 'modpack' ? 'modpacks' : 'mods'}...</span>
+                    <span>
+                      Loading more{' '}
+                      {projectType === 'modpack'
+                        ? 'modpacks'
+                        : projectType === 'resourcepack'
+                        ? 'resource packs'
+                        : 'mods'}
+                      ...
+                    </span>
                   </div>
                 )}
 
@@ -989,10 +1266,14 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
           <div className="shrink-0 flex items-center justify-between bg-background-card border border-border-subtle p-4 rounded-2xl">
             <div>
               <h3 className="text-sm font-bold text-white">
-                Installed in {currentInstance?.name || 'Instance'}
+                {projectType === 'resourcepack'
+                  ? `Installed Resource Packs in ${currentInstance?.name || 'Instance'}`
+                  : `Installed in ${currentInstance?.name || 'Instance'}`}
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                {installedMods.length} mods currently placed in instance mods folder
+                {projectType === 'resourcepack'
+                  ? `${installedPacks.length} resource pack(s) currently placed in resourcepacks folder`
+                  : `${installedMods.length} mods currently placed in instance mods folder`}
               </p>
             </div>
 
@@ -1001,15 +1282,19 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
                 variant="secondary"
                 size="sm"
                 icon={FolderOpen}
-                onClick={() => selectedInstanceId && onOpenFolder(selectedInstanceId)}
+                onClick={() =>
+                  projectType === 'resourcepack'
+                    ? handleOpenPacksFolder()
+                    : selectedInstanceId && onOpenFolder(selectedInstanceId)
+                }
               >
-                Open Mods Folder
+                {projectType === 'resourcepack' ? 'Open Packs Folder' : 'Open Mods Folder'}
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
                 icon={RefreshCw}
-                onClick={fetchInstalledMods}
+                onClick={projectType === 'resourcepack' ? fetchInstalledPacks : fetchInstalledMods}
                 disabled={isLoadingInstalled}
               />
             </div>
@@ -1017,7 +1302,126 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
 
           <div className="flex-1 min-h-0 overflow-y-auto pr-1">
             {isLoadingInstalled ? (
-              <div className="py-16 text-center text-slate-500 text-xs">Loading installed mods...</div>
+              <div className="py-16 text-center text-slate-500 text-xs">
+                {projectType === 'resourcepack'
+                  ? 'Loading installed resource packs...'
+                  : 'Loading installed mods...'}
+              </div>
+            ) : projectType === 'resourcepack' ? (
+              installedPacks.length === 0 ? (
+                <div className="py-16 text-center text-slate-500 border border-dashed border-border-subtle rounded-2xl p-6">
+                  <p className="text-xs text-slate-400 mb-2">No resource packs installed in this instance yet.</p>
+                  <Button variant="primary" size="sm" onClick={() => setActiveSubTab('browse')}>
+                    Browse & Install Resource Packs
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2 pb-6">
+                  {installedPacks.map((pack) => (
+                    <div
+                      key={pack.filename}
+                      className={`p-3.5 rounded-2xl border transition-all duration-150 flex items-center justify-between gap-3 ${
+                        pack.enabled
+                          ? 'bg-background-card border-border-subtle hover:border-border-strong hover:bg-background-surface/50'
+                          : 'bg-background-darkest/50 border-border-subtle/50 opacity-60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {pack.iconUrl ? (
+                          <img
+                            src={pack.iconUrl}
+                            alt={pack.name}
+                            className="w-9 h-9 rounded-xl bg-background-darkest object-cover border border-border-subtle shrink-0"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none'
+                            }}
+                          />
+                        ) : (
+                          <div
+                            className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${
+                              pack.enabled
+                                ? 'bg-primary/10 border-primary/20 text-primary'
+                                : 'bg-slate-800 border-slate-700 text-slate-500'
+                            }`}
+                          >
+                            <Palette size={17} />
+                          </div>
+                        )}
+
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-slate-100 truncate">
+                              {pack.name}
+                            </span>
+                            {pack.version && pack.version !== 'custom' && (
+                              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-background-darkest text-slate-400 border border-border-subtle">
+                                {pack.version}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[11px] text-slate-500 font-mono block truncate">
+                            {pack.filename} • {formatFileSize(pack.fileSizeBytes)}
+                          </span>
+                          {pack.description && (
+                            <span className="text-[11px] text-slate-400 block truncate max-w-md">
+                              {pack.description}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => handleTogglePack(pack)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                            pack.enabled
+                              ? 'bg-primary/15 border-primary/30 text-primary hover:bg-primary/20'
+                              : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          {pack.enabled ? 'Enabled' : 'Disabled'}
+                        </button>
+
+                        {pack.id && !pack.id.startsWith('manual-') && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            icon={ArrowUpDown}
+                            onClick={() =>
+                              handleOpenInstallModal({
+                                id: pack.id,
+                                name: pack.name,
+                                slug: pack.id,
+                                author: '',
+                                description: pack.description || '',
+                                categories: [],
+                                loaders: [],
+                                downloads: 0,
+                                iconUrl: pack.iconUrl,
+                                source: pack.source || 'modrinth',
+                                projectType: 'resourcepack'
+                              })
+                            }
+                            title="Change pack version"
+                          >
+                            Change Version
+                          </Button>
+                        )}
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon={Trash2}
+                          onClick={() => handleDeletePack(pack)}
+                          title="Delete Resource Pack"
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
             ) : installedMods.length === 0 ? (
               <div className="py-16 text-center text-slate-500 border border-dashed border-border-subtle rounded-2xl p-6">
                 <p className="text-xs text-slate-400 mb-2">No mods installed in this instance yet.</p>
@@ -1114,11 +1518,15 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
           title={
             projectType === 'modpack'
               ? `Install Modpack: ${selectedModForVersions.name}`
+              : projectType === 'resourcepack'
+              ? `Install Resource Pack: ${selectedModForVersions.name}`
               : `Install ${selectedModForVersions.name}`
           }
           description={
             projectType === 'modpack'
               ? `Create a new Minecraft instance from this modpack`
+              : projectType === 'resourcepack'
+              ? `Select compatible version for ${currentInstance?.name || 'Minecraft'} (${currentInstance?.minecraftVersion})`
               : `Select compatible version for ${currentInstance?.name || 'Minecraft'} (${currentInstance?.loaderType} • ${currentInstance?.minecraftVersion})`
           }
           maxWidthClass="max-w-xl"
@@ -1172,6 +1580,8 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
                 <p className="text-xs text-slate-300">
                   {projectType === 'modpack'
                     ? 'No installable versions found for this modpack.'
+                    : projectType === 'resourcepack'
+                    ? `No matching versions found for ${currentInstance?.minecraftVersion || 'Minecraft'}.`
                     : `No matching versions found for ${currentInstance?.loaderType} ${currentInstance?.minecraftVersion}.`}
                 </p>
               </div>
@@ -1212,11 +1622,10 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
 
                     {(() => {
                       const installedRecordForModal = selectedModForVersions
-                        ? getInstalledModForProject(selectedModForVersions)
+                        ? getInstalledItemForProject(selectedModForVersions)
                         : undefined
 
                       const isCurrent =
-                        projectType === 'mod' &&
                         installedRecordForModal &&
                         (ver.filename.toLowerCase() ===
                           installedRecordForModal.filename.toLowerCase() ||
@@ -1231,7 +1640,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
                         )
                       }
 
-                      if (projectType === 'mod' && installedRecordForModal) {
+                      if (projectType !== 'modpack' && installedRecordForModal) {
                         return (
                           <Button
                             variant="secondary"
@@ -1296,8 +1705,8 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
         mod={selectedModForDetail}
         currentInstance={currentInstance}
         onInstallVersion={handleInstallFromDetailModal}
-        isInstalled={Boolean(selectedModForDetail && getInstalledModForProject(selectedModForDetail))}
-        installedVersion={selectedModForDetail ? getInstalledModForProject(selectedModForDetail)?.version : undefined}
+        isInstalled={Boolean(selectedModForDetail && getInstalledItemForProject(selectedModForDetail))}
+        installedVersion={selectedModForDetail ? getInstalledItemForProject(selectedModForDetail)?.version : undefined}
       />
 
       <ConfirmModal

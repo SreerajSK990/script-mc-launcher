@@ -123,18 +123,32 @@ export const ModDetailModal: React.FC<ModDetailModalProps> = ({
 
     setIsLoadingVersions(true)
     if (window.launcherAPI?.mods?.getVersions) {
+      const loaderArg =
+        mod.projectType === 'resourcepack' || currentInstance?.loaderType === 'vanilla'
+          ? undefined
+          : currentInstance?.loaderType
+
       window.launcherAPI.mods
         .getVersions(
           mod.id,
           mod.source,
           currentInstance?.minecraftVersion,
-          currentInstance?.loaderType !== 'vanilla' ? currentInstance?.loaderType : undefined
+          loaderArg
         )
-        .then((verList) => {
-          if (isMounted) {
-            setVersions(verList)
-            setIsLoadingVersions(false)
+        .then(async (verList) => {
+          if (!isMounted) return
+          if (verList.length === 0 && mod.projectType === 'resourcepack') {
+            const fallbackList = await window.launcherAPI.mods
+              .getVersions(mod.id, mod.source)
+              .catch(() => [])
+            if (isMounted) {
+              setVersions(fallbackList)
+              setIsLoadingVersions(false)
+              return
+            }
           }
+          setVersions(verList)
+          setIsLoadingVersions(false)
         })
         .catch((err) => {
           if (isMounted) {
@@ -464,10 +478,14 @@ export const ModDetailModal: React.FC<ModDetailModalProps> = ({
                               <span className="font-mono text-slate-300">
                                 {ver.gameVersions.join(', ')}
                               </span>
-                              <span>•</span>
-                              <span className="uppercase font-mono text-primary">
-                                {ver.loaders.join(', ')}
-                              </span>
+                              {ver.loaders.length > 0 && (
+                                <>
+                                  <span>•</span>
+                                  <span className="uppercase font-mono text-primary">
+                                    {ver.loaders.join(', ')}
+                                  </span>
+                                </>
+                              )}
                               <span>•</span>
                               <span className="font-mono">
                                 {(ver.sizeBytes / (1024 * 1024)).toFixed(2)} MB
@@ -545,14 +563,22 @@ export const ModDetailModal: React.FC<ModDetailModalProps> = ({
                     Platforms & Loaders
                   </span>
                   <div className="flex flex-wrap gap-1.5">
-                    {displayLoaders.map((l) => (
-                      <span
-                        key={l}
-                        className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-lg bg-primary/10 text-primary border border-primary/20 font-bold"
-                      >
-                        {l}
+                    {mod.projectType === 'resourcepack' ? (
+                      <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
+                        Vanilla & All Mod Loaders
                       </span>
-                    ))}
+                    ) : displayLoaders.length > 0 ? (
+                      displayLoaders.map((l) => (
+                        <span
+                          key={l}
+                          className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-lg bg-primary/10 text-primary border border-primary/20 font-bold"
+                        >
+                          {l}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-[10px] text-slate-500 italic">Universal</span>
+                    )}
                   </div>
                 </div>
 

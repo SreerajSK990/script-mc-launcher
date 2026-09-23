@@ -28,6 +28,7 @@ export const App: React.FC = () => {
   const [instances, setInstances] = useState<InstanceConfiguration[]>([])
   const [selectedDetailInstance, setSelectedDetailInstance] = useState<InstanceConfiguration | null>(null)
   const [modBrowserTargetInstanceId, setModBrowserTargetInstanceId] = useState<string | undefined>(undefined)
+  const [modBrowserInitialType, setModBrowserInitialType] = useState<'mod' | 'modpack' | 'resourcepack'>('mod')
   const [systemEnv, setSystemEnv] = useState<SystemEnvironment | null>(null)
   const [authState, setAuthState] = useState<AuthState>({ activeAccount: null, accounts: [] })
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
@@ -409,6 +410,12 @@ export const App: React.FC = () => {
                   onOpenFolder={handleOpenFolder}
                   onBrowseMods={(inst) => {
                     setModBrowserTargetInstanceId(inst.id)
+                    setModBrowserInitialType('mod')
+                    setActiveTab('mods')
+                  }}
+                  onBrowseResourcePacks={(inst) => {
+                    setModBrowserTargetInstanceId(inst.id)
+                    setModBrowserInitialType('resourcepack')
                     setActiveTab('mods')
                   }}
                   onInstanceUpdated={(updated) => {
@@ -440,6 +447,7 @@ export const App: React.FC = () => {
                 onOpenFolder={handleOpenFolder}
                 onNotification={showNotification}
                 initialInstanceId={modBrowserTargetInstanceId}
+                initialProjectType={modBrowserInitialType}
                 onInstanceCreated={(newInstance) => {
                   fetchInstances()
                   setSelectedDetailInstance(newInstance)

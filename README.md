@@ -26,6 +26,13 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
   - **In-App Version Switching:** Change or upgrade any mod's version directly from the Instance Details mods tab or the Mod Browser with one click; automatically removes old `.jar` / `.jar.disabled` files and updates configurations.
   - One-click mod installation directly into your instance's `mods/` folder with SHA-512 hash verification.
   - In-app mod manager to toggle mods on/off (`.jar.disabled`) or delete them without digging through File Explorer.
+- **Integrated Resource Pack (Texture Pack) Browser & Manager:**
+  - Search and discover thousands of texture and resource packs across Modrinth and CurseForge without leaving the launcher.
+  - **Resolution & Style Filters:** Filter packs instantly by texture resolution (16x, 32x, 64x+) or artistic style (Faithful, Realistic, Medieval, Modern, Futuristic, RPG, Steampunk, Themed).
+  - **Universal Instance Compatibility:** Works out of the box with all Minecraft instances, including Vanilla as well as modded instances (Fabric, Quilt, Forge, NeoForge).
+  - **In-App Pack Management:** View installed resource packs with extracted description and resolution badges, toggle them on/off (`.zip.disabled`), change versions in one click, or delete files cleanly.
+  - **Metadata & Thumbnail Extraction:** Automatically inspects `pack.mcmeta` and `pack.png` within archives to display custom descriptions and pack artwork.
+  - **Drag-and-Drop Installation:** Drag any `.zip` resource pack directly onto the launcher window to install it into your active instance immediately.
 - **Modpack Support (Local Imports & Direct Online Downloads):**
   - **Local Archive Import:** One-click import for Modrinth (`.mrpack`) and CurseForge (`.zip`) archives. Automatically extracts `overrides/` (configs, options, resource packs) directly into your instance and batch-downloads all required mods with hash verification.
   - **Online Modpack Browser:** Search and browse thousands of curated modpacks on Modrinth and CurseForge directly from the Mods page. One-click "Install Modpack" creates a brand new instance and installs everything automatically.
@@ -101,7 +108,8 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 │   │   │   ├── meta/            # Prism Meta client with disk cache & TTL
 │   │   │   ├── minecraft/       # Piston manifest, assets, libraries, args, process spawner, screenshots
 │   │   │   ├── modpacks/        # Modrinth (.mrpack) and CurseForge (.zip) archive & online importer
-│   │   │   └── mods/            # Modrinth client, CurseForge client, instance mod manager
+│   │   │   ├── mods/            # Modrinth client, CurseForge client, instance mod manager
+│   │   │   └── resourcepacks/   # Resource pack manager, metadata extractor & zip installer
 │   │   ├── services/            # Instances, auth state, launch engine, paths, system specs
 │   │   ├── ipc/                 # Typed IPC handlers (bridge to renderer)
 │   │   └── utils/               # Atomic filesystem writers, batch downloader, zip extract
@@ -113,7 +121,7 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 │   ├── preload/                 # Secure contextBridge API exposing window.launcherAPI
 │   └── shared/                  # Shared types (instances, auth, launch, mods, externalLauncher, ipc)
 ├── scripts/
-│   └── test-services.mjs        # Automated sandbox test suite (Phases 1–7 + Cloner)
+│   └── test-services.mjs        # Automated sandbox test suite (Phases 1–8 + Cloner & Resource Packs)
 ├── package.json
 └── tsconfig.json
 ```
@@ -178,6 +186,7 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 - [x] **Server IP Privacy & Streamer Mode:** Server IP redaction on dashboard and instance management with one-click reveal toggles
 - [x] **Interactive 3D Skin & Cape Studio:** Real-time 3D skin and cape preview with walk/fly animations, classic/slim models, elytra switching, Minecon presets, and OptiFine lookup
 - [x] **Instance Installation & Version Upgrading:** Change game versions, switch mod loaders, 4 safety backup strategies, and one-click instance repair
+- [x] **Resource Pack (Texture Pack) Browser & Manager:** Modrinth & CurseForge search, resolution filters, in-app management, drag-and-drop installer, and pack metadata extraction
 
 ---
 

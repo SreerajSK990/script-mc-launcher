@@ -26,7 +26,8 @@ import {
   Dices,
   Upload,
   Server,
-  Wrench
+  Wrench,
+  Palette
 } from 'lucide-react'
 import type { InstanceConfiguration, ModLoaderType } from '@shared/types/instance'
 import type { InstalledModRecord, ModUpdateInfo } from '@shared/types/mods'
@@ -50,6 +51,7 @@ interface InstanceDetailPageProps {
   onQuickPlay?: (target: QuickPlayTarget) => void
   onOpenFolder: (instanceId: string) => void
   onBrowseMods: (instance: InstanceConfiguration) => void
+  onBrowseResourcePacks?: (instance: InstanceConfiguration) => void
   onInstanceUpdated: (updated: InstanceConfiguration) => void
   onNotification?: (message: string) => void
 }
@@ -116,6 +118,7 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
   onQuickPlay,
   onOpenFolder,
   onBrowseMods,
+  onBrowseResourcePacks,
   onInstanceUpdated,
   onNotification
 }) => {
@@ -942,6 +945,15 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
                 onClick={() => onOpenFolder(instance.id)}
               >
                 Open Mods Folder
+              </Button>
+
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={Palette}
+                onClick={() => onBrowseResourcePacks?.(instance)}
+              >
+                Resource Packs
               </Button>
 
               <Button
