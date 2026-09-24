@@ -181,20 +181,47 @@ export async function getShaderEnvironment(instanceId: string): Promise<ShaderEn
   const mods = await listInstalledMods(instanceId)
   const installed = new Set<string>()
   for (const mod of mods.filter((mod) => mod.enabled)) {
-    try {
-      const archive = new AdmZip(
-        join(getInstanceMinecraftPath(instanceId), 'mods', validateFilename(mod.filename))
-      )
-      const fabric = archive.getEntry('fabric.mod.json')
-      if (fabric) {
-        const metadata = JSON.parse(archive.readAsText(fabric)) as { id?: string }
-        if (metadata.id === 'iris') installed.add('Iris')
-      }
-      const forge = archive.getEntry('META-INF/mods.toml') || archive.getEntry('META-INF/neoforge.mods.toml')
-      if (forge && /modId\s*=\s*["']oculus["']/.test(archive.readAsText(forge))) installed.add('Oculus')
-      if (forge && /modId\s*=\s*["']iris["']/.test(archive.readAsText(forge))) installed.add('Iris')
-      if (archive.getEntry('optifine/OptiFineClassTransformer.class')) installed.add('OptiFine')
-    } catch {}
+    const nameLower = (mod.name || '').toLowerCase()
+    const idLower = (mod.id || '').toLowerCase()
+    const fileLower = (mod.filename || '').toLowerCase()
+
+    if (nameLower.includes('iris') || idLower === 'iris' || fileLower.includes('iris')) {
+      installed.add('Iris')
+      continue
+    }
+    if (nameLower.includes('oculus') || idLower === 'oculus' || fileLower.includes('oculus')) {
+      installed.add('Oculus')
+      continue
+    }
+    if (nameLower.includes('optifine') || idLower.includes('optifine') || fileLower.includes('optifine')) {
+      installed.add('OptiFine')
+      continue
+    }
+
+    if (
+      fileLower.includes('shader') ||
+      fileLower.includes('opti') ||
+      fileLower.includes('ocu') ||
+      fileLower.includes('iri')
+    ) {
+      try {
+        const archive = new AdmZip(
+          join(getInstanceMinecraftPath(instanceId), 'mods', validateFilename(mod.filename))
+        )
+        const fabric = archive.getEntry('fabric.mod.json')
+        if (fabric) {
+          const metadata = JSON.parse(archive.readAsText(fabric)) as { id?: string }
+          if (metadata.id === 'iris') installed.add('Iris')
+        }
+        const forge = archive.getEntry('META-INF/mods.toml') || archive.getEntry('META-INF/neoforge.mods.toml')
+        if (forge) {
+          const content = archive.readAsText(forge)
+          if (/modId\s*=\s*["']oculus["']/.test(content)) installed.add('Oculus')
+          if (/modId\s*=\s*["']iris["']/.test(content)) installed.add('Iris')
+        }
+        if (archive.getEntry('optifine/OptiFineClassTransformer.class')) installed.add('OptiFine')
+      } catch {}
+    }
   }
   const recommendedProject =
     instance.loaderType === 'fabric' || instance.loaderType === 'neoforge'

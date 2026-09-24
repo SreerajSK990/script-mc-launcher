@@ -1,6 +1,6 @@
 {
   "name": "script-mc-launcher",
-  "version": "0.17.0",
+  "version": "0.17.1",
   "type": "module",
   "description": "Custom modern Minecraft launcher with instance isolation and mod loader support",
   "main": "./out/main/index.js",

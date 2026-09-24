@@ -138,7 +138,7 @@ export const ModDetailModal: React.FC<ModDetailModalProps> = ({
         )
         .then(async (verList) => {
           if (!isMounted) return
-          if (verList.length === 0 && mod.projectType === 'resourcepack') {
+          if (verList.length === 0 && (mod.projectType === 'resourcepack' || mod.projectType === 'shader')) {
             const fallbackList = await window.launcherAPI.mods
               .getVersions(mod.id, mod.source)
               .catch(() => [])
@@ -597,6 +597,10 @@ export const ModDetailModal: React.FC<ModDetailModalProps> = ({
                     {mod.projectType === 'resourcepack' ? (
                       <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
                         Vanilla & All Mod Loaders
+                      </span>
+                    ) : mod.projectType === 'shader' ? (
+                      <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-lg bg-amber-500/15 text-amber-400 border border-amber-500/25">
+                        Iris, Oculus, OptiFine
                       </span>
                     ) : displayLoaders.length > 0 ? (
                       displayLoaders.map((l) => (

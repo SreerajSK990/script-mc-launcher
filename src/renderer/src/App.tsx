@@ -31,7 +31,7 @@ export const App: React.FC = () => {
   const [instances, setInstances] = useState<InstanceConfiguration[]>([])
   const [selectedDetailInstance, setSelectedDetailInstance] = useState<InstanceConfiguration | null>(null)
   const [modBrowserTargetInstanceId, setModBrowserTargetInstanceId] = useState<string | undefined>(undefined)
-  const [modBrowserInitialType, setModBrowserInitialType] = useState<'mod' | 'modpack' | 'resourcepack'>('mod')
+  const [modBrowserInitialType, setModBrowserInitialType] = useState<'mod' | 'modpack' | 'resourcepack' | 'shader'>('mod')
   const [systemEnv, setSystemEnv] = useState<SystemEnvironment | null>(null)
   const [authState, setAuthState] = useState<AuthState>({ activeAccount: null, accounts: [] })
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
@@ -422,6 +422,11 @@ export const App: React.FC = () => {
                   onBrowseResourcePacks={(inst) => {
                     setModBrowserTargetInstanceId(inst.id)
                     setModBrowserInitialType('resourcepack')
+                    setActiveTab('mods')
+                  }}
+                  onBrowseShaders={(inst) => {
+                    setModBrowserTargetInstanceId(inst.id)
+                    setModBrowserInitialType('shader')
                     setActiveTab('mods')
                   }}
                   onInstanceUpdated={(updated) => {

@@ -25,7 +25,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowUp,
-  ArrowUpCircle
+  ArrowUpCircle,
+  Sun
 } from 'lucide-react'
 import type { InstanceConfiguration, ModLoaderType } from '@shared/types/instance'
 import type {
@@ -48,7 +49,7 @@ interface ModBrowserPageProps {
   onOpenFolder: (instanceId: string) => void
   onNotification: (message: string) => void
   initialInstanceId?: string
-  initialProjectType?: 'mod' | 'modpack' | 'resourcepack'
+  initialProjectType?: 'mod' | 'modpack' | 'resourcepack' | 'shader'
   onInstanceCreated?: (instance: InstanceConfiguration) => void
 }
 
@@ -84,8 +85,8 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
   initialProjectType,
   onInstanceCreated
 }) => {
-  const [showShaders, setShowShaders] = useState(false)
-  const [projectType, setProjectType] = useState<'mod' | 'modpack' | 'resourcepack'>(
+  const [installedShadersCount, setInstalledShadersCount] = useState(0)
+  const [projectType, setProjectType] = useState<'mod' | 'modpack' | 'resourcepack' | 'shader'>(
     initialProjectType || 'mod'
   )
   const [activeSubTab, setActiveSubTab] = useState<'browse' | 'installed'>('browse')
@@ -175,13 +176,29 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
       onNotification(
         projectType === 'resourcepack'
           ? 'Please drop valid .zip Minecraft resource pack files.'
+          : projectType === 'shader'
+          ? 'Please drop valid .zip Minecraft shader pack files.'
           : 'Please drop valid .jar or .zip Minecraft mod files.'
       )
       return
     }
 
     try {
-      if (projectType === 'resourcepack') {
+      if (projectType === 'shader') {
+        const shaderZipPaths = validPaths.filter((p) => p.toLowerCase().endsWith('.zip'))
+        if (shaderZipPaths.length === 0) {
+          onNotification('Please drop valid .zip Minecraft shader pack files.')
+          return
+        }
+        const res = await window.launcherAPI.content.importShaders(currentInstance.id, shaderZipPaths)
+        if (res.success) {
+          onNotification(
+            `Successfully installed ${res.data.length} dropped shader pack(s) into "${currentInstance.name}"!`
+          )
+        } else {
+          onNotification(res.error || 'Failed to install dropped shader files.')
+        }
+      } else if (projectType === 'resourcepack') {
         if (window.launcherAPI?.resourcepacks?.installDropped) {
           const res = await window.launcherAPI.resourcepacks.installDropped(currentInstance.id, validPaths)
           if (res.success) {
@@ -424,7 +441,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
 
   const executeSearch = useCallback(
     async (page = 0, isAppend = false) => {
-      if (!window.launcherAPI?.mods || isFetchingRef.current) return
+      if (!window.launcherAPI?.mods || isFetchingRef.current || projectType === 'shader') return
 
       try {
         isFetchingRef.current = true
@@ -830,11 +847,6 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
     return `${bytes} B`
   }
 
-  if (showShaders) return <div className="space-y-5">
-    <div className="flex flex-wrap gap-2 items-center">{(['mod', 'resourcepack', 'modpack'] as const).map(type => <Button key={type} variant="ghost" onClick={() => { setShowShaders(false); setProjectType(type); setSelectedCategory('all') }}>{type === 'mod' ? 'Mods' : type === 'resourcepack' ? 'Resource Packs' : 'Modpacks'}</Button>)}<Button>Shaders</Button><select aria-label="Target shader instance" className="ml-auto bg-background-darkest p-2 rounded-lg text-slate-200" value={selectedInstanceId} onChange={event => setSelectedInstanceId(event.target.value)}>{instances.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
-    <ShadersPanel key={selectedInstanceId} instance={currentInstance} />
-  </div>
-
   return (
     <div
       onDragOver={(e) => {
@@ -853,18 +865,22 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
         <div className="absolute inset-0 z-50 bg-background-dark/85 backdrop-blur-sm border-2 border-dashed border-primary rounded-2xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-150 pointer-events-none">
           {projectType === 'resourcepack' ? (
             <Palette size={48} className="text-primary animate-bounce mb-3" />
+          ) : projectType === 'shader' ? (
+            <Sun size={48} className="text-primary animate-bounce mb-3" />
           ) : (
             <Package size={48} className="text-primary animate-bounce mb-3" />
           )}
           <h3 className="text-lg font-bold text-white">
             {projectType === 'resourcepack'
               ? 'Drop Minecraft Resource Packs Here'
+              : projectType === 'shader'
+              ? 'Drop Shader Packs (.zip) Here'
               : 'Drop Minecraft Mods Here'}
           </h3>
           <p className="text-xs text-slate-300 mt-1">
             {currentInstance
               ? `Release ${
-                  projectType === 'resourcepack' ? '.zip' : '.jar or .zip'
+                  projectType === 'resourcepack' || projectType === 'shader' ? '.zip' : '.jar or .zip'
                 } files to install them directly into "${currentInstance.name}"`
               : 'Select an instance first to install dropped files'}
           </p>
@@ -878,6 +894,8 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
               <Package size={24} className="text-primary" />
             ) : projectType === 'resourcepack' ? (
               <Palette size={24} className="text-primary" />
+            ) : projectType === 'shader' ? (
+              <Sun size={24} className="text-primary" />
             ) : (
               <Boxes size={24} className="text-primary" />
             )}
@@ -886,6 +904,8 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
                 ? 'Modpack Browser'
                 : projectType === 'resourcepack'
                 ? 'Resource Pack Browser'
+                : projectType === 'shader'
+                ? 'Shader Pack Browser'
                 : 'Mod Browser'}
             </span>
           </h2>
@@ -894,6 +914,8 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
               ? 'Discover and install complete curated modpacks directly from Modrinth and CurseForge'
               : projectType === 'resourcepack'
               ? 'Discover, download, and manage resource packs directly for your Minecraft instances'
+              : projectType === 'shader'
+              ? 'Discover, download, and manage shaders and lighting pipelines for your Minecraft instances'
               : 'Discover, download, and manage mods directly for your Minecraft instances'}
           </p>
         </div>
@@ -932,6 +954,21 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
             </button>
             <button
               onClick={() => {
+                setProjectType('shader')
+                setActiveSubTab('browse')
+                setSelectedCategory('all')
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                projectType === 'shader'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Sun size={14} />
+              <span>Shaders</span>
+            </button>
+            <button
+              onClick={() => {
                 setProjectType('modpack')
                 setActiveSubTab('browse')
                 setSelectedCategory('all')
@@ -945,7 +982,6 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
               <Package size={14} />
               <span>Modpacks</span>
             </button>
-            <Button variant="ghost" onClick={() => setShowShaders(true)}>Shaders</Button>
           </div>
 
           {projectType !== 'modpack' ? (
@@ -984,7 +1020,11 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                {projectType === 'resourcepack' ? 'Browse Packs' : 'Browse Mods'}
+                {projectType === 'resourcepack'
+                  ? 'Browse Packs'
+                  : projectType === 'shader'
+                  ? 'Browse Shaders'
+                  : 'Browse Mods'}
               </button>
               <button
                 onClick={() => setActiveSubTab('installed')}
@@ -996,7 +1036,11 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
               >
                 <span>Installed</span>
                 <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-primary/20 text-primary">
-                  {projectType === 'resourcepack' ? installedPacks.length : installedMods.length}
+                  {projectType === 'resourcepack'
+                    ? installedPacks.length
+                    : projectType === 'shader'
+                    ? installedShadersCount
+                    : installedMods.length}
                 </span>
               </button>
             </div>
@@ -1004,7 +1048,17 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
         </div>
       </div>
 
-      {activeSubTab === 'browse' ? (
+      {projectType === 'shader' ? (
+        <div className="flex-1 min-h-0 overflow-y-auto pr-1 pt-3">
+          <ShadersPanel
+            key={selectedInstanceId}
+            instance={currentInstance}
+            activeSubTab={activeSubTab}
+            onSubTabChange={setActiveSubTab}
+            onInstalledCountChange={setInstalledShadersCount}
+          />
+        </div>
+      ) : activeSubTab === 'browse' ? (
         <div className="flex flex-col flex-1 min-h-0 pt-3">
           <div className="shrink-0 flex flex-col gap-2.5 pb-3">
             <div className="flex flex-col md:flex-row items-center gap-3 bg-background-card border border-border-subtle p-3 rounded-2xl">

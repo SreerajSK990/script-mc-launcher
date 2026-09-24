@@ -32,7 +32,8 @@ import {
   Upload,
   Server,
   Wrench,
-  Palette
+  Palette,
+  Sun
 } from 'lucide-react'
 import type { InstanceConfiguration, ModLoaderType } from '@shared/types/instance'
 import type { InstalledModRecord, ModUpdateInfo } from '@shared/types/mods'
@@ -57,6 +58,7 @@ interface InstanceDetailPageProps {
   onOpenFolder: (instanceId: string) => void
   onBrowseMods: (instance: InstanceConfiguration) => void
   onBrowseResourcePacks?: (instance: InstanceConfiguration) => void
+  onBrowseShaders?: (instance: InstanceConfiguration) => void
   onInstanceUpdated: (updated: InstanceConfiguration) => void
   onNotification?: (message: string) => void
 }
@@ -605,8 +607,30 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
           <Sliders size={16} />
           <span>Minecraft Settings</span>
         </button>
-        <Button icon={Palette} variant={activeTab === 'shaders' ? 'primary' : 'ghost'} onClick={() => setActiveTab('shaders')}>Shaders</Button>
-        <Button icon={RotateCcw} variant={activeTab === 'recovery' ? 'primary' : 'ghost'} onClick={() => setActiveTab('recovery')}>Backups</Button>
+
+        <button
+          onClick={() => setActiveTab('shaders')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+            activeTab === 'shaders'
+              ? 'bg-primary/10 text-primary border border-primary/20'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-background-card'
+          }`}
+        >
+          <Sun size={16} />
+          <span>Shaders</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('recovery')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+            activeTab === 'recovery'
+              ? 'bg-primary/10 text-primary border border-primary/20'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-background-card'
+          }`}
+        >
+          <RotateCcw size={16} />
+          <span>Backups</span>
+        </button>
       </div>
 
       {activeTab === 'shaders' && <ShadersPanel key={instance.id} instance={instance} />}
