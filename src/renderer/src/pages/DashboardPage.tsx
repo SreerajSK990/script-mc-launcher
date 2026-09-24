@@ -7,7 +7,10 @@ import {
   RefreshCw,
   Loader2,
   Eye,
-  EyeOff
+  EyeOff,
+  ChevronDown,
+  ChevronRight,
+  Clock
 } from 'lucide-react'
 import type { InstanceConfiguration } from '@shared/types/instance'
 import type { SystemEnvironment } from '@shared/types/system'
@@ -47,6 +50,25 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     return localStorage.getItem('script_launcher_redact_ips') !== 'false'
   })
   const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set())
+  const [isJumpInCollapsed, setIsJumpInCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('script_launcher_jump_in_collapsed') === 'true'
+    } catch {
+      return false
+    }
+  })
+  const [showAllTargets, setShowAllTargets] = useState(false)
+
+  const toggleJumpInCollapse = () => {
+    setIsJumpInCollapsed((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem('script_launcher_jump_in_collapsed', String(next))
+      } catch {
+      }
+      return next
+    })
+  }
 
   const toggleRedactIps = () => {
     setRedactIps((prev) => {
@@ -166,54 +188,232 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     onRefreshInstances?.()
   }
 
+  const instanceMap = new Map(instances.map((i) => [i.id, i]))
+
+  const sortedTargets = [...quickPlayTargets].sort((a, b) => {
+    const instA = instanceMap.get(a.instanceId)
+    const instB = instanceMap.get(b.instanceId)
+    const playTimeA = instA?.totalPlayTimeMinutes || 0
+    const playTimeB = instB?.totalPlayTimeMinutes || 0
+    if (playTimeB !== playTimeA) {
+      return playTimeB - playTimeA
+    }
+    const lastPlayedA =
+      a.type === 'world'
+        ? a.lastPlayed
+        : instA?.lastPlayedAt
+        ? new Date(instA.lastPlayedAt).getTime()
+        : 0
+    const lastPlayedB =
+      b.type === 'world'
+        ? b.lastPlayed
+        : instB?.lastPlayedAt
+        ? new Date(instB.lastPlayedAt).getTime()
+        : 0
+    return lastPlayedB - lastPlayedA
+  })
+
+  const displayedTargets = showAllTargets ? sortedTargets : sortedTargets.slice(0, 3)
+
   return (
-    <div className="flex flex-col gap-6 w-full">
+    <div className="flex flex-col gap-6 w-full pb-10">
       <div className="bg-background-card border border-border-subtle rounded-3xl p-5 md:p-6 shadow-xl flex flex-col gap-4">
         <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-white flex items-center gap-2 tracking-tight">
-              <Compass className="text-emerald-400" size={20} />
-              Jump In
-            </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              1-click auto-join into saved multiplayer servers and singleplayer worlds
-            </p>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={toggleJumpInCollapse}
+              className="p-1.5 -ml-1 text-slate-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
+              title={isJumpInCollapsed ? 'Expand Jump In' : 'Collapse Jump In'}
+              aria-label={isJumpInCollapsed ? 'Expand Jump In' : 'Collapse Jump In'}
+            >
+              {isJumpInCollapsed ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
+            </button>
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2 tracking-tight">
+                <Compass className="text-emerald-400" size={20} />
+                Jump In
+                {sortedTargets.length > 0 && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-mono font-semibold border border-emerald-500/20">
+                    {showAllTargets ? sortedTargets.length : Math.min(3, sortedTargets.length)}
+                  </span>
+                )}
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Top {sortedTargets.length > 3 && !showAllTargets ? '3 ' : ''}quick-join targets sorted by playtime
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={redactIps ? EyeOff : Eye}
-              onClick={toggleRedactIps}
-              title={redactIps ? 'Show all server IPs' : 'Redact all server IPs (Streamer Mode)'}
-            >
-              {redactIps ? 'IPs Hidden' : 'Show IPs'}
-            </Button>
+            {!isJumpInCollapsed && sortedTargets.length > 3 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAllTargets((prev) => !prev)}
+                title={showAllTargets ? 'Show only top 3 by playtime' : 'Show all quick play targets'}
+              >
+                {showAllTargets ? 'Show Top 3' : `View All (${sortedTargets.length})`}
+              </Button>
+            )}
 
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={isPinging ? Loader2 : RefreshCw}
-              isLoading={isPinging}
-              onClick={loadQuickPlayTargets}
-              title="Refresh server status"
-            >
-              Refresh
-            </Button>
+            {!isJumpInCollapsed && (
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={redactIps ? EyeOff : Eye}
+                onClick={toggleRedactIps}
+                title={redactIps ? 'Show all server IPs' : 'Redact all server IPs (Streamer Mode)'}
+              >
+                {redactIps ? 'IPs Hidden' : 'Show IPs'}
+              </Button>
+            )}
+
+            {!isJumpInCollapsed && (
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={isPinging ? Loader2 : RefreshCw}
+                isLoading={isPinging}
+                onClick={loadQuickPlayTargets}
+                title="Refresh server status"
+              >
+                Refresh
+              </Button>
+            )}
           </div>
         </div>
 
-        {quickPlayTargets.length === 0 ? (
-          <div className="py-8 text-center border border-dashed border-border-subtle rounded-2xl bg-background-card/40 text-xs text-slate-400">
-            No servers or singleplayer worlds detected yet across your instances. Launch an instance to add servers or create worlds!
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-            {quickPlayTargets.map((target) => {
-              if (target.type === 'server') {
-                const ping = pingStatuses[target.id]
-                const iconSrc = ping?.favicon || target.icon || DEFAULT_MINECRAFT_ICON.dataUrl
+        {!isJumpInCollapsed && (
+          sortedTargets.length === 0 ? (
+            <div className="py-8 text-center border border-dashed border-border-subtle rounded-2xl bg-background-card/40 text-xs text-slate-400">
+              No servers or singleplayer worlds detected yet across your instances. Launch an instance to add servers or create worlds!
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              {displayedTargets.map((target) => {
+                if (target.type === 'server') {
+                  const ping = pingStatuses[target.id]
+                  const iconSrc = ping?.favicon || target.icon || DEFAULT_MINECRAFT_ICON.dataUrl
+
+                  return (
+                    <div
+                      key={target.id}
+                      className="bg-background-darkest/70 border border-border-subtle hover:border-border-strong rounded-2xl p-3.5 flex flex-col justify-between gap-3 shadow-md transition-all group"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-background-card border border-white/10 shrink-0 overflow-hidden flex items-center justify-center p-1">
+                          <img
+                            src={iconSrc}
+                            alt={target.name}
+                            className="w-full h-full object-contain"
+                            style={{ imageRendering: 'pixelated' }}
+                            onError={(e) => {
+                              ;(e.target as HTMLImageElement).src = DEFAULT_MINECRAFT_ICON.dataUrl
+                            }}
+                          />
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1">
+                            <h4 className="text-sm font-bold text-white truncate">{target.name}</h4>
+                            {ping ? (
+                              ping.online ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                  {ping.latencyMs}ms
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 shrink-0">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                                  Offline
+                                </span>
+                              )
+                            ) : (
+                              <span className="text-[10px] font-mono text-slate-500 shrink-0">
+                                Pinging...
+                              </span>
+                            )}
+                          </div>
+
+                          {(() => {
+                            const isHidden = redactIps ? !revealedIds.has(target.id) : false
+                            return (
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <p className="text-xs text-slate-400 font-mono truncate">
+                                  {isHidden ? (
+                                    <span className="tracking-widest text-slate-500 select-none">••••••••••••</span>
+                                  ) : (
+                                    <>
+                                      {target.ip}
+                                      {target.port !== 25565 ? `:${target.port}` : ''}
+                                    </>
+                                  )}
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    toggleRevealTarget(target.id)
+                                  }}
+                                  className="text-slate-500 hover:text-slate-300 transition-colors p-0.5 rounded focus:outline-none shrink-0"
+                                  title={isHidden ? 'Reveal server IP' : 'Hide server IP'}
+                                >
+                                  {isHidden ? <Eye size={11} /> : <EyeOff size={11} />}
+                                </button>
+                              </div>
+                            )
+                          })()}
+
+                          {ping?.motd && (
+                            <p className="text-[11px] text-slate-400 truncate mt-1">
+                              {ping.motd}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {(() => {
+                        const inst = instanceMap.get(target.instanceId)
+                        const totalMins = inst?.totalPlayTimeMinutes || 0
+                        const hours = Math.floor(totalMins / 60)
+                        const mins = totalMins % 60
+                        const playTimeStr = hours > 0 ? `${hours}h ${mins}m` : mins > 0 ? `${mins}m` : null
+
+                        return (
+                          <div className="flex items-center justify-between pt-2 border-t border-border-subtle/50 text-xs">
+                            <div className="flex items-center gap-2 text-slate-400 min-w-0">
+                              <span className="text-[11px] truncate max-w-[120px]" title={target.instanceName}>
+                                {target.instanceName}
+                              </span>
+                              {playTimeStr && (
+                                <span className="text-[10px] text-emerald-400/80 font-mono flex items-center gap-0.5 shrink-0" title="Total playtime in this instance">
+                                  <Clock size={10} />
+                                  {playTimeStr}
+                                </span>
+                              )}
+                              {ping?.players && (
+                                <span className="text-[10px] text-slate-500 font-mono flex items-center gap-1 shrink-0">
+                                  <Users size={10} />
+                                  {ping.players.online.toLocaleString()}
+                                </span>
+                              )}
+                            </div>
+
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              icon={Play}
+                              onClick={() => onQuickPlay(target)}
+                            >
+                              Join
+                            </Button>
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  )
+                }
 
                 return (
                   <div
@@ -221,152 +421,68 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                     className="bg-background-darkest/70 border border-border-subtle hover:border-border-strong rounded-2xl p-3.5 flex flex-col justify-between gap-3 shadow-md transition-all group"
                   >
                     <div className="flex items-start gap-3">
-                      <div className="w-12 h-12 rounded-xl bg-background-card border border-white/10 shrink-0 overflow-hidden flex items-center justify-center p-1">
+                      <div className="w-12 h-12 rounded-xl bg-background-card border border-white/10 shrink-0 overflow-hidden flex items-center justify-center">
                         <img
-                          src={iconSrc}
+                          src={target.icon || DEFAULT_MINECRAFT_ICON.dataUrl}
                           alt={target.name}
-                          className="w-full h-full object-contain"
+                          className="w-full h-full object-cover"
                           style={{ imageRendering: 'pixelated' }}
-                          onError={(e) => {
-                            ;(e.target as HTMLImageElement).src = DEFAULT_MINECRAFT_ICON.dataUrl
-                          }}
                         />
                       </div>
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-1">
                           <h4 className="text-sm font-bold text-white truncate">{target.name}</h4>
-                          {ping ? (
-                            ping.online ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                {ping.latencyMs}ms
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 shrink-0">
-                                <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
-                                Offline
-                              </span>
-                            )
-                          ) : (
-                            <span className="text-[10px] font-mono text-slate-500 shrink-0">
-                              Pinging...
-                            </span>
-                          )}
-                        </div>
-
-                        {(() => {
-                          const isHidden = redactIps ? !revealedIds.has(target.id) : false
-                          return (
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <p className="text-xs text-slate-400 font-mono truncate">
-                                {isHidden ? (
-                                  <span className="tracking-widest text-slate-500 select-none">••••••••••••</span>
-                                ) : (
-                                  <>
-                                    {target.ip}
-                                    {target.port !== 25565 ? `:${target.port}` : ''}
-                                  </>
-                                )}
-                              </p>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  toggleRevealTarget(target.id)
-                                }}
-                                className="text-slate-500 hover:text-slate-300 transition-colors p-0.5 rounded focus:outline-none shrink-0"
-                                title={isHidden ? 'Reveal server IP' : 'Hide server IP'}
-                              >
-                                {isHidden ? <Eye size={11} /> : <EyeOff size={11} />}
-                              </button>
-                            </div>
-                          )
-                        })()}
-
-                        {ping?.motd && (
-                          <p className="text-[11px] text-slate-400 truncate mt-1">
-                            {ping.motd}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-2 border-t border-border-subtle/50 text-xs">
-                      <div className="flex items-center gap-2 text-slate-400">
-                        <span className="text-[11px] truncate max-w-[140px]" title={target.instanceName}>
-                          {target.instanceName}
-                        </span>
-                        {ping?.players && (
-                          <span className="text-[10px] text-slate-500 font-mono flex items-center gap-1">
-                            <Users size={10} />
-                            {ping.players.online.toLocaleString()}
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/5 text-slate-300 capitalize shrink-0">
+                            {target.gameMode}
                           </span>
-                        )}
+                        </div>
+                        <p className="text-xs text-slate-400 truncate mt-0.5">
+                          Folder: {target.folderName}
+                        </p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">
+                          Played {new Date(target.lastPlayed).toLocaleDateString()}
+                        </p>
                       </div>
-
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        icon={Play}
-                        onClick={() => onQuickPlay(target)}
-                      >
-                        Join
-                      </Button>
                     </div>
+
+                    {(() => {
+                      const inst = instanceMap.get(target.instanceId)
+                      const totalMins = inst?.totalPlayTimeMinutes || 0
+                      const hours = Math.floor(totalMins / 60)
+                      const mins = totalMins % 60
+                      const playTimeStr = hours > 0 ? `${hours}h ${mins}m` : mins > 0 ? `${mins}m` : null
+
+                      return (
+                        <div className="flex items-center justify-between pt-2 border-t border-border-subtle/50 text-xs">
+                          <div className="flex items-center gap-2 text-slate-400 min-w-0">
+                            <span className="text-[11px] truncate max-w-[130px]" title={target.instanceName}>
+                              {target.instanceName}
+                            </span>
+                            {playTimeStr && (
+                              <span className="text-[10px] text-emerald-400/80 font-mono flex items-center gap-0.5 shrink-0" title="Total playtime in this instance">
+                                <Clock size={10} />
+                                {playTimeStr}
+                              </span>
+                            )}
+                          </div>
+
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            icon={Play}
+                            onClick={() => onQuickPlay(target)}
+                          >
+                            Play World
+                          </Button>
+                        </div>
+                      )
+                    })()}
                   </div>
                 )
-              }
-
-              return (
-                <div
-                  key={target.id}
-                  className="bg-background-darkest/70 border border-border-subtle hover:border-border-strong rounded-2xl p-3.5 flex flex-col justify-between gap-3 shadow-md transition-all group"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-background-card border border-white/10 shrink-0 overflow-hidden flex items-center justify-center">
-                      <img
-                        src={target.icon || DEFAULT_MINECRAFT_ICON.dataUrl}
-                        alt={target.name}
-                        className="w-full h-full object-cover"
-                        style={{ imageRendering: 'pixelated' }}
-                      />
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1">
-                        <h4 className="text-sm font-bold text-white truncate">{target.name}</h4>
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/5 text-slate-300 capitalize shrink-0">
-                          {target.gameMode}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400 truncate mt-0.5">
-                        Folder: {target.folderName}
-                      </p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">
-                        Played {new Date(target.lastPlayed).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-2 border-t border-border-subtle/50 text-xs">
-                    <span className="text-[11px] text-slate-400 truncate max-w-[150px]" title={target.instanceName}>
-                      {target.instanceName}
-                    </span>
-
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      icon={Play}
-                      onClick={() => onQuickPlay(target)}
-                    >
-                      Play World
-                    </Button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+              })}
+            </div>
+          )
         )}
       </div>
 

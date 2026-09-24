@@ -83,6 +83,16 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
   - 4 safety backup strategies before upgrading: **Backup Both** (clones instance & archives saves), **Backup Instance only**, **Backup Saves only**, or **No backup**.
   - One-click **Instance Repair** to purge broken natives, clear stale metadata caches, and re-verify integrity on next launch.
 - **Discord Rich Presence (RPC):** Dynamic presence powered by `@xhayper/discord-rpc` showing what page you're browsing (Dashboard, Instances, Mod Browser, Skins, Settings), which instance you're configuring, and live in-game status with elapsed playtime, mod loader badges, and a direct GitHub link button.
+- **Collapsible "Jump In" & Playtime-Ranked Quick Join:**
+  - Automatically sorts all multiplayer servers and singleplayer worlds by total instance playtime and recent activity.
+  - Displays top 3 most played targets by default with instant 1-click launch; provides a seamless "View All" toggle when more targets exist.
+  - Interactive collapse/expand toggle on the Jump In card header with persistent saved state.
+  - Inline playtime badges (`Clock` icon with formatted hours and minutes) on each quick-play card.
+- **Modal Portaling Architecture & UI Stability:**
+  - All modal dialogs (Instance Groups, Confirmations, Icon Picker, Upgrades) are rendered through top-level React portals directly to the document body.
+  - Eliminates CSS `transform` containing-block conflicts and prevents modal flickering when interacting with items at the bottom of long scrollable lists.
+  - Dynamic 3-dot dropdown menus that flip upwards or downwards based on screen position, with outside-click dismissal.
+  - Generous bottom scroll padding across all views for comfortable viewing.
 - **Zero Button Emojis & Modern UI:** Clean, human-designed dark interface using Lucide SVG icons that uses your full screen properly instead of cramming everything into the center.
 
 ---
@@ -193,6 +203,7 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 - [x] **Resource Pack (Texture Pack) Browser & Manager:** Modrinth & CurseForge search, resolution filters, in-app management, drag-and-drop installer, and pack metadata extraction
 - [x] **Batch Mod Update Engine:** SHA-512 batch hash lookup, per-mod update badges, one-click individual update, and batch "Update All" with live progress
 - [x] **Enhanced Version Listing & Web Download Engine:** External browser download for restricted CurseForge files, channel filters (Release/Beta/Alpha), loader badges, changelog accordions, and modpack project ID self-healing
+- [x] **Modal Portaling Architecture & UI Polish:** Top-level React portals for zero CSS transform modal flickering, dynamic 3-dot action menus with outside-click dismissal, collapsible Jump In section, and playtime-based quick-join sorting
 
 ---
 

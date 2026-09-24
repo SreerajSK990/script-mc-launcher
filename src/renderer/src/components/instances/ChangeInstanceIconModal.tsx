@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { Dices, Upload, Check, X, Image as ImageIcon } from 'lucide-react'
 import type { InstanceConfiguration } from '@shared/types/instance'
 import {
@@ -71,8 +72,8 @@ export const ChangeInstanceIconModal: React.FC<ChangeInstanceIconModalProps> = (
     ? 'bg-gradient-to-br from-slate-800 to-zinc-900'
     : `bg-gradient-to-br ${getMinecraftIconById(selectedIcon).bg}`
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150 app-no-drag">
       <div className="bg-background-card border border-border-subtle rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle bg-background-dark/50">
           <div className="flex items-center gap-2">
@@ -185,6 +186,7 @@ export const ChangeInstanceIconModal: React.FC<ChangeInstanceIconModalProps> = (
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

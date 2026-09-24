@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { AlertTriangle, Trash2, HelpCircle, X, LucideIcon } from 'lucide-react'
 import { Button } from './Button'
 
@@ -63,7 +64,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
   const currentStyle = variantStyles[variant] || variantStyles.danger
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn app-no-drag">
       <div className="fixed inset-0" onClick={isLoading ? undefined : onCancel} aria-hidden="true" />
 
@@ -110,6 +111,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Play,
   FolderOpen,
@@ -41,6 +42,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false)
   const [isChangeIconModalOpen, setIsChangeIconModalOpen] = useState(false)
   const [targetGroupInput, setTargetGroupInput] = useState(instance.group || '')
+  const [openUpwards, setOpenUpwards] = useState(true)
   const menuRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -87,7 +89,11 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
         draggable
         onDragStart={handleDragStart}
         onClick={() => onManage?.(instance)}
-        className="group relative flex flex-col bg-background-card hover:bg-background-surface/70 border border-border-subtle hover:border-border-strong rounded-2xl p-2.5 transition-all duration-200 hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-500/5 active:scale-[0.99] cursor-pointer select-none"
+        className={`group relative flex flex-col bg-background-card hover:bg-background-surface/70 border border-border-subtle hover:border-border-strong rounded-2xl p-2.5 transition-all duration-200 cursor-pointer select-none ${
+          isMenuOpen
+            ? 'z-30 ring-1 ring-emerald-500/40 shadow-xl'
+            : 'hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-500/5 active:scale-[0.99]'
+        }`}
       >
         <div
           className={`w-full aspect-square rounded-xl ${bgClass} flex items-center justify-center relative overflow-hidden shadow-inner`}
@@ -151,9 +157,17 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
               type="button"
               onClick={(e) => {
                 e.stopPropagation()
+                if (!isMenuOpen && menuRef.current) {
+                  const rect = menuRef.current.getBoundingClientRect()
+                  setOpenUpwards(rect.top > 240)
+                }
                 setIsMenuOpen((prev) => !prev)
               }}
-              className="p-1 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity"
+              className={`p-1 rounded-lg transition-all ${
+                isMenuOpen
+                  ? 'opacity-100 text-white bg-white/10'
+                  : 'text-slate-400 hover:text-slate-100 hover:bg-white/5 opacity-0 group-hover:opacity-100'
+              }`}
               title="More Options"
               aria-label="More Options"
             >
@@ -163,7 +177,9 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
             {isMenuOpen && (
               <div
                 onClick={(e) => e.stopPropagation()}
-                className="absolute right-0 bottom-full mb-1.5 w-44 bg-background-darkest/95 backdrop-blur-md border border-border-subtle rounded-xl p-1.5 shadow-2xl z-30 flex flex-col gap-0.5 text-xs text-slate-300"
+                className={`absolute right-0 ${
+                  openUpwards ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+                } w-44 bg-background-darkest/95 backdrop-blur-md border border-border-subtle rounded-xl p-1.5 shadow-2xl z-40 flex flex-col gap-0.5 text-xs text-slate-300 animate-in fade-in zoom-in-95 duration-100`}
               >
                 {onManage && (
                   <button
@@ -262,11 +278,13 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
             )}
           </div>
         </div>
+      </div>
 
-        {isGroupModalOpen && (
+      {isGroupModalOpen &&
+        createPortal(
           <div
             onClick={(e) => e.stopPropagation()}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150"
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150 app-no-drag"
           >
             <div className="bg-background-card border border-border-subtle rounded-2xl p-5 max-w-sm w-full shadow-2xl">
               <h3 className="text-base font-bold text-white mb-1">Set Instance Group</h3>
@@ -332,9 +350,9 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
                 </div>
               </form>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
-      </div>
 
       <ChangeInstanceIconModal
         isOpen={isChangeIconModalOpen}

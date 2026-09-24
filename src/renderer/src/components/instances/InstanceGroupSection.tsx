@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Folder,
   ChevronDown,
@@ -61,6 +62,21 @@ export const InstanceGroupSection: React.FC<InstanceGroupSectionProps> = ({
   const [newGroupNameInput, setNewGroupNameInput] = useState(groupName)
   const [isDisbandModalOpen, setIsDisbandModalOpen] = useState(false)
   const [isDeleteAllModalOpen, setIsDeleteAllModalOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setIsMenuOpen(false)
+      }
+    }
+    if (isMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isMenuOpen])
 
   const toggleCollapse = () => {
     setIsCollapsed((prev) => {
@@ -141,11 +157,13 @@ export const InstanceGroupSection: React.FC<InstanceGroupSectionProps> = ({
           </span>
         </div>
 
-        <div className="relative">
+        <div className="relative" ref={menuRef}>
           <button
             type="button"
             onClick={() => setIsMenuOpen((prev) => !prev)}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+            className={`p-1.5 rounded-lg transition-colors ${
+              isMenuOpen ? 'text-white bg-white/10' : 'text-slate-400 hover:text-white hover:bg-white/5'
+            }`}
             title="Group Actions"
             aria-label="Group Actions"
           >
@@ -163,7 +181,7 @@ export const InstanceGroupSection: React.FC<InstanceGroupSectionProps> = ({
                   setNewGroupNameInput(groupName)
                   setIsRenameModalOpen(true)
                 }}
-                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-colors text-left w-full"
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-colors text-left w-full cursor-pointer"
               >
                 <Edit2 size={13} className="text-slate-400" />
                 <span>Rename Group</span>
@@ -172,7 +190,7 @@ export const InstanceGroupSection: React.FC<InstanceGroupSectionProps> = ({
               <button
                 type="button"
                 onClick={() => setIsDisbandModalOpen(true)}
-                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-colors text-left w-full"
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-colors text-left w-full cursor-pointer"
               >
                 <FolderMinus size={13} className="text-amber-400" />
                 <span>Disband Group</span>
@@ -183,7 +201,7 @@ export const InstanceGroupSection: React.FC<InstanceGroupSectionProps> = ({
               <button
                 type="button"
                 onClick={() => setIsDeleteAllModalOpen(true)}
-                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 transition-colors text-left w-full"
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 transition-colors text-left w-full cursor-pointer"
               >
                 <Trash2 size={13} />
                 <span>Delete All Instances</span>
@@ -220,46 +238,48 @@ export const InstanceGroupSection: React.FC<InstanceGroupSectionProps> = ({
         </div>
       )}
 
-      {isRenameModalOpen && (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150"
-        >
-          <div className="bg-background-card border border-border-subtle rounded-2xl p-5 max-w-sm w-full shadow-2xl">
-            <h3 className="text-base font-bold text-white mb-1">Rename Group</h3>
-            <p className="text-xs text-slate-400 mb-4">
-              All instances in this group will be updated with the new name.
-            </p>
+      {isRenameModalOpen &&
+        createPortal(
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-150 app-no-drag"
+          >
+            <div className="bg-background-card border border-border-subtle rounded-2xl p-5 max-w-sm w-full shadow-2xl">
+              <h3 className="text-base font-bold text-white mb-1">Rename Group</h3>
+              <p className="text-xs text-slate-400 mb-4">
+                All instances in this group will be updated with the new name.
+              </p>
 
-            <form onSubmit={handleRenameSubmit} className="flex flex-col gap-3">
-              <input
-                type="text"
-                value={newGroupNameInput}
-                onChange={(e) => setNewGroupNameInput(e.target.value)}
-                autoFocus
-                className="w-full px-3 py-2 bg-background-darkest border border-border-subtle rounded-xl text-sm text-white focus:outline-none focus:border-emerald-500"
-              />
+              <form onSubmit={handleRenameSubmit} className="flex flex-col gap-3">
+                <input
+                  type="text"
+                  value={newGroupNameInput}
+                  onChange={(e) => setNewGroupNameInput(e.target.value)}
+                  autoFocus
+                  className="w-full px-3 py-2 bg-background-darkest border border-border-subtle rounded-xl text-sm text-white focus:outline-none focus:border-emerald-500"
+                />
 
-              <div className="flex items-center justify-end gap-2 mt-2 pt-3 border-t border-border-subtle">
-                <button
-                  type="button"
-                  onClick={() => setIsRenameModalOpen(false)}
-                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-white rounded-lg hover:bg-white/5"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={!newGroupNameInput.trim()}
-                  className="px-4 py-1.5 text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black rounded-lg transition-colors disabled:opacity-50"
-                >
-                  Save Name
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+                <div className="flex items-center justify-end gap-2 mt-2 pt-3 border-t border-border-subtle">
+                  <button
+                    type="button"
+                    onClick={() => setIsRenameModalOpen(false)}
+                    className="px-3 py-1.5 text-xs text-slate-400 hover:text-white rounded-lg hover:bg-white/5 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!newGroupNameInput.trim()}
+                    className="px-4 py-1.5 text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    Save Name
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body
+        )}
 
       <ConfirmModal
         isOpen={isDisbandModalOpen}
