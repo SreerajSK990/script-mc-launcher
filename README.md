@@ -2,7 +2,7 @@
 
 A fast, sleek, and modular Minecraft launcher built with **Electron**, **React**, **TypeScript**, and **Tailwind CSS**.
 
-**Latest release: [v0.17.2](https://github.com/SreerajSK990/script-mc-launcher/releases/tag/v0.17.2)** — smooth infinite scrolling for shaders, persistent card positioning during catalog pagination, quick scroll-to-top navigation, and robust installed shader detection. Read the [release notes](release-notes/v0.17.2.md) for details.
+**Latest release: [v0.17.3](https://github.com/SreerajSK990/script-mc-launcher/releases/tag/v0.17.3)** — fixed viewport layout boundaries for Mod Browser, Live Logs, and Skin Studio, restored pinned search bar and static headers, bounded terminal auto-scroll, and eliminated unintended API rate limits on catalog load. Read the [release notes](release-notes/v0.17.3.md) for details.
 
 Most Minecraft launchers out there either look like they're stuck in 2010 with clunky Java Swing windows, or they're bloated with electron bloatware and ads. Script Launcher is built to be fast, clean, and completely isolated so your mod setups and game versions never conflict with each other.
 

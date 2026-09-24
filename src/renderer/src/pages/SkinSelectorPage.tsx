@@ -490,7 +490,7 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
   const isCapeActive = Boolean(previewCape && activeCapeId === previewCape.id)
 
   return (
-    <div className="flex flex-col gap-6 w-full h-[calc(100vh-4rem)]">
+    <div className="flex flex-col gap-6 w-full h-full min-h-0">
       <div className="flex items-center justify-between shrink-0">
         <div>
           <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">

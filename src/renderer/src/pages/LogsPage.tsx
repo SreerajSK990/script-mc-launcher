@@ -86,7 +86,7 @@ export const LogsPage: React.FC<LogsPageProps> = ({
   const hasPercentage = typeof progress?.percentage === 'number'
 
   return (
-    <div className="flex flex-col h-full w-full gap-4">
+    <div className="flex flex-col h-full w-full gap-4 min-h-0">
       {isCrashed && <section className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-2 text-sm text-slate-300"><h3 className="font-semibold text-amber-300">{diagnosis.title}</h3><p>{diagnosis.explanation}</p>{diagnosis.evidence && <pre className="whitespace-pre-wrap break-all text-xs text-slate-400">{diagnosis.evidence}</pre>}</section>}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-2 border-b border-border-subtle">
         <div className="flex items-center gap-3 min-w-0">

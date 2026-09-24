@@ -385,9 +385,21 @@ export const App: React.FC = () => {
 
         <DependencyInstallHost />
         <TransferStatus />
-        <main className="flex-1 overflow-y-auto p-6 md:p-8 bg-background-dark/50">
+        <main
+          className={`flex-1 p-6 md:p-8 bg-background-dark/50 ${
+            activeTab === 'mods' || activeTab === 'logs' || activeTab === 'skins'
+              ? 'overflow-hidden flex flex-col'
+              : 'overflow-y-auto'
+          }`}
+        >
           <Suspense fallback={<div role="status" className="p-6 text-sm text-slate-400">Loading page…</div>}>
-          <div className="w-full max-w-[1600px] min-h-full mx-auto pb-16 flex flex-col">
+          <div
+            className={`w-full max-w-[1600px] mx-auto ${
+              activeTab === 'mods' || activeTab === 'logs' || activeTab === 'skins'
+                ? 'h-full flex flex-col min-h-0'
+                : 'min-h-full pb-16 flex flex-col'
+            }`}
+          >
             {activeTab === 'dashboard' && (
               <DashboardPage
                 instances={instances}
