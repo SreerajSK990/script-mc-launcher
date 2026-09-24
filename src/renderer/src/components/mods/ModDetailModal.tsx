@@ -84,6 +84,7 @@ export const ModDetailModal: React.FC<ModDetailModalProps> = ({
 
   const [versions, setVersions] = useState<ModVersionFile[]>([])
   const [isLoadingVersions, setIsLoadingVersions] = useState(false)
+  const [installError, setInstallError] = useState<string | null>(null)
   const [installingVersionId, setInstallingVersionId] = useState<string | null>(null)
 
   const [selectedLightboxImage, setSelectedLightboxImage] = useState<string | null>(null)
@@ -124,7 +125,7 @@ export const ModDetailModal: React.FC<ModDetailModalProps> = ({
     setIsLoadingVersions(true)
     if (window.launcherAPI?.mods?.getVersions) {
       const loaderArg =
-        mod.projectType === 'resourcepack' || currentInstance?.loaderType === 'vanilla'
+        mod.projectType === 'resourcepack' || mod.projectType === 'shader' || currentInstance?.loaderType === 'vanilla'
           ? undefined
           : currentInstance?.loaderType
 
@@ -183,7 +184,10 @@ export const ModDetailModal: React.FC<ModDetailModalProps> = ({
 
     setInstallingVersionId(versionToInstall.id)
     try {
+      setInstallError(null)
       await onInstallVersion(mod, versionToInstall)
+    } catch (error) {
+      setInstallError(error instanceof Error ? error.message : String(error))
     } finally {
       setInstallingVersionId(null)
     }
@@ -205,6 +209,7 @@ export const ModDetailModal: React.FC<ModDetailModalProps> = ({
         className="relative w-full max-w-6xl h-[90vh] bg-background-card border border-border-subtle rounded-3xl shadow-2xl flex flex-col overflow-hidden text-slate-100"
         onClick={(e) => e.stopPropagation()}
       >
+        {installError && <p role="alert" className="p-3 text-sm text-amber-300">{installError}</p>}
         <div className="flex items-start justify-between p-5 md:p-6 border-b border-border-subtle bg-background-dark/40 shrink-0">
           <div className="flex items-start gap-4 min-w-0 flex-1 pr-4">
             {displayIcon ? (
@@ -484,6 +489,7 @@ export const ModDetailModal: React.FC<ModDetailModalProps> = ({
                               <span className="font-mono text-slate-300">
                                 {ver.gameVersions.join(', ')}
                               </span>
+                              {Boolean(ver.shaderLoaders?.length) && <span className="text-xs text-slate-400">Shader loaders: {ver.shaderLoaders?.join(', ')}</span>}
                               {ver.loaders.length > 0 && (
                                 <>
                                   <span>•</span>

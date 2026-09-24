@@ -54,13 +54,20 @@ export function spawnMinecraftProcess(options: LaunchProcessOptions): RunningPro
     })
   }
 
+  let exitReported = false
+  const reportExit = (code: number | null) => {
+    if (exitReported) return
+    exitReported = true
+    options.onExit(code)
+  }
+
   child.on('error', (err) => {
     options.onLog(`Failed to start Java process: ${err.message}`, 'error')
-    options.onExit(-1)
+    reportExit(-1)
   })
 
-  child.on('exit', (code) => {
-    options.onExit(code)
+  child.on('close', (code) => {
+    reportExit(code)
   })
 
   return {

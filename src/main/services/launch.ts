@@ -1,3 +1,7 @@
+import { findManagedDependencyIssues } from '@main/core/mods/dependencies'
+import { listInstalledMods } from '@main/core/mods/manager'
+import { getRecoverySettings, backupSaves } from './recovery'
+import { reserveInstance } from './instanceOperations'
 import { delimiter, join } from 'node:path'
 import type { LaunchProgressStep, LaunchProgressEvent, LaunchLogEvent } from '@shared/types/launch'
 import type { QuickPlayLaunchOptions } from '@shared/types/servers'
@@ -34,15 +38,15 @@ export function stopRunningInstance(instanceId: string): boolean {
   }
 
   handle.kill()
-  activeProcesses.delete(instanceId)
   return true
 }
 
-export async function launchInstance(
+async function launchInstanceInternal(
   instanceId: string,
   onProgress: (event: LaunchProgressEvent) => void,
   onLog: (event: LaunchLogEvent) => void,
-  quickPlay?: QuickPlayLaunchOptions
+  quickPlay: QuickPlayLaunchOptions | undefined,
+  release: () => void
 ): Promise<boolean> {
   if (isInstanceRunning(instanceId)) {
     throw new Error('This instance is already running.')
@@ -74,6 +78,9 @@ export async function launchInstance(
   if (!instance) {
     throw new Error(`Instance ${instanceId} does not exist.`)
   }
+
+  const dependencyIssues = findManagedDependencyIssues(await listInstalledMods(instanceId))
+  if (dependencyIssues.length) throw new Error(`Resolve mod requirements before launching: ${dependencyIssues.join(' ')}`)
 
   let authState = await getCurrentAuthState()
   let activeAccount = authState.activeAccount
@@ -200,6 +207,7 @@ export async function launchInstance(
     },
     onExit: async (exitCode) => {
       activeProcesses.delete(instanceId)
+      release()
       const durationSeconds = Math.max(0, Math.round((Date.now() - processStartTime) / 1000))
 
       if (exitCode === 0) {
@@ -208,6 +216,15 @@ export async function launchInstance(
       } else {
         sendLog(`Minecraft process exited with code ${exitCode}`, 'error')
         sendProgress('CRASHED', `Game closed with code ${exitCode}`)
+      }
+
+      if (exitCode === 0) {
+        try {
+          if ((await getRecoverySettings(instanceId)).backupAfterPlay) {
+            await backupSaves(instanceId)
+            sendLog('World saves backed up after game exit')
+          }
+        } catch (error) { sendLog(`Automatic backup failed: ${error instanceof Error ? error.message : String(error)}`, 'warn') }
       }
 
       try {
@@ -230,4 +247,14 @@ export async function launchInstance(
   activeProcesses.set(instanceId, handle)
   sendProgress('RUNNING', 'Minecraft is running')
   return true
+}
+
+export async function launchInstance(instanceId: string, onProgress: (event: LaunchProgressEvent) => void, onLog: (event: LaunchLogEvent) => void, quickPlay?: QuickPlayLaunchOptions): Promise<boolean> {
+  const release = reserveInstance(instanceId, 'Minecraft is launching or running')
+  try {
+    return await launchInstanceInternal(instanceId, onProgress, onLog, quickPlay, release)
+  } catch (error) {
+    release()
+    throw error
+  }
 }

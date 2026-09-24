@@ -891,13 +891,18 @@ async function runTests() {
 
   let progressCalled = false
   const progressCalls = []
-  const updateAllResult = await updateAllMods(updateTestInstance.id, mockUpdates, (prog) => {
+  const originalUpdateFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response('Missing test version', { status: 404 })
+  let updateAllResult
+  try {
+  updateAllResult = await updateAllMods(updateTestInstance.id, mockUpdates, (prog) => {
     progressCalled = true
     progressCalls.push(prog)
   })
 
-  if (!updateAllResult.success) {
-    throw new Error('updateAllMods failed!')
+  } finally { globalThis.fetch = originalUpdateFetch }
+  if (updateAllResult.success || updateAllResult.updatedCount !== 0 || updateAllResult.failures.length !== 1) {
+    throw new Error('Failed updates must be reported accurately')
   }
   if (!progressCalled || progressCalls.length === 0) {
     throw new Error('updateAllMods did not trigger progress events!')

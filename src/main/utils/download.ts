@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
+import type { TransferProgress } from '@shared/types/operations'
 import { createHash, randomBytes } from 'node:crypto'
 import { createWriteStream, promises as fs } from 'node:fs'
 import { dirname } from 'node:path'
@@ -13,7 +15,7 @@ export interface DownloadTask {
   size?: number
 }
 
-export async function downloadFileWithHash(
+async function downloadFileAttempt(
   url: string,
   destinationPath: string,
   expectedHash?: string,
@@ -47,34 +49,55 @@ export async function downloadFileWithHash(
   const temporaryFilePath = `${destinationPath}.${randomSuffix}.tmp`
 
   try {
-    const response = await fetch(url)
-    if (!response.ok || !response.body) {
-      throw new Error(`Failed to download ${url}: HTTP ${response.status}`)
-    }
-
-    const hashCalculator = createHash(hashAlgorithm)
-    const fileWriteStream = createWriteStream(temporaryFilePath)
-
-    const nodeReadable = Readable.fromWeb(response.body as import('stream/web').ReadableStream)
-
-    nodeReadable.on('data', (chunk: Buffer) => {
-      hashCalculator.update(chunk)
-    })
-
-    await pipeline(nodeReadable, fileWriteStream)
-
-    const computedHash = hashCalculator.digest('hex')
-
-    if (expectedHash && computedHash.toLowerCase() !== expectedHash.toLowerCase()) {
-      throw new Error(
-        `${hashAlgorithm.toUpperCase()} mismatch for ${url}. Expected ${expectedHash}, computed ${computedHash}`
-      )
-    }
-
+    const context = transferContext.getStore()
+    const controller = new AbortController()
+    let timeout = setTimeout(() => controller.abort(new Error('Download stalled for 30 seconds')), 30000)
+    const signal = context
+      ? AbortSignal.any([controller.signal, context.controller.signal])
+      : controller.signal
+    const started = Date.now()
+    let transferred = 0
     try {
+      const response = await fetch(url, { signal })
+      if (!response.ok || !response.body) {
+        throw new DownloadHttpError(response.status)
+      }
+
+      const hashCalculator = createHash(hashAlgorithm)
+      const fileWriteStream = createWriteStream(temporaryFilePath)
+
+      const nodeReadable = Readable.fromWeb(response.body as import('stream/web').ReadableStream)
+
+      nodeReadable.on('data', (chunk: Buffer) => {
+        hashCalculator.update(chunk)
+        transferred += chunk.length
+        clearTimeout(timeout)
+        timeout = setTimeout(() => controller.abort(new Error('Download stalled for 30 seconds')), 30000)
+        if (context && Date.now() - context.lastProgress >= 150) {
+          context.lastProgress = Date.now()
+          context.onProgress({
+            instanceId: context.instanceId,
+            transferred,
+            total: Number(response.headers.get('content-length')) || undefined,
+            bytesPerSecond: transferred / Math.max(0.1, (Date.now() - started) / 1000)
+          })
+        }
+      })
+
+      await pipeline(nodeReadable, fileWriteStream, { signal })
+
+      const computedHash = hashCalculator.digest('hex')
+
+      if (expectedHash && computedHash.toLowerCase() !== expectedHash.toLowerCase()) {
+        throw new Error(
+          `${hashAlgorithm.toUpperCase()} mismatch for ${url}. Expected ${expectedHash}, computed ${computedHash}`
+        )
+      }
+
+      signal.throwIfAborted()
       await fs.rename(temporaryFilePath, destinationPath)
-    } catch {
-      await fs.copyFile(temporaryFilePath, destinationPath)
+    } finally {
+      clearTimeout(timeout)
     }
   } finally {
     await fs.rm(temporaryFilePath, { force: true }).catch(() => {})
@@ -139,4 +162,73 @@ export async function downloadBatch(
   }
 
   await Promise.all(workerPromises)
+}
+
+interface TransferContext {
+  instanceId: string
+  controller: AbortController
+  onProgress: (progress: TransferProgress) => void
+  lastProgress: number
+}
+
+const transferContext = new AsyncLocalStorage<TransferContext>()
+const activeTransfers = new Map<string, AbortController>()
+
+class DownloadHttpError extends Error {
+  constructor(readonly status: number) {
+    super(`Download failed: HTTP ${status}`)
+  }
+}
+
+export async function withTransfer<T>(
+  instanceId: string,
+  onProgress: (progress: TransferProgress) => void,
+  work: () => Promise<T>
+): Promise<T> {
+  if (activeTransfers.has(instanceId))
+    throw new Error('Another download operation is active for this instance')
+  const controller = new AbortController()
+  activeTransfers.set(instanceId, controller)
+  onProgress({ instanceId, transferred: 0, bytesPerSecond: 0 })
+  try {
+    return await transferContext.run({ instanceId, controller, onProgress, lastProgress: 0 }, work)
+  } finally {
+    activeTransfers.delete(instanceId)
+    onProgress({ instanceId, transferred: 0, bytesPerSecond: 0, completed: true })
+  }
+}
+
+export function cancelTransfer(instanceId: string): void {
+  activeTransfers.get(instanceId)?.abort(new Error('Download cancelled'))
+}
+
+export async function downloadFileWithHash(
+  url: string,
+  destinationPath: string,
+  expectedHash?: string,
+  hashAlgorithm: 'sha1' | 'sha512' = 'sha1'
+): Promise<void> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    transferContext.getStore()?.controller.signal.throwIfAborted()
+    try {
+      return await downloadFileAttempt(url, destinationPath, expectedHash, hashAlgorithm)
+    } catch (error) {
+      transferContext.getStore()?.controller.signal.throwIfAborted()
+      if (
+        attempt === 2 ||
+        (error instanceof DownloadHttpError &&
+          error.status < 500 &&
+          error.status !== 429 &&
+          error.status !== 408)
+      )
+        throw error
+      await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** attempt))
+    }
+  }
+}
+
+export function getTransferSignal(): AbortSignal {
+  const timeout = AbortSignal.timeout(20000)
+  const context = transferContext.getStore()
+  return context ? AbortSignal.any([timeout, context.controller.signal]) : timeout
 }

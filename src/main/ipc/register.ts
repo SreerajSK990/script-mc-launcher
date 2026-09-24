@@ -1,3 +1,4 @@
+import { registerContentIpc } from './content'
 import type { BrowserWindow } from 'electron'
 import { registerInstanceIpcHandlers } from '@main/ipc/instances'
 import { registerSystemIpcHandlers } from '@main/ipc/system'
@@ -18,6 +19,7 @@ import { registerUpdaterIpcHandlers } from '@main/ipc/updater'
 import { registerDiscordIpcHandlers } from '@main/ipc/discordRpc'
 
 export function registerAllIpcHandlers(mainWindow: BrowserWindow): void {
+  registerContentIpc(mainWindow)
   registerInstanceIpcHandlers()
   registerSystemIpcHandlers(mainWindow)
   registerAuthIpcHandlers(mainWindow)

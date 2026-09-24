@@ -1,3 +1,4 @@
+import { getTransferSignal } from '@main/utils/download'
 import type { ModLoaderType } from '@shared/types/instance'
 import type { ModSearchResult, ModVersionFile, ModSearchParams, ModDetail } from '@shared/types/mods'
 
@@ -90,6 +91,7 @@ export interface CurseForgeFile {
   fileLength: number
   downloadUrl: string | null
   gameVersions: string[]
+  dependencies?: { modId: number; relationType: number }[]
   hashes: { value: string; algo: number }[]
 }
 
@@ -104,6 +106,7 @@ export async function batchGetCurseForgeFiles(fileIds: number[]): Promise<CurseF
     const chunk = fileIds.slice(i, i + 50)
     try {
       const response = await fetch(`${CURSEFORGE_API_BASE}/mods/files`, {
+        signal: getTransferSignal(),
         method: 'POST',
         headers: {
           'x-api-key': apiKey,
@@ -118,8 +121,7 @@ export async function batchGetCurseForgeFiles(fileIds: number[]): Promise<CurseF
           results.push(...json.data)
         }
       }
-    } catch {
-    }
+    } catch {}
   }
 
   return results
@@ -139,7 +141,21 @@ export async function searchCurseForge(params: ModSearchParams): Promise<ModSear
   const queryParams = new URLSearchParams()
   queryParams.set('gameId', String(MINECRAFT_GAME_ID))
   let classId = MODS_CLASS_ID
-  if (params.projectType === 'modpack') {
+  if (params.projectType === 'shader') {
+    const response = await fetch(`${CURSEFORGE_API_BASE}/categories?gameId=${MINECRAFT_GAME_ID}`, {
+      signal: getTransferSignal(),
+      headers: { 'x-api-key': apiKey }
+    })
+    if (!response.ok) throw new Error('Could not load CurseForge shader categories')
+    const categories = (await response.json()) as {
+      data: { id: number; name: string; slug: string; isClass: boolean }[]
+    }
+    const shaders = categories.data.find(
+      (category) => category.isClass && /shaders/i.test(category.slug || category.name)
+    )
+    if (!shaders) throw new Error('CurseForge shader catalog is unavailable')
+    classId = shaders.id
+  } else if (params.projectType === 'modpack') {
     classId = MODPACKS_CLASS_ID
   } else if (params.projectType === 'resourcepack') {
     classId = RESOURCEPACKS_CLASS_ID
@@ -154,7 +170,7 @@ export async function searchCurseForge(params: ModSearchParams): Promise<ModSear
     queryParams.set('gameVersion', params.minecraftVersion)
   }
 
-  if (params.projectType !== 'resourcepack') {
+  if (!params.projectType || params.projectType === 'mod' || params.projectType === 'modpack') {
     const loaderEnum = convertLoaderToCurseForgeEnum(params.loader)
     if (loaderEnum) {
       queryParams.set('modLoaderType', String(loaderEnum))
@@ -174,6 +190,7 @@ export async function searchCurseForge(params: ModSearchParams): Promise<ModSear
 
   try {
     const response = await fetch(url, {
+      signal: getTransferSignal(),
       headers: {
         'x-api-key': apiKey
       }
@@ -206,7 +223,7 @@ export async function searchCurseForge(params: ModSearchParams): Promise<ModSear
         source: 'curseforge' as const,
         categories: mod.categories.map((c) => c.name),
         loaders: Array.from(loaders) as ModLoaderType[],
-        projectType: (params.projectType || 'mod') as 'mod' | 'modpack' | 'resourcepack'
+        projectType: (params.projectType || 'mod') as 'mod' | 'modpack' | 'resourcepack' | 'shader'
       }
     })
 
@@ -236,7 +253,7 @@ export async function getCurseForgeFiles(
     queryParams.set('modLoaderType', String(loaderEnum))
   }
 
-  const cacheKey = `curseforge_files_${modId}_${queryParams.toString()}`
+  const cacheKey = `curseforge_files_v2_${modId}_${queryParams.toString()}`
   const cached = await getCachedData<ModVersionFile[]>(cacheKey, CF_VERSIONS_CACHE_TTL)
   if (cached) {
     return cached
@@ -246,6 +263,7 @@ export async function getCurseForgeFiles(
 
   try {
     const response = await fetch(url, {
+      signal: getTransferSignal(),
       headers: {
         'x-api-key': apiKey
       }
@@ -255,6 +273,7 @@ export async function getCurseForgeFiles(
       if (/^\d+$/.test(modId)) {
         try {
           const fileCheck = await fetch(`${CURSEFORGE_API_BASE}/mods/files`, {
+            signal: getTransferSignal(),
             method: 'POST',
             headers: {
               'x-api-key': apiKey,
@@ -280,43 +299,7 @@ export async function getCurseForgeFiles(
     const files = json.data || []
 
     const results: ModVersionFile[] = files.map((file) => {
-      const sha1Obj = file.hashes?.find((h) => h.algo === 1)
-
-      let releaseType: 'release' | 'beta' | 'alpha' = 'release'
-      if (file.releaseType === 2) releaseType = 'beta'
-      else if (file.releaseType === 3) releaseType = 'alpha'
-
-      const fileLoaders: ModLoaderType[] = []
-      for (const gv of file.gameVersions || []) {
-        const lower = gv.toLowerCase()
-        if (lower === 'fabric' && !fileLoaders.includes('fabric')) fileLoaders.push('fabric')
-        if (lower === 'forge' && !fileLoaders.includes('forge')) fileLoaders.push('forge')
-        if (lower === 'neoforge' && !fileLoaders.includes('neoforge')) fileLoaders.push('neoforge')
-        if (lower === 'quilt' && !fileLoaders.includes('quilt')) fileLoaders.push('quilt')
-      }
-
-      const loaders =
-        fileLoaders.length > 0
-          ? fileLoaders
-          : loader
-            ? [loader]
-            : (['forge', 'fabric'] as ModLoaderType[])
-
-      return {
-        id: String(file.id),
-        projectId: String(file.modId || modId),
-        name: file.displayName,
-        versionNumber: file.fileName,
-        gameVersions: file.gameVersions,
-        loaders,
-        downloadUrl: file.downloadUrl || null,
-        websiteUrl: `https://www.curseforge.com/projects/${file.modId || modId}/files/${file.id}`,
-        filename: file.fileName,
-        sizeBytes: file.fileLength,
-        sha1: sha1Obj?.value,
-        releaseType,
-        datePublished: file.fileDate
-      }
+      return normalizeCurseForgeFile(file, modId, loader)
     })
 
     await setCachedData(cacheKey, results)
@@ -415,4 +398,68 @@ export async function getCurseForgeModDetail(modId: string): Promise<ModDetail> 
 
   await setCachedData(cacheKey, detail)
   return detail
+}
+
+function normalizeCurseForgeFile(
+  file: CurseForgeFile,
+  modId: string,
+  loader?: ModLoaderType
+): ModVersionFile {
+  const sha1Obj = file.hashes?.find((h) => h.algo === 1)
+
+  let releaseType: 'release' | 'beta' | 'alpha' = 'release'
+  if (file.releaseType === 2) releaseType = 'beta'
+  else if (file.releaseType === 3) releaseType = 'alpha'
+
+  const fileLoaders: ModLoaderType[] = []
+  for (const gv of file.gameVersions || []) {
+    const lower = gv.toLowerCase()
+    if (lower === 'fabric' && !fileLoaders.includes('fabric')) fileLoaders.push('fabric')
+    if (lower === 'forge' && !fileLoaders.includes('forge')) fileLoaders.push('forge')
+    if (lower === 'neoforge' && !fileLoaders.includes('neoforge')) fileLoaders.push('neoforge')
+    if (lower === 'quilt' && !fileLoaders.includes('quilt')) fileLoaders.push('quilt')
+  }
+
+  const loaders = fileLoaders.length > 0 ? fileLoaders : loader ? [loader] : ([] as ModLoaderType[])
+
+  return {
+    dependencies: (file.dependencies || [])
+      .filter((d) => [2, 3, 5, 6].includes(d.relationType))
+      .map((d) => ({
+        projectId: String(d.modId),
+        type:
+          d.relationType === 3
+            ? ('required' as const)
+            : d.relationType === 5
+              ? ('incompatible' as const)
+              : d.relationType === 6
+                ? ('embedded' as const)
+                : ('optional' as const)
+      })),
+    id: String(file.id),
+    projectId: String(file.modId || modId),
+    name: file.displayName,
+    versionNumber: file.fileName,
+    gameVersions: file.gameVersions,
+    loaders,
+    downloadUrl: file.downloadUrl || null,
+    websiteUrl: `https://www.curseforge.com/projects/${file.modId || modId}/files/${file.id}`,
+    filename: file.fileName,
+    sizeBytes: file.fileLength,
+    sha1: sha1Obj?.value,
+    releaseType,
+    datePublished: file.fileDate
+  }
+}
+
+export async function getCurseForgeVersion(projectId: string, versionId: string): Promise<ModVersionFile> {
+  const apiKey = getCurseForgeApiKey()
+  if (!apiKey) throw new Error('CurseForge API key is required')
+  const response = await fetch(
+    `${CURSEFORGE_API_BASE}/mods/${encodeURIComponent(projectId)}/files/${encodeURIComponent(versionId)}`,
+    { headers: { 'x-api-key': apiKey }, signal: getTransferSignal() }
+  )
+  if (!response.ok) throw new Error(`Cannot resolve CurseForge version: ${response.status}`)
+  const result = (await response.json()) as { data: CurseForgeFile }
+  return normalizeCurseForgeFile(result.data, projectId)
 }

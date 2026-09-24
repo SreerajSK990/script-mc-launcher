@@ -1,3 +1,8 @@
+import type { ModUpdateResult } from '@shared/types/operations'
+import { UpdateReport } from '@renderer/components/mods/UpdateReport'
+import { ShadersPanel } from '@renderer/components/mods/ShadersPanel'
+import { RecoveryPanel } from '@renderer/components/instances/RecoveryPanel'
+import { installModWithPreview } from '@renderer/components/mods/DependencyInstallHost'
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   ArrowLeft,
@@ -56,7 +61,7 @@ interface InstanceDetailPageProps {
   onNotification?: (message: string) => void
 }
 
-type DetailSubTab = 'config' | 'installation' | 'mods' | 'servers' | 'screenshots' | 'mcSettings'
+type DetailSubTab = 'shaders' | 'recovery' | 'config' | 'installation' | 'mods' | 'servers' | 'screenshots' | 'mcSettings'
 
 const RAM_PRESETS = [
   { label: '2 GB', mb: 2048 },
@@ -139,6 +144,7 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
   const [isLoadingMods, setIsLoadingMods] = useState(false)
   const [selectedModForVersionChange, setSelectedModForVersionChange] = useState<InstalledModRecord | null>(null)
   const [modsFeedbackMessage, setModsFeedbackMessage] = useState<string | null>(null)
+  const [updateResult, setUpdateResult] = useState<ModUpdateResult | null>(null)
   const [modUpdates, setModUpdates] = useState<ModUpdateInfo[]>([])
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false)
   const [isUpdatingAll, setIsUpdatingAll] = useState(false)
@@ -298,7 +304,7 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
     if (!window.launcherAPI?.mods) return
     setUpdatingModId(update.modId)
     try {
-      await window.launcherAPI.mods.install({
+      await installModWithPreview({
         instanceId: instance.id,
         versionFile: update.versionFile,
         modMetadata: {
@@ -338,8 +344,9 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
 
         try {
           const res = await window.launcherAPI!.mods.updateAll(instance.id, modUpdates)
-          setModsFeedbackMessage(`Successfully updated ${res.updatedCount} mods!`)
-          setModUpdates([])
+          setUpdateResult(res)
+          setModsFeedbackMessage(`${res.updatedCount} mods updated; ${res.failures.length} failed`)
+          setModUpdates(previous => previous.filter(item => res.failures.some(failure => failure.modId === item.modId && failure.source === item.source)))
           await loadMods(true)
         } catch (err: any) {
           console.error('Failed to update all mods:', err)
@@ -379,7 +386,7 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
 
     const files = Array.from(e.dataTransfer.files)
     const validPaths = files
-      .map((f) => (f as any).path)
+      .map((file) => window.launcherAPI.system.pathForFile(file))
       .filter((p): p is string => Boolean(p && (p.toLowerCase().endsWith('.jar') || p.toLowerCase().endsWith('.zip'))))
 
     if (validPaths.length === 0) {
@@ -516,7 +523,7 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
         </div>
       </div>
 
-      <div className="flex items-center gap-2 border-b border-border-subtle pb-px">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border-subtle pb-px">
         <button
           onClick={() => setActiveTab('config')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
@@ -598,8 +605,12 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
           <Sliders size={16} />
           <span>Minecraft Settings</span>
         </button>
+        <Button icon={Palette} variant={activeTab === 'shaders' ? 'primary' : 'ghost'} onClick={() => setActiveTab('shaders')}>Shaders</Button>
+        <Button icon={RotateCcw} variant={activeTab === 'recovery' ? 'primary' : 'ghost'} onClick={() => setActiveTab('recovery')}>Backups</Button>
       </div>
 
+      {activeTab === 'shaders' && <ShadersPanel key={instance.id} instance={instance} />}
+      {activeTab === 'recovery' && <RecoveryPanel key={instance.id} instanceId={instance.id} />}
       {activeTab === 'config' && (
         <div className="space-y-6">
           <div className="bg-background-card border border-border-subtle rounded-2xl p-6 space-y-4">
@@ -976,6 +987,7 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
             </div>
           </div>
 
+          {updateResult && <UpdateReport result={updateResult} busy={isUpdatingAll} onRetry={handleUpdateAllMods} />}
           {updateProgress && (
             <div className="bg-background-card border border-emerald-500/30 p-4 rounded-2xl flex flex-col gap-2 animate-in fade-in duration-200">
               <div className="flex items-center justify-between text-xs">

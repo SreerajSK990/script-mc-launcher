@@ -13,13 +13,21 @@ export interface ModSearchResult {
   source: ModSource
   categories: string[]
   loaders: ModLoaderType[]
-  projectType?: 'mod' | 'modpack' | 'resourcepack'
+  projectType?: 'mod' | 'modpack' | 'resourcepack' | 'shader'
   latestVersion?: string
   clientSide?: 'required' | 'optional' | 'unsupported'
   serverSide?: 'required' | 'optional' | 'unsupported'
 }
 
+export interface ModDependency {
+  projectId: string | null
+  versionId?: string | null
+  type: 'required' | 'optional' | 'incompatible' | 'embedded'
+}
+
 export interface ModVersionFile {
+  dependencies?: ModDependency[]
+  shaderLoaders?: string[]
   id: string
   projectId: string
   name: string
@@ -38,6 +46,8 @@ export interface ModVersionFile {
 }
 
 export interface InstalledModRecord {
+  versionId?: string
+  dependencies?: ModDependency[]
   id: string
   name: string
   version: string
@@ -69,7 +79,7 @@ export interface ModSearchParams {
   query?: string
   minecraftVersion?: string
   loader?: ModLoaderType
-  projectType?: 'mod' | 'modpack' | 'resourcepack'
+  projectType?: 'mod' | 'modpack' | 'resourcepack' | 'shader'
   source?: 'all' | 'modrinth' | 'curseforge'
   category?: string
   limit?: number

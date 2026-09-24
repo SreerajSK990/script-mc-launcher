@@ -30,6 +30,7 @@
     ]
   },
   "nsis": {
+    "artifactName": "Script-Minecraft-Launcher-Setup-${version}.${ext}",
     "oneClick": true,
     "perMachine": false,
     "allowToChangeInstallationDirectory": false,
@@ -40,5 +41,8 @@
     "createDesktopShortcut": "always",
     "createStartMenuShortcut": true,
     "shortcutName": "Script Minecraft Launcher"
+  },
+  "portable": {
+    "artifactName": "Script.Minecraft.Launcher.${version}.${ext}"
   }
 }

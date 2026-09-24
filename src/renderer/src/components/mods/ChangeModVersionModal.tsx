@@ -1,3 +1,4 @@
+import { installModWithPreview } from '@renderer/components/mods/DependencyInstallHost'
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   ArrowUpDown,
@@ -260,7 +261,7 @@ export const ChangeModVersionModal: React.FC<ChangeModVersionModalProps> = ({
       setSwitchingVersionId(version.id)
       setErrorMessage(null)
 
-      await window.launcherAPI.mods.install({
+      await installModWithPreview({
         instanceId: instance.id,
         versionFile: version,
         modMetadata: {

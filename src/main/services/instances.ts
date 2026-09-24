@@ -1,3 +1,4 @@
+import { withInstanceOperation, assertInstanceIdle } from './instanceOperations'
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
@@ -104,7 +105,7 @@ export async function createNewInstance(payload: CreateInstancePayload): Promise
   return newInstance
 }
 
-export async function updateExistingInstance(payload: UpdateInstancePayload): Promise<InstanceConfiguration> {
+async function updateExistingInstanceInternal(payload: UpdateInstancePayload): Promise<InstanceConfiguration> {
   const existing = await getInstanceById(payload.id)
   if (!existing) {
     throw new Error(`Instance with id "${payload.id}" does not exist.`)
@@ -201,7 +202,7 @@ export async function saveInstanceCustomIcon(instanceId: string, dataUrl: string
   return dataUrl
 }
 
-export async function deleteInstanceById(instanceId: string): Promise<boolean> {
+async function deleteInstanceByIdInternal(instanceId: string): Promise<boolean> {
   const instanceDirectory = getInstancePath(instanceId)
   const exists = await doesPathExist(instanceDirectory)
 
@@ -226,7 +227,7 @@ export async function toggleInstanceFavorite(instanceId: string): Promise<Instan
   })
 }
 
-export async function repairInstance(instanceId: string): Promise<{ success: boolean; message: string }> {
+async function repairInstanceInternal(instanceId: string): Promise<{ success: boolean; message: string }> {
   const instance = await getInstanceById(instanceId)
   if (!instance) {
     throw new Error(`Instance ${instanceId} does not exist.`)
@@ -255,7 +256,7 @@ export async function repairInstance(instanceId: string): Promise<{ success: boo
   }
 }
 
-export async function backupInstanceSaves(instanceId: string): Promise<{ success: boolean; backupPath: string }> {
+async function backupInstanceSavesInternal(instanceId: string): Promise<{ success: boolean; backupPath: string }> {
   const instance = await getInstanceById(instanceId)
   if (!instance) {
     throw new Error(`Instance ${instanceId} does not exist.`)
@@ -287,7 +288,7 @@ export async function backupInstanceSaves(instanceId: string): Promise<{ success
   }
 }
 
-export async function cloneInstance(
+async function cloneInstanceInternal(
   instanceId: string,
   customName?: string
 ): Promise<InstanceConfiguration> {
@@ -303,6 +304,7 @@ export async function cloneInstance(
     loaderType: source.loaderType,
     loaderVersion: source.loaderVersion,
     ramAllocationMegabytes: source.ramAllocationMegabytes,
+    javaPath: source.javaPath,
     jvmArguments: source.jvmArguments,
     icon: source.icon,
     group: source.group
@@ -328,8 +330,38 @@ export async function cloneInstance(
     }
   }
 
+  for (const filename of ['mods.json', 'resourcepacks.json', 'shaders.json']) {
+    const metadata = join(getInstancePath(source.id), filename)
+    if (await doesPathExist(metadata)) await fs.copyFile(metadata, join(getInstancePath(newInstance.id), filename))
+  }
+
   return newInstance
 }
 
 
 
+
+export async function deleteInstanceById(instanceId: string): Promise<boolean> {
+  assertInstanceIdle(instanceId)
+  if (!(await getInstanceById(instanceId))) return false
+  return withInstanceOperation(instanceId, 'deleting instance', () => deleteInstanceByIdInternal(instanceId))
+}
+
+export async function repairInstance(instanceId: string): Promise<{ success: boolean; message: string }> {
+  return withInstanceOperation(instanceId, 'repairing instance', () => repairInstanceInternal(instanceId))
+}
+
+export async function backupInstanceSaves(instanceId: string): Promise<{ success: boolean; backupPath: string }> {
+  return withInstanceOperation(instanceId, 'backing up saves', () => backupInstanceSavesInternal(instanceId))
+}
+
+export async function cloneInstance(instanceId: string, customName?: string): Promise<InstanceConfiguration> {
+  return withInstanceOperation(instanceId, 'cloning instance', () => cloneInstanceInternal(instanceId, customName))
+}
+
+export async function updateExistingInstance(payload: UpdateInstancePayload): Promise<InstanceConfiguration> {
+  if (payload.minecraftVersion !== undefined || payload.loaderType !== undefined || payload.loaderVersion !== undefined || payload.javaPath !== undefined || payload.jvmArguments !== undefined || payload.ramAllocationMegabytes !== undefined) {
+    return withInstanceOperation(payload.id, 'changing instance configuration', () => updateExistingInstanceInternal(payload))
+  }
+  return updateExistingInstanceInternal(payload)
+}

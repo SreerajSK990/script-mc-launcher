@@ -1,3 +1,5 @@
+import type { OperationResult } from '@shared/types/operations'
+import { withTransfer } from '@main/utils/download'
 import { ipcMain, type BrowserWindow } from 'electron'
 import { IPC_CHANNELS } from '@shared/constants/channels'
 import type { ModSearchParams, InstallModPayload, ModSource, ModUpdateInfo } from '@shared/types/mods'
@@ -15,13 +17,21 @@ import {
 } from '@main/services/mods'
 import { checkForModUpdates, updateAllMods } from '@main/core/mods/updates'
 
+async function resultOf<T>(work: () => Promise<T>): Promise<OperationResult<T>> {
+  try {
+    return { success: true, data: await work() }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
 export function registerModsIpcHandlers(mainWindow?: BrowserWindow): void {
   ipcMain.handle(IPC_CHANNELS.MODS_SEARCH, async (_event, params: ModSearchParams) => {
-    return await searchAllMods(params)
+    return resultOf(() => searchAllMods(params))
   })
 
   ipcMain.handle(IPC_CHANNELS.MODS_GET_DETAIL, async (_event, source: ModSource, id: string) => {
-    return await fetchModDetail(source, id)
+    return resultOf(() => fetchModDetail(source, id))
   })
 
   ipcMain.handle(
@@ -43,26 +53,35 @@ export function registerModsIpcHandlers(mainWindow?: BrowserWindow): void {
   )
 
   ipcMain.handle(IPC_CHANNELS.MODS_INSTALL, async (_event, payload: InstallModPayload) => {
-    return await installMod(payload)
+    try {
+      const data = await withTransfer(
+        payload.instanceId,
+        (progress) => {
+          if (mainWindow && !mainWindow.isDestroyed())
+            mainWindow.webContents.send(IPC_CHANNELS.CONTENT_TRANSFER_PROGRESS, progress)
+        },
+        () => installMod(payload)
+      )
+      return { success: true, data }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) }
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.MODS_LIST_INSTALLED, async (_event, instanceId: string) => {
-    return await listMods(instanceId)
+    return resultOf(() => listMods(instanceId))
   })
 
   ipcMain.handle(
     IPC_CHANNELS.MODS_TOGGLE_INSTALLED,
     async (_event, instanceId: string, filename: string, enable: boolean) => {
-      return await toggleMod(instanceId, filename, enable)
+      return resultOf(() => toggleMod(instanceId, filename, enable))
     }
   )
 
-  ipcMain.handle(
-    IPC_CHANNELS.MODS_DELETE_INSTALLED,
-    async (_event, instanceId: string, filename: string) => {
-      return await deleteMod(instanceId, filename)
-    }
-  )
+  ipcMain.handle(IPC_CHANNELS.MODS_DELETE_INSTALLED, async (_event, instanceId: string, filename: string) => {
+    return resultOf(() => deleteMod(instanceId, filename))
+  })
 
   ipcMain.handle(IPC_CHANNELS.MODS_SET_CURSEFORGE_KEY, async (_event, key: string | null) => {
     setCurseForgeApiKey(key)
@@ -89,14 +108,35 @@ export function registerModsIpcHandlers(mainWindow?: BrowserWindow): void {
     IPC_CHANNELS.MODS_UPDATE_ALL,
     async (_event, instanceId: string, updates: ModUpdateInfo[]) => {
       try {
-        return await updateAllMods(instanceId, updates, (progress) => {
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send(IPC_CHANNELS.MODS_UPDATE_PROGRESS_EVENT, progress)
-          }
-        })
+        return await withTransfer(
+          instanceId,
+          (progress) => {
+            if (mainWindow && !mainWindow.isDestroyed())
+              mainWindow.webContents.send(IPC_CHANNELS.CONTENT_TRANSFER_PROGRESS, progress)
+          },
+          () =>
+            updateAllMods(instanceId, updates, (progress) => {
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send(IPC_CHANNELS.MODS_UPDATE_PROGRESS_EVENT, {
+                  ...progress,
+                  instanceId
+                })
+              }
+            })
+        )
       } catch (err) {
-        console.error('Failed to update all mods:', err)
-        return { success: false, updatedCount: 0 }
+        const error = err instanceof Error ? err.message : String(err)
+        return {
+          success: false,
+          updatedCount: 0,
+          failures: updates.map((item) => ({
+            modId: item.modId,
+            source: item.source,
+            name: item.name,
+            error
+          })),
+          error
+        }
       }
     }
   )
@@ -114,4 +154,3 @@ export function registerModsIpcHandlers(mainWindow?: BrowserWindow): void {
     }
   )
 }
-

@@ -1,3 +1,4 @@
+import { diagnoseCrash } from '@shared/crashDiagnosis'
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import {
   Terminal,
@@ -80,11 +81,13 @@ export const LogsPage: React.FC<LogsPageProps> = ({
   }
 
   const isCrashed = progress?.step === 'CRASHED'
+  const diagnosis = useMemo(() => diagnoseCrash(logs.map(log => log.text)), [logs])
   const isCompleted = progress?.step === 'COMPLETED'
   const hasPercentage = typeof progress?.percentage === 'number'
 
   return (
     <div className="flex flex-col h-full w-full gap-4">
+      {isCrashed && <section className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-2 text-sm text-slate-300"><h3 className="font-semibold text-amber-300">{diagnosis.title}</h3><p>{diagnosis.explanation}</p>{diagnosis.evidence && <pre className="whitespace-pre-wrap break-all text-xs text-slate-400">{diagnosis.evidence}</pre>}</section>}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-2 border-b border-border-subtle">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-xl bg-background-surface border border-border-subtle flex items-center justify-center text-emerald-400 shrink-0">

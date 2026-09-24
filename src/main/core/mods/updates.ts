@@ -1,3 +1,6 @@
+import { withInstanceOperation } from '@main/services/instanceOperations'
+import { createSnapshot, pruneSnapshots } from '@main/services/recovery'
+import type { ModUpdateResult } from '@shared/types/operations'
 import { join } from 'node:path'
 import { promises as fs } from 'node:fs'
 import { createHash } from 'node:crypto'
@@ -5,7 +8,7 @@ import { getInstanceConfigPath } from '@main/services/paths'
 import { readJsonFile, doesPathExist } from '@main/utils/filesystem'
 import type { InstanceConfiguration, ModLoaderType } from '@shared/types/instance'
 import type { ModUpdateInfo, InstalledModRecord, ModVersionFile } from '@shared/types/mods'
-import { listInstalledMods, installModToInstance, getModsDirectory } from './manager'
+import { listInstalledMods, installModWithDependencies, getModsDirectory } from './manager'
 import { getModrinthProjectVersions } from './modrinth'
 import { getCurseForgeFiles } from './curseforge'
 import { getCachedData, setCachedData } from './cache'
@@ -238,11 +241,12 @@ export async function checkForModUpdates(
   return updates
 }
 
-export async function updateAllMods(
+async function updateAllModsInternal(
   instanceId: string,
   updates: ModUpdateInfo[],
   onProgress?: (progress: { message: string; current: number; total: number }) => void
-): Promise<{ success: boolean; updatedCount: number }> {
+): Promise<ModUpdateResult> {
+  const failures: ModUpdateResult['failures'] = []
   let updatedCount = 0
   const total = updates.length
 
@@ -257,7 +261,7 @@ export async function updateAllMods(
     }
 
     try {
-      await installModToInstance({
+      await installModWithDependencies({
         instanceId,
         versionFile: item.versionFile,
         modMetadata: {
@@ -266,12 +270,21 @@ export async function updateAllMods(
           source: item.source
         },
         oldFilename: item.currentFilename
-      })
+      }, false)
       updatedCount++
     } catch (err) {
-      console.warn(`Failed to update mod ${item.name}:`, err)
+      failures.push({ modId: item.modId, source: item.source, name: item.name, error: err instanceof Error ? err.message : String(err) })
     }
   }
 
-  return { success: true, updatedCount }
+  return { success: failures.length === 0, updatedCount, failures }
+}
+
+export async function updateAllMods(instanceId: string, updates: ModUpdateInfo[], onProgress?: (progress: { message: string; current: number; total: number }) => void): Promise<ModUpdateResult> {
+  return withInstanceOperation(instanceId, 'updating mods', async () => {
+    if (updates.length) await createSnapshot(instanceId, 'mods', 'Before batch update')
+    const result = await updateAllModsInternal(instanceId, updates, onProgress)
+    await pruneSnapshots(instanceId)
+    return result
+  })
 }

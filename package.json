@@ -1,6 +1,6 @@
 {
   "name": "script-mc-launcher",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "type": "module",
   "description": "Custom modern Minecraft launcher with instance isolation and mod loader support",
   "main": "./out/main/index.js",
@@ -10,7 +10,9 @@
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "test": "tsx scripts/test-services.mjs",
+    "test": "tsx scripts/test-services.mjs && tsx scripts/test-content.mjs",
+    "measure:startup": "node scripts/measure-startup.mjs",
+    "test:shaders:live": "tsx scripts/test-shaders-live.mjs",
     "package": "npm run build && electron-builder",
     "preview": "electron-vite preview"
   },

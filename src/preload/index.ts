@@ -1,9 +1,36 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import type { OperationResult, TransferProgress } from '@shared/types/operations'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC_CHANNELS } from '@shared/constants/channels'
 import type { LauncherAPI } from '@shared/types/ipc'
 import type { CreateInstancePayload, UpdateInstancePayload } from '@shared/types/instance'
 
+async function invokeResult<T>(channel: string, ...args: unknown[]): Promise<T> {
+  const result = await ipcRenderer.invoke(channel, ...args) as OperationResult<T>
+  if (!result.success) throw new Error(result.error)
+  return result.data
+}
+
 const launcherAPI: LauncherAPI = {
+  content: {
+    planMods: payloads => ipcRenderer.invoke(IPC_CHANNELS.CONTENT_PLAN_MODS, payloads),
+    listBackups: id => ipcRenderer.invoke(IPC_CHANNELS.CONTENT_LIST_BACKUPS, id),
+    backupSaves: id => ipcRenderer.invoke(IPC_CHANNELS.CONTENT_BACKUP_SAVES, id),
+    restoreBackup: (id, backup) => ipcRenderer.invoke(IPC_CHANNELS.CONTENT_RESTORE_BACKUP, id, backup),
+    getRecoverySettings: id => ipcRenderer.invoke(IPC_CHANNELS.CONTENT_GET_RECOVERY_SETTINGS, id),
+    saveRecoverySettings: (id, settings) => ipcRenderer.invoke(IPC_CHANNELS.CONTENT_SAVE_RECOVERY_SETTINGS, id, settings),
+    listShaders: id => ipcRenderer.invoke(IPC_CHANNELS.CONTENT_LIST_SHADERS, id),
+    installShader: payload => ipcRenderer.invoke(IPC_CHANNELS.CONTENT_INSTALL_SHADER, payload),
+    importShaders: (id, paths) => ipcRenderer.invoke(IPC_CHANNELS.CONTENT_IMPORT_SHADERS, id, paths),
+    deleteShader: (id, filename) => ipcRenderer.invoke(IPC_CHANNELS.CONTENT_DELETE_SHADER, id, filename),
+    shaderEnvironment: id => ipcRenderer.invoke(IPC_CHANNELS.CONTENT_SHADER_ENVIRONMENT, id),
+    openShaderFolder: id => ipcRenderer.invoke(IPC_CHANNELS.CONTENT_OPEN_SHADER_FOLDER, id),
+    cancelTransfer: id => ipcRenderer.invoke(IPC_CHANNELS.CONTENT_CANCEL_TRANSFER, id),
+    onTransfer: callback => {
+      const handler = (_event: Electron.IpcRendererEvent, progress: TransferProgress) => callback(progress)
+      ipcRenderer.on(IPC_CHANNELS.CONTENT_TRANSFER_PROGRESS, handler)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.CONTENT_TRANSFER_PROGRESS, handler)
+    }
+  },
   window: {
     minimize: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_MINIMIZE),
     maximize: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW_MAXIMIZE),
@@ -14,8 +41,8 @@ const launcherAPI: LauncherAPI = {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_LIST),
     get: (instanceId: string) => ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_GET, instanceId),
     create: (payload: CreateInstancePayload) => ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_CREATE, payload),
-    update: (payload: UpdateInstancePayload) => ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_UPDATE, payload),
-    delete: (instanceId: string) => ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_DELETE, instanceId),
+    update: (payload: UpdateInstancePayload) => invokeResult(IPC_CHANNELS.INSTANCES_UPDATE, payload),
+    delete: (instanceId: string) => invokeResult(IPC_CHANNELS.INSTANCES_DELETE, instanceId),
     openFolder: (instanceId: string) => ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_OPEN_FOLDER, instanceId),
     setGroup: (instanceId: string, group: string | null) =>
       ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_SET_GROUP, instanceId, group),
@@ -30,11 +57,11 @@ const launcherAPI: LauncherAPI = {
     toggleFavorite: (instanceId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_TOGGLE_FAVORITE, instanceId),
     repair: (instanceId: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_REPAIR, instanceId),
+      invokeResult(IPC_CHANNELS.INSTANCES_REPAIR, instanceId),
     backupSaves: (instanceId: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_BACKUP_SAVES, instanceId),
+      invokeResult(IPC_CHANNELS.INSTANCES_BACKUP_SAVES, instanceId),
     clone: (instanceId: string, customName?: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.INSTANCES_CLONE, instanceId, customName)
+      invokeResult(IPC_CHANNELS.INSTANCES_CLONE, instanceId, customName)
   },
 
 
@@ -78,6 +105,7 @@ const launcherAPI: LauncherAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.META_GET_LOADER_VERSIONS, loaderType, minecraftVersion)
   },
   system: {
+    pathForFile: file => webUtils.getPathForFile(file),
     getEnvironment: () => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_GET_ENVIRONMENT),
     openExternal: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_OPEN_EXTERNAL, url),
     openExternalUrl: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_OPEN_EXTERNAL, url),
@@ -85,16 +113,16 @@ const launcherAPI: LauncherAPI = {
     selectFile: (options) => ipcRenderer.invoke(IPC_CHANNELS.SYSTEM_SELECT_FILE, options)
   },
   mods: {
-    search: (params) => ipcRenderer.invoke(IPC_CHANNELS.MODS_SEARCH, params),
-    getDetail: (source, id) => ipcRenderer.invoke(IPC_CHANNELS.MODS_GET_DETAIL, source, id),
+    search: (params) => invokeResult(IPC_CHANNELS.MODS_SEARCH, params),
+    getDetail: (source, id) => invokeResult(IPC_CHANNELS.MODS_GET_DETAIL, source, id),
     getVersions: (projectId, source, minecraftVersion, loader) =>
       ipcRenderer.invoke(IPC_CHANNELS.MODS_GET_VERSIONS, projectId, source, minecraftVersion, loader),
-    install: (payload) => ipcRenderer.invoke(IPC_CHANNELS.MODS_INSTALL, payload),
-    listInstalled: (instanceId) => ipcRenderer.invoke(IPC_CHANNELS.MODS_LIST_INSTALLED, instanceId),
+    install: (payload) => invokeResult(IPC_CHANNELS.MODS_INSTALL, payload),
+    listInstalled: (instanceId) => invokeResult(IPC_CHANNELS.MODS_LIST_INSTALLED, instanceId),
     toggleInstalled: (instanceId, filename, enable) =>
-      ipcRenderer.invoke(IPC_CHANNELS.MODS_TOGGLE_INSTALLED, instanceId, filename, enable),
+      invokeResult(IPC_CHANNELS.MODS_TOGGLE_INSTALLED, instanceId, filename, enable),
     deleteInstalled: (instanceId, filename) =>
-      ipcRenderer.invoke(IPC_CHANNELS.MODS_DELETE_INSTALLED, instanceId, filename),
+      invokeResult(IPC_CHANNELS.MODS_DELETE_INSTALLED, instanceId, filename),
     setCurseForgeKey: (key) => ipcRenderer.invoke(IPC_CHANNELS.MODS_SET_CURSEFORGE_KEY, key),
     getCurseForgeKey: () => ipcRenderer.invoke(IPC_CHANNELS.MODS_GET_CURSEFORGE_KEY),
     checkUpdates: (instanceId, forceRefresh) =>

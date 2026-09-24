@@ -1,3 +1,4 @@
+import { getTransferSignal } from '@main/utils/download'
 import type { ModLoaderType } from '@shared/types/instance'
 import type { ModSearchResult, ModVersionFile, ModSearchParams, ModDetail } from '@shared/types/mods'
 
@@ -47,6 +48,11 @@ interface ModrinthVersionResponse {
   version_type: 'release' | 'beta' | 'alpha'
   date_published: string
   changelog?: string
+  dependencies?: {
+    project_id: string | null
+    version_id: string | null
+    dependency_type: 'required' | 'optional' | 'incompatible' | 'embedded'
+  }[]
   files: ModrinthVersionFileEntry[]
 }
 
@@ -56,7 +62,7 @@ const SEARCH_CACHE_TTL = 15 * 60 * 1000
 const VERSIONS_CACHE_TTL = 30 * 60 * 1000
 
 export async function searchModrinth(params: ModSearchParams): Promise<ModSearchResult[]> {
-  let projectType = 'mod'
+  let projectType = params.projectType || 'mod'
   if (params.projectType === 'modpack') {
     projectType = 'modpack'
   } else if (params.projectType === 'resourcepack') {
@@ -94,6 +100,7 @@ export async function searchModrinth(params: ModSearchParams): Promise<ModSearch
   const url = `${MODRINTH_API_BASE}/search?${queryParams.toString()}`
 
   const response = await fetch(url, {
+    signal: getTransferSignal(),
     headers: {
       'User-Agent': USER_AGENT
     }
@@ -129,7 +136,7 @@ export async function searchModrinth(params: ModSearchParams): Promise<ModSearch
       source: 'modrinth',
       categories: nonLoaderCategories,
       loaders: matchedLoaders,
-      projectType: projectType as 'mod' | 'modpack' | 'resourcepack',
+      projectType: projectType as 'mod' | 'modpack' | 'resourcepack' | 'shader',
       latestVersion: hit.latest_version,
       clientSide: hit.client_side,
       serverSide: hit.server_side
@@ -155,7 +162,7 @@ export async function getModrinthProjectVersions(
     queryParams.set('game_versions', JSON.stringify([minecraftVersion]))
   }
 
-  const cacheKey = `modrinth_versions_${projectId}_${queryParams.toString()}`
+  const cacheKey = `modrinth_versions_v2_${projectId}_${queryParams.toString()}`
   const cached = await getCachedData<ModVersionFile[]>(cacheKey, VERSIONS_CACHE_TTL)
   if (cached) {
     return cached
@@ -164,6 +171,7 @@ export async function getModrinthProjectVersions(
   const url = `${MODRINTH_API_BASE}/project/${projectId}/version?${queryParams.toString()}`
 
   const response = await fetch(url, {
+    signal: getTransferSignal(),
     headers: {
       'User-Agent': USER_AGENT
     }
@@ -181,34 +189,7 @@ export async function getModrinthProjectVersions(
   const result: ModVersionFile[] = []
 
   for (const item of data) {
-    const primaryFile = item.files.find((f) => f.primary) || item.files[0]
-    if (!primaryFile) continue
-
-    const validLoaders: ModLoaderType[] = []
-    for (const l of item.loaders) {
-      const lower = l.toLowerCase()
-      if (lower === 'fabric' || lower === 'forge' || lower === 'neoforge' || lower === 'quilt') {
-        validLoaders.push(lower as ModLoaderType)
-      }
-    }
-
-    result.push({
-      id: item.id,
-      projectId: item.project_id,
-      name: item.name,
-      versionNumber: item.version_number,
-      gameVersions: item.game_versions,
-      loaders: validLoaders,
-      downloadUrl: primaryFile ? primaryFile.url : null,
-      websiteUrl: `https://modrinth.com/mod/${item.project_id}/version/${item.id}`,
-      filename: primaryFile.filename,
-      sizeBytes: primaryFile.size,
-      sha512: primaryFile.hashes.sha512,
-      sha1: primaryFile.hashes.sha1,
-      releaseType: item.version_type,
-      datePublished: item.date_published,
-      changelog: item.changelog
-    })
+    result.push(normalizeModrinthVersion(item))
   }
 
   await setCachedData(cacheKey, result)
@@ -226,6 +207,7 @@ export async function getModrinthProjectDetail(projectIdOrSlug: string): Promise
 
   const projectUrl = `${MODRINTH_API_BASE}/project/${encodeURIComponent(projectIdOrSlug)}`
   const resp = await fetch(projectUrl, {
+    signal: getTransferSignal(),
     headers: { 'User-Agent': USER_AGENT }
   })
 
@@ -239,6 +221,7 @@ export async function getModrinthProjectDetail(projectIdOrSlug: string): Promise
   try {
     const membersUrl = `${MODRINTH_API_BASE}/project/${encodeURIComponent(projectIdOrSlug)}/members`
     const memResp = await fetch(membersUrl, {
+      signal: getTransferSignal(),
       headers: { 'User-Agent': USER_AGENT }
     })
     if (memResp.ok) {
@@ -251,8 +234,7 @@ export async function getModrinthProjectDetail(projectIdOrSlug: string): Promise
         }))
       }
     }
-  } catch {
-  }
+  } catch {}
 
   const validLoaders: ModLoaderType[] = []
   if (Array.isArray(data.loaders)) {
@@ -272,9 +254,8 @@ export async function getModrinthProjectDetail(projectIdOrSlug: string): Promise
       }))
     : []
 
-  const donationUrl = Array.isArray(data.donation_urls) && data.donation_urls.length > 0
-    ? data.donation_urls[0].url
-    : undefined
+  const donationUrl =
+    Array.isArray(data.donation_urls) && data.donation_urls.length > 0 ? data.donation_urls[0].url : undefined
 
   const detail: ModDetail = {
     id: data.id,
@@ -313,4 +294,50 @@ export async function getModrinthProjectDetail(projectIdOrSlug: string): Promise
 
   await setCachedData(cacheKey, detail)
   return detail
+}
+
+function normalizeModrinthVersion(item: ModrinthVersionResponse): ModVersionFile {
+  const primaryFile = item.files.find((f) => f.primary) || item.files[0]
+  if (!primaryFile) throw new Error('Version has no downloadable files')
+
+  const validLoaders: ModLoaderType[] = []
+  for (const l of item.loaders) {
+    const lower = l.toLowerCase()
+    if (lower === 'fabric' || lower === 'forge' || lower === 'neoforge' || lower === 'quilt') {
+      validLoaders.push(lower as ModLoaderType)
+    }
+  }
+
+  return {
+    dependencies: (item.dependencies || []).map((d) => ({
+      projectId: d.project_id,
+      versionId: d.version_id,
+      type: d.dependency_type
+    })),
+    shaderLoaders: item.loaders.filter((l) => ['iris', 'optifine', 'canvas', 'vanilla'].includes(l)),
+    id: item.id,
+    projectId: item.project_id,
+    name: item.name,
+    versionNumber: item.version_number,
+    gameVersions: item.game_versions,
+    loaders: validLoaders,
+    downloadUrl: primaryFile ? primaryFile.url : null,
+    websiteUrl: `https://modrinth.com/${item.loaders.some((loader) => ['iris', 'optifine', 'canvas'].includes(loader)) ? 'shader' : 'mod'}/${item.project_id}/version/${item.id}`,
+    filename: primaryFile.filename,
+    sizeBytes: primaryFile.size,
+    sha512: primaryFile.hashes.sha512,
+    sha1: primaryFile.hashes.sha1,
+    releaseType: item.version_type,
+    datePublished: item.date_published,
+    changelog: item.changelog
+  }
+}
+
+export async function getModrinthVersion(versionId: string): Promise<ModVersionFile> {
+  const response = await fetch(`${MODRINTH_API_BASE}/version/${encodeURIComponent(versionId)}`, {
+    signal: getTransferSignal(),
+    headers: { 'User-Agent': USER_AGENT }
+  })
+  if (!response.ok) throw new Error(`Cannot resolve Modrinth version: ${response.status}`)
+  return normalizeModrinthVersion((await response.json()) as ModrinthVersionResponse)
 }

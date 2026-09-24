@@ -49,23 +49,13 @@ export async function searchAllMods(params: ModSearchParams): Promise<ModSearchR
     searchCurseForge(params).catch(() => [])
   ])
 
-  const seenTitles = new Set<string>()
-  const merged: ModSearchResult[] = []
-
-  for (const item of modrinthResults) {
-    seenTitles.add(item.name.toLowerCase().replace(/[^a-z0-9]/g, ''))
-    merged.push(item)
-  }
-
-  for (const item of curseForgeResults) {
-    const key = item.name.toLowerCase().replace(/[^a-z0-9]/g, '')
-    if (!seenTitles.has(key)) {
-      seenTitles.add(key)
-      merged.push(item)
-    }
-  }
-
-  return merged
+  const seen = new Set<string>()
+  return [...modrinthResults, ...curseForgeResults].filter(item => {
+    const key = `${item.source}:${item.id}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 export async function fetchModVersions(

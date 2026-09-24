@@ -2,11 +2,21 @@
 
 A fast, sleek, and modular Minecraft launcher built with **Electron**, **React**, **TypeScript**, and **Tailwind CSS**.
 
+**Latest release: [v0.17.0](https://github.com/SreerajSK990/script-mc-launcher/releases/tag/v0.17.0)** — shader browsing and management, dependency previews, recoverable mod updates, and backup restoration. Read the [release notes](release-notes/v0.17.0.md) for details.
+
 Most Minecraft launchers out there either look like they're stuck in 2010 with clunky Java Swing windows, or they're bloated with electron bloatware and ads. Script Launcher is built to be fast, clean, and completely isolated so your mod setups and game versions never conflict with each other.
 
 ---
 
 ## Highlights
+
+- **Dependency-aware Mod Installation:** Preview required mods before installation, resolve dependency chains and exact version requirements from Modrinth and CurseForge, reuse compatible installed files, and explain disabled dependencies or declared conflicts. Managed requirements are checked again before launch. Optional dependencies are not added automatically; compatibility checks depend on provider metadata.
+- **Recoverable Mod Updates:** Updates preserve disabled states and report individual failures with retry actions. Mod changes create recovery snapshots of JAR files and managed metadata. Batch updates keep a backup of the original setup and use file-level recovery for individual failures.
+- **Shader Browser & Manager:** Browse shader projects from Modrinth or the optional CurseForge integration, inspect descriptions and galleries, select versions, import shader ZIPs, and manage packs in each instance’s isolated `shaderpacks/` folder. Detect Iris, Oculus, and OptiFine; offer compatible Iris or Oculus installation where available. Select the active shader inside Minecraft. Vanilla instances first need a compatible mod-loader setup through Installation settings.
+- **Backup History & Restore:** The instance Backups tab lists mod recovery snapshots, world-save backups, and existing version-upgrade save ZIPs. Restore with integrity verification and a backup of the current state first. Configure retention for recovery snapshots and optional save backups after a clean game exit; legacy ZIP backups are retained separately. Backups remain local to the instance and do not survive deleting it.
+- **Actionable Crash Explanations:** The Logs page recognizes common memory, Java-version, missing-dependency, duplicate-mod, and OpenGL failures, showing the supporting log line and a suggested next step. Unrecognized crashes retain the full log workflow.
+- **On-demand Page Loading:** Load the skin studio, content browser, instance details, and settings when opened to reduce the initial renderer bundle. Run `npm run build` followed by `npm run measure:startup` for three local startup samples using temporary profiles.
+- **Download Recovery:** File downloads retry transient failures and time out stalled transfers. Managed mod and shader installations show transfer speed and offer cancellation; failed or cancelled mod installations restore the previous files.
 
 - **Complete Instance Isolation:** Every instance has its own dedicated directory (`instances/<id>/minecraft/`). Mods, configs, resource packs, and saves stay strictly inside that instance. No shared messy `.minecraft` folder.
 - **Snapshots & Historical Minecraft Versions:** Full access to all official development snapshots, Release Candidates, Pre-releases, and historical Beta and Alpha versions alongside stable releases. Built-in version-type filters in the instance creation modal and smart loader compatibility warnings.
@@ -123,8 +133,9 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 │   │   │   ├── minecraft/       # Piston manifest, assets, libraries, args, process spawner, screenshots
 │   │   │   ├── modpacks/        # Modrinth (.mrpack) and CurseForge (.zip) archive & online importer
 │   │   │   ├── mods/            # Modrinth client, CurseForge client, instance mod manager
+│   │   │   ├── shaders/         # Shader validation, installation, and loader detection
 │   │   │   └── resourcepacks/   # Resource pack manager, metadata extractor & zip installer
-│   │   ├── services/            # Instances, auth state, launch engine, paths, system specs
+│   │   ├── services/            # Instances, auth, launch, paths, operation guards, recovery
 │   │   ├── ipc/                 # Typed IPC handlers (bridge to renderer)
 │   │   └── utils/               # Atomic filesystem writers, batch downloader, zip extract
 │   ├── renderer/                # Electron Renderer Process (React UI)
@@ -135,7 +146,11 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 │   ├── preload/                 # Secure contextBridge API exposing window.launcherAPI
 │   └── shared/                  # Shared types (instances, auth, launch, mods, externalLauncher, ipc)
 ├── scripts/
-│   └── test-services.mjs        # Automated sandbox test suite (Phases 1–9 + Batch Mod Updates)
+│   ├── test-services.mjs        # Launcher service and provider integration tests
+│   ├── test-content.mjs         # Isolated dependency, rollback, shader, and backup tests
+│   ├── test-shaders-live.mjs     # Optional real shader and loader download checks
+│   └── measure-startup.mjs      # Production startup samples in temporary profiles
+├── release-notes/              # Versioned release notes and download guidance
 ├── package.json
 └── tsconfig.json
 ```
@@ -146,7 +161,7 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) (v20 or newer)
+- [Node.js](https://nodejs.org/) (v20.19+ or v22.12+; Node 22 LTS recommended)
 - npm or pnpm
 
 ### Quick Setup
@@ -177,9 +192,31 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
    npm run build
    ```
 
+6. **Package the Windows installer and portable executable:**
+   ```bash
+   npm run package
+   ```
+   Windows builds are written to `dist/`: `Script-Minecraft-Launcher-Setup-<version>.exe`, its `.blockmap`, `Script.Minecraft.Launcher.<version>.exe`, and `latest.yml` for the auto-updater.
+
+Before committing release changes, run `npm run typecheck`, `npm test`, and `npm run build` in that order.
+
+Optional live shader checks download Iris, Oculus, their required dependencies, and a shader pack into temporary instances; they do not launch Minecraft:
+
+```bash
+npm run test:shaders:live
+```
+
 ---
 
 ## Roadmap
+
+- [x] **Dependency-aware Installs:** Required dependencies, exact versions, install preview, and known conflict checks
+- [x] **Safe Mod Updates:** Preserve disabled states, report failed updates, retry, and restore previous mod files
+- [x] **Shader Support:** Catalog browsing, version selection, local imports, isolated management, and shader-loader guidance
+- [x] **Backup Recovery:** History, verified restoration, retention, and optional backups after gameplay
+- [x] **Crash Guidance:** Local pattern matching with evidence and actionable suggestions
+- [x] **Download Resilience:** Retries, stall timeouts, and cancellation for managed content installations
+- [x] **On-demand Pages:** Lazy-load instance details, the content browser, settings, and the skin studio
 
 - [x] **Phase 1:** Foundation & Isolated Instance System
 - [x] **Phase 2:** Microsoft OAuth & Encrypted Auth Storage

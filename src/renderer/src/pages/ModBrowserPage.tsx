@@ -1,3 +1,7 @@
+import type { ModUpdateResult } from '@shared/types/operations'
+import { UpdateReport } from '@renderer/components/mods/UpdateReport'
+import { ShadersPanel } from '@renderer/components/mods/ShadersPanel'
+import { installModWithPreview } from '@renderer/components/mods/DependencyInstallHost'
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Search,
@@ -80,6 +84,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
   initialProjectType,
   onInstanceCreated
 }) => {
+  const [showShaders, setShowShaders] = useState(false)
   const [projectType, setProjectType] = useState<'mod' | 'modpack' | 'resourcepack'>(
     initialProjectType || 'mod'
   )
@@ -122,6 +127,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
   const [installedPacks, setInstalledPacks] = useState<InstalledResourcePackRecord[]>([])
   const [isLoadingInstalled, setIsLoadingInstalled] = useState(false)
   const [selectedInstalledModForChange, setSelectedInstalledModForChange] = useState<InstalledModRecord | null>(null)
+  const [updateResult, setUpdateResult] = useState<ModUpdateResult | null>(null)
   const [modUpdates, setModUpdates] = useState<ModUpdateInfo[]>([])
   const [isCheckingUpdates, setIsCheckingUpdates] = useState(false)
   const [isUpdatingAll, setIsUpdatingAll] = useState(false)
@@ -162,7 +168,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
 
     const files = Array.from(e.dataTransfer.files)
     const validPaths = files
-      .map((f) => (f as any).path)
+      .map((file) => window.launcherAPI.system.pathForFile(file))
       .filter((p): p is string => Boolean(p && (p.toLowerCase().endsWith('.jar') || p.toLowerCase().endsWith('.zip'))))
 
     if (validPaths.length === 0) {
@@ -284,7 +290,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
     if (!selectedInstanceId || !window.launcherAPI?.mods) return
     setUpdatingModId(update.modId)
     try {
-      await window.launcherAPI.mods.install({
+      await installModWithPreview({
         instanceId: selectedInstanceId,
         versionFile: update.versionFile,
         modMetadata: {
@@ -324,8 +330,9 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
 
         try {
           const res = await window.launcherAPI!.mods.updateAll(selectedInstanceId, modUpdates)
-          onNotification(`Successfully updated ${res.updatedCount} mods!`)
-          setModUpdates([])
+          setUpdateResult(res)
+          onNotification(`${res.updatedCount} mods updated; ${res.failures.length} failed`)
+          setModUpdates(previous => previous.filter(item => res.failures.some(failure => failure.modId === item.modId && failure.source === item.source)))
           await fetchInstalledMods()
         } catch (err: any) {
           console.error('Failed to update all mods:', err)
@@ -605,7 +612,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
         await fetchInstalledPacks()
       } else {
         if (!window.launcherAPI?.mods) return
-        await window.launcherAPI.mods.install({
+        await installModWithPreview({
           instanceId: selectedInstanceId,
           versionFile: version,
           modMetadata: {
@@ -714,7 +721,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
 
     try {
       const installedRec = getInstalledItemForProject(mod)
-      await window.launcherAPI.mods.install({
+      await installModWithPreview({
         instanceId: selectedInstanceId,
         versionFile: version,
         modMetadata: {
@@ -822,6 +829,11 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
     if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`
     return `${bytes} B`
   }
+
+  if (showShaders) return <div className="space-y-5">
+    <div className="flex flex-wrap gap-2 items-center">{(['mod', 'resourcepack', 'modpack'] as const).map(type => <Button key={type} variant="ghost" onClick={() => { setShowShaders(false); setProjectType(type); setSelectedCategory('all') }}>{type === 'mod' ? 'Mods' : type === 'resourcepack' ? 'Resource Packs' : 'Modpacks'}</Button>)}<Button>Shaders</Button><select aria-label="Target shader instance" className="ml-auto bg-background-darkest p-2 rounded-lg text-slate-200" value={selectedInstanceId} onChange={event => setSelectedInstanceId(event.target.value)}>{instances.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
+    <ShadersPanel key={selectedInstanceId} instance={currentInstance} />
+  </div>
 
   return (
     <div
@@ -933,6 +945,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
               <Package size={14} />
               <span>Modpacks</span>
             </button>
+            <Button variant="ghost" onClick={() => setShowShaders(true)}>Shaders</Button>
           </div>
 
           {projectType !== 'modpack' ? (
@@ -1418,6 +1431,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
             </div>
           </div>
 
+          {updateResult && <UpdateReport result={updateResult} busy={isUpdatingAll} onRetry={handleUpdateAllMods} />}
           {updateProgress && (
             <div className="bg-background-card border border-emerald-500/30 p-4 rounded-2xl flex flex-col gap-2 animate-in fade-in duration-200">
               <div className="flex items-center justify-between text-xs">

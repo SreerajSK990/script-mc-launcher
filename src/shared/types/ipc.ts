@@ -1,3 +1,4 @@
+import type { OperationResult, DependencyPlan, ModUpdateResult, BackupEntry, RecoverySettings, ShaderPack, ShaderEnvironment, TransferProgress } from './operations'
 import type { InstanceConfiguration, CreateInstancePayload, UpdateInstancePayload, ModLoaderType } from './instance'
 import type { SystemEnvironment } from './system'
 import type { AuthState, StoredAccount } from './auth'
@@ -94,6 +95,7 @@ export interface MetaActions {
 }
 
 export interface SystemActions {
+  pathForFile: (file: File) => string
   getEnvironment: () => Promise<SystemEnvironment>
   openExternal: (url: string) => Promise<void>
   openExternalUrl: (url: string) => Promise<void>
@@ -123,7 +125,7 @@ export interface ModActions {
   updateAll: (
     instanceId: string,
     updates: ModUpdateInfo[]
-  ) => Promise<{ success: boolean; updatedCount: number }>
+  ) => Promise<ModUpdateResult>
   installDropped: (
     instanceId: string,
     filePaths: string[]
@@ -245,7 +247,25 @@ export interface DiscordActions {
   clearActivity: () => Promise<void>
 }
 
+export interface ContentActions {
+  planMods: (payloads: InstallModPayload[]) => Promise<OperationResult<DependencyPlan>>
+  listBackups: (instanceId: string) => Promise<OperationResult<BackupEntry[]>>
+  backupSaves: (instanceId: string) => Promise<OperationResult<BackupEntry>>
+  restoreBackup: (instanceId: string, id: string) => Promise<OperationResult<void>>
+  getRecoverySettings: (instanceId: string) => Promise<OperationResult<RecoverySettings>>
+  saveRecoverySettings: (instanceId: string, settings: RecoverySettings) => Promise<OperationResult<void>>
+  listShaders: (instanceId: string) => Promise<OperationResult<ShaderPack[]>>
+  installShader: (payload: InstallModPayload) => Promise<OperationResult<ShaderPack>>
+  importShaders: (instanceId: string, paths: string[]) => Promise<OperationResult<ShaderPack[]>>
+  deleteShader: (instanceId: string, filename: string) => Promise<OperationResult<void>>
+  shaderEnvironment: (instanceId: string) => Promise<OperationResult<ShaderEnvironment>>
+  openShaderFolder: (instanceId: string) => Promise<OperationResult<void>>
+  cancelTransfer: (instanceId: string) => Promise<OperationResult<void>>
+  onTransfer: (callback: (event: TransferProgress) => void) => () => void
+}
+
 export interface LauncherAPI {
+  content: ContentActions
   window: WindowControlActions
   instances: InstanceActions
   auth: AuthActions

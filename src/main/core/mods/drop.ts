@@ -1,3 +1,5 @@
+import { withInstanceOperation } from '@main/services/instanceOperations'
+import { withModSnapshot } from '@main/services/recovery'
 import { basename, join } from 'node:path'
 import { promises as fs } from 'node:fs'
 import AdmZip from 'adm-zip'
@@ -100,7 +102,7 @@ function extractModMetadata(jarPath: string): ParsedModMetadata {
   return fallback
 }
 
-export async function installDroppedModFiles(
+async function installDroppedModFilesInternal(
   instanceId: string,
   filePaths: string[]
 ): Promise<{ success: boolean; installedMods: InstalledModRecord[] }> {
@@ -162,4 +164,8 @@ export async function installDroppedModFiles(
     success: newlyInstalled.length > 0,
     installedMods: newlyInstalled
   }
+}
+
+export async function installDroppedModFiles(instanceId: string, filePaths: string[]) {
+  return withInstanceOperation(instanceId, 'importing mods', () => withModSnapshot(instanceId, 'Before importing mods', () => installDroppedModFilesInternal(instanceId, filePaths)))
 }

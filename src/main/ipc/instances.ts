@@ -1,3 +1,4 @@
+import type { OperationResult } from '@shared/types/operations'
 import { ipcMain, shell } from 'electron'
 import { IPC_CHANNELS } from '@shared/constants/channels'
 import type { CreateInstancePayload, UpdateInstancePayload } from '@shared/types/instance'
@@ -19,6 +20,11 @@ import {
 } from '@main/services/instances'
 import { getInstancePath } from '@main/services/paths'
 
+async function instanceResult<T>(work: () => Promise<T>): Promise<OperationResult<T>> {
+  try { return { success: true, data: await work() } }
+  catch (error) { return { success: false, error: error instanceof Error ? error.message : String(error) } }
+}
+
 export function registerInstanceIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.INSTANCES_LIST, async () => {
     return await listAllInstances()
@@ -33,11 +39,11 @@ export function registerInstanceIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC_CHANNELS.INSTANCES_UPDATE, async (_event, payload: UpdateInstancePayload) => {
-    return await updateExistingInstance(payload)
+    return instanceResult(() => updateExistingInstance(payload))
   })
 
   ipcMain.handle(IPC_CHANNELS.INSTANCES_DELETE, async (_event, instanceId: string) => {
-    return await deleteInstanceById(instanceId)
+    return instanceResult(() => deleteInstanceById(instanceId))
   })
 
   ipcMain.handle(IPC_CHANNELS.INSTANCES_OPEN_FOLDER, async (_event, instanceId: string) => {
@@ -70,15 +76,15 @@ export function registerInstanceIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC_CHANNELS.INSTANCES_REPAIR, async (_event, instanceId: string) => {
-    return await repairInstance(instanceId)
+    return instanceResult(() => repairInstance(instanceId))
   })
 
   ipcMain.handle(IPC_CHANNELS.INSTANCES_BACKUP_SAVES, async (_event, instanceId: string) => {
-    return await backupInstanceSaves(instanceId)
+    return instanceResult(() => backupInstanceSaves(instanceId))
   })
 
   ipcMain.handle(IPC_CHANNELS.INSTANCES_CLONE, async (_event, instanceId: string, customName?: string) => {
-    return await cloneInstance(instanceId, customName)
+    return instanceResult(() => cloneInstance(instanceId, customName))
   })
 }
 

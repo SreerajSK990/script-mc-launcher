@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import { DependencyInstallHost } from '@renderer/components/mods/DependencyInstallHost'
+import { TransferStatus } from '@renderer/components/mods/TransferStatus'
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import type { InstanceConfiguration, CreateInstancePayload } from '@shared/types/instance'
 import type { SystemEnvironment } from '@shared/types/system'
 import type { AuthState } from '@shared/types/auth'
@@ -7,11 +9,7 @@ import { TitleBar } from '@renderer/components/layout/TitleBar'
 import { Sidebar, type ActivePageTab } from '@renderer/components/layout/Sidebar'
 import { DashboardPage } from '@renderer/pages/DashboardPage'
 import { InstancesPage } from '@renderer/pages/InstancesPage'
-import { InstanceDetailPage } from '@renderer/pages/InstanceDetailPage'
-import { ModBrowserPage } from '@renderer/pages/ModBrowserPage'
 import { LogsPage } from '@renderer/pages/LogsPage'
-import { SettingsPage } from '@renderer/pages/SettingsPage'
-import { SkinSelectorPage } from '@renderer/pages/SkinSelectorPage'
 import type { QuickPlayTarget, QuickPlayLaunchOptions } from '@shared/types/servers'
 import { CreateInstanceModal } from '@renderer/components/instances/CreateInstanceModal'
 import { ImportModpackModal } from '@renderer/components/instances/ImportModpackModal'
@@ -22,6 +20,11 @@ import { ToastNotification } from '@renderer/components/common/ToastNotification
 import { applyLauncherFont } from '@renderer/components/settings/FontSettingsSection'
 import { UpdateReadyModal } from '@renderer/components/updater/UpdateReadyModal'
 import type { UpdateInfo } from '@shared/types/updater'
+
+const InstanceDetailPage = lazy(() => import('@renderer/pages/InstanceDetailPage').then(module => ({ default: module.InstanceDetailPage })))
+const ModBrowserPage = lazy(() => import('@renderer/pages/ModBrowserPage').then(module => ({ default: module.ModBrowserPage })))
+const SettingsPage = lazy(() => import('@renderer/pages/SettingsPage').then(module => ({ default: module.SettingsPage })))
+const SkinSelectorPage = lazy(() => import('@renderer/pages/SkinSelectorPage').then(module => ({ default: module.SkinSelectorPage })))
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActivePageTab>('dashboard')
@@ -380,7 +383,10 @@ export const App: React.FC = () => {
           isProcessRunning={launchProgress?.step === 'RUNNING'}
         />
 
+        <DependencyInstallHost />
+        <TransferStatus />
         <main className="flex-1 overflow-y-auto p-6 md:p-8 bg-background-dark/50">
+          <Suspense fallback={<div role="status" className="p-6 text-sm text-slate-400">Loading page…</div>}>
           <div className="w-full max-w-[1600px] min-h-full mx-auto pb-16 flex flex-col">
             {activeTab === 'dashboard' && (
               <DashboardPage
@@ -471,6 +477,7 @@ export const App: React.FC = () => {
 
             {activeTab === 'settings' && <SettingsPage systemEnv={systemEnv} />}
           </div>
+          </Suspense>
         </main>
       </div>
 
