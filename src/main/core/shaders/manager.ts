@@ -6,7 +6,7 @@ import type { InstallModPayload } from '@shared/types/mods'
 import type { ShaderPack, ShaderEnvironment } from '@shared/types/operations'
 import { getInstanceMinecraftPath, getInstancePath } from '@main/services/paths'
 import { getInstanceById } from '@main/services/instances'
-import { validateFilename, withInstanceOperation } from '@main/services/instanceOperations'
+import { validateFilename } from '@main/services/instanceOperations'
 import { readJsonFile, writeJsonFileAtomic, doesPathExist } from '@main/utils/filesystem'
 import { downloadFileWithHash } from '@main/utils/download'
 import { listInstalledMods } from '@main/core/mods/manager'
@@ -102,77 +102,71 @@ async function commitShader(
 }
 
 export async function installShader(payload: InstallModPayload): Promise<ShaderPack> {
-  return withInstanceOperation(payload.instanceId, 'installing shader', async () => {
-    const version = payload.versionFile
-    validateFilename(version.filename)
-    if (!version.filename.toLowerCase().endsWith('.zip') || !version.downloadUrl)
-      throw new Error('Select a downloadable shader ZIP')
-    const directory = shaderDirectory(payload.instanceId)
-    await fs.mkdir(directory, { recursive: true })
-    const staging = join(directory, `.download-${randomUUID()}`)
-    try {
-      await downloadFileWithHash(
-        version.downloadUrl,
-        staging,
-        version.sha512 || version.sha1,
-        version.sha512 ? 'sha512' : 'sha1'
-      )
-      validateShaderArchive(staging)
-      const record: ShaderPack = {
-        shaderLoaders: version.shaderLoaders,
-        id: payload.modMetadata?.id || version.projectId,
-        name: payload.modMetadata.name,
-        filename: version.filename,
-        version: version.versionNumber,
-        source: payload.modMetadata.source,
-        sizeBytes: (await fs.stat(staging)).size
-      }
-      return await commitShader(payload.instanceId, staging, record, payload.oldFilename)
-    } finally {
-      await fs.rm(staging, { force: true })
+  const version = payload.versionFile
+  validateFilename(version.filename)
+  if (!version.filename.toLowerCase().endsWith('.zip') || !version.downloadUrl)
+    throw new Error('Select a downloadable shader ZIP')
+  const directory = shaderDirectory(payload.instanceId)
+  await fs.mkdir(directory, { recursive: true })
+  const staging = join(directory, `.download-${randomUUID()}`)
+  try {
+    await downloadFileWithHash(
+      version.downloadUrl,
+      staging,
+      version.sha512 || version.sha1,
+      version.sha512 ? 'sha512' : 'sha1'
+    )
+    validateShaderArchive(staging)
+    const record: ShaderPack = {
+      shaderLoaders: version.shaderLoaders,
+      id: payload.modMetadata?.id || version.projectId,
+      name: payload.modMetadata.name,
+      filename: version.filename,
+      version: version.versionNumber,
+      source: payload.modMetadata.source,
+      sizeBytes: (await fs.stat(staging)).size
     }
-  })
+    return await commitShader(payload.instanceId, staging, record, payload.oldFilename)
+  } finally {
+    await fs.rm(staging, { force: true })
+  }
 }
 
 export async function importShaders(instanceId: string, paths: string[]): Promise<ShaderPack[]> {
-  return withInstanceOperation(instanceId, 'importing shaders', async () => {
-    const directory = shaderDirectory(instanceId)
-    await fs.mkdir(directory, { recursive: true })
-    const result: ShaderPack[] = []
-    for (const path of paths) {
-      if (!path.toLowerCase().endsWith('.zip')) throw new Error('Select shader ZIP files')
-      validateShaderArchive(path)
-    }
-    for (const path of paths) {
-      const filename = validateFilename(basename(path))
-      const staging = join(directory, `.import-${randomUUID()}`)
-      try {
-        await fs.copyFile(path, staging)
-        const record: ShaderPack = {
-          id: `local-${filename}`,
-          name: filename.replace(/\.zip$/i, ''),
-          filename,
-          version: 'Local',
-          sizeBytes: (await fs.stat(staging)).size
-        }
-        result.push(await commitShader(instanceId, staging, record))
-      } finally {
-        await fs.rm(staging, { force: true })
+  const directory = shaderDirectory(instanceId)
+  await fs.mkdir(directory, { recursive: true })
+  const result: ShaderPack[] = []
+  for (const path of paths) {
+    if (!path.toLowerCase().endsWith('.zip')) throw new Error('Select shader ZIP files')
+    validateShaderArchive(path)
+  }
+  for (const path of paths) {
+    const filename = validateFilename(basename(path))
+    const staging = join(directory, `.import-${randomUUID()}`)
+    try {
+      await fs.copyFile(path, staging)
+      const record: ShaderPack = {
+        id: `local-${filename}`,
+        name: filename.replace(/\.zip$/i, ''),
+        filename,
+        version: 'Local',
+        sizeBytes: (await fs.stat(staging)).size
       }
+      result.push(await commitShader(instanceId, staging, record))
+    } finally {
+      await fs.rm(staging, { force: true })
     }
-    return result
-  })
+  }
+  return result
 }
 
 export async function deleteShader(instanceId: string, filename: string): Promise<void> {
-  await withInstanceOperation(instanceId, 'deleting shader', async () => {
-    validateFilename(filename)
-    await fs.rm(join(shaderDirectory(instanceId), filename), { force: true })
-    await writeJsonFileAtomic(
-      metadataPath(instanceId),
-      (await listShaders(instanceId)).filter((pack) => pack.filename !== filename)
-    )
-  })
+  validateFilename(filename)
+  await fs.rm(join(shaderDirectory(instanceId), filename), { force: true })
+  await writeJsonFileAtomic(
+    metadataPath(instanceId),
+    (await listShaders(instanceId)).filter((pack) => pack.filename !== filename)
+  )
 }
 
 export async function getShaderEnvironment(instanceId: string): Promise<ShaderEnvironment> {

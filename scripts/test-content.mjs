@@ -340,7 +340,12 @@ try {
     assert.throws(() => validateShaderArchive(path), /not a shader pack/)
   })
   await check('shader imports are isolated and version replacement updates metadata', async () => {
-    await importShaders(instance.id, [shaderFile])
+    const release = reserveInstance(instance.id, 'Minecraft is running')
+    try {
+      await importShaders(instance.id, [shaderFile])
+    } finally {
+      release()
+    }
     assert.equal((await listShaders(instance.id)).length, 1)
     const shaderBytes = shaderZip.toBuffer()
     globalThis.fetch = async () => new Response(shaderBytes)
