@@ -1049,7 +1049,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
       </div>
 
       {projectType === 'shader' ? (
-        <div className="flex-1 min-h-0 overflow-y-auto pr-1 pt-3">
+        <div className="flex flex-col flex-1 min-h-0 pt-3">
           <ShadersPanel
             key={selectedInstanceId}
             instance={currentInstance}

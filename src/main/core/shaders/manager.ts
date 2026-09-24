@@ -120,7 +120,7 @@ export async function installShader(payload: InstallModPayload): Promise<ShaderP
       validateShaderArchive(staging)
       const record: ShaderPack = {
         shaderLoaders: version.shaderLoaders,
-        id: version.projectId,
+        id: payload.modMetadata?.id || version.projectId,
         name: payload.modMetadata.name,
         filename: version.filename,
         version: version.versionNumber,
