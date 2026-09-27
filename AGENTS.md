@@ -245,10 +245,16 @@ Use clear, concise, imperative conventional commit messages:
 
 ## 8. Release Process & Publishing Style
 
+### Versioning Rules (Semantic Versioning `MAJOR.MINOR.PATCH`)
+After every successful verification pipeline and build, release and push changes to Git with an appropriately bumped version number:
+- **PATCH (`X.Y.Z+1`, e.g. `0.17.4` → `0.17.5`):** Bug fixes, UI/layout polish, minor cosmetic adjustments, performance tweaks, and non-breaking internal enhancements.
+- **MINOR (`X.Y+1.0`, e.g. `0.17.5` → `0.18.0`):** New functional features, new subsystems (e.g. shaders, modpacks, backup systems, 3D skins), or significant user-facing capabilities.
+- **MAJOR (`X+1.0.0`, e.g. `0.x.x` → `1.0.0`):** Milestone architectural overhauls, breaking data/API schema migrations, or official stable 1.0 production releases.
+
 ### Release Preparation Flow
-1. **Version Bump:** Update the version string in:
+1. **Version Bump:** Update the version string according to the rules above in:
    - `package.json` (`"version": "X.Y.Z"`)
-   - `src/shared/constants/defaults.ts` (`DEFAULT_LAUNCHER_VERSION = 'X.Y.Z'`)
+   - `src/shared/constants/defaults.ts` (`VERSION: 'X.Y.Z'`)
 2. **Build Production Executables:**
    ```bash
    npm run package

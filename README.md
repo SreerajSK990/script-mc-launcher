@@ -2,7 +2,7 @@
 
 A fast, sleek, and modular Minecraft launcher built with **Electron**, **React**, **TypeScript**, and **Tailwind CSS**.
 
-**Latest release: [v0.17.4](https://github.com/SreerajSK990/script-mc-launcher/releases/tag/v0.17.4)** — enabled live in-game shader and resource pack installation, imports, and management while Minecraft is actively running, keeping lock restrictions strictly focused on game JAR mods and destructive actions. Read the [release notes](release-notes/v0.17.4.md) for details.
+**Latest release: [v0.17.5](https://github.com/SreerajSK990/script-mc-launcher/releases/tag/v0.17.5)** — polished Jump In quick-join card responsive density, simplified action buttons to "Play" / "Join", added button line wrap guards, and streamlined gamemode badges. Read the [release notes](release-notes/v0.17.5.md) for details.
 
 Most Minecraft launchers out there either look like they're stuck in 2010 with clunky Java Swing windows, or they're bloated with electron bloatware and ads. Script Launcher is built to be fast, clean, and completely isolated so your mod setups and game versions never conflict with each other.
 
@@ -96,6 +96,8 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 - **Discord Rich Presence (RPC):** Dynamic presence powered by `@xhayper/discord-rpc` showing what page you're browsing (Dashboard, Instances, Mod Browser, Skins, Settings), which instance you're configuring, and live in-game status with elapsed playtime, mod loader badges, and a direct GitHub link button.
 - **Collapsible "Jump In" & Playtime-Ranked Quick Join:**
   - Automatically sorts all multiplayer servers and singleplayer worlds by total instance playtime and recent activity.
+  - **Adaptive Responsive Density:** Dynamically switches between 2 spacious columns on smaller or unmaximized windows and 3 columns on wide screens, keeping cards readable and preventing text clipping.
+  - **Streamlined Card Layout:** Symmetrical "Play" and "Join" launch buttons with text wrap protection, and compact gamemode and latency badges.
   - Displays top 3 most played targets by default with instant 1-click launch; provides a seamless "View All" toggle when more targets exist.
   - Interactive collapse/expand toggle on the Jump In card header with persistent saved state.
   - Inline playtime badges (`Clock` icon with formatted hours and minutes) on each quick-play card.

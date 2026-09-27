@@ -431,16 +431,16 @@ export async function getInstanceWorlds(
           if (typeof data.GameType === 'number') {
             switch (data.GameType) {
               case 1:
-                gameMode = 'Creative mode'
+                gameMode = 'Creative'
                 break
               case 2:
-                gameMode = 'Adventure mode'
+                gameMode = 'Adventure'
                 break
               case 3:
                 gameMode = 'Spectator'
                 break
               default:
-                gameMode = 'Survival mode'
+                gameMode = 'Survival'
                 break
             }
           }

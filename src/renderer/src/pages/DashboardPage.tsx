@@ -290,7 +290,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               No servers or singleplayer worlds detected yet across your instances. Launch an instance to add servers or create worlds!
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5">
               {displayedTargets.map((target) => {
                 if (target.type === 'server') {
                   const ping = pingStatuses[target.id]
@@ -404,6 +404,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                               variant="primary"
                               size="sm"
                               icon={Play}
+                              className="shrink-0"
                               onClick={() => onQuickPlay(target)}
                             >
                               Join
@@ -434,7 +435,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                         <div className="flex items-center justify-between gap-1">
                           <h4 className="text-sm font-bold text-white truncate">{target.name}</h4>
                           <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/5 text-slate-300 capitalize shrink-0">
-                            {target.gameMode}
+                            {target.gameMode.replace(/\s+mode$/i, '')}
                           </span>
                         </div>
                         <p className="text-xs text-slate-400 truncate mt-0.5">
@@ -471,9 +472,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                             variant="primary"
                             size="sm"
                             icon={Play}
+                            className="shrink-0"
                             onClick={() => onQuickPlay(target)}
                           >
-                            Play World
+                            Play
                           </Button>
                         </div>
                       )
