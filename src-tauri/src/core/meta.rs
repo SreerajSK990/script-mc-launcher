@@ -230,7 +230,7 @@ pub async fn fetch_mojang_version_manifest() -> Result<VersionManifest, String> 
     let client = reqwest::Client::new();
     let response = client
         .get(MOJANG_MANIFEST_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.4")
+        .header(USER_AGENT, "ScriptLauncher/0.18.5")
         .send()
         .await;
 
@@ -276,7 +276,7 @@ pub async fn fetch_version_package(version_id: &str) -> Result<VersionPackage, S
     let client = reqwest::Client::new();
     let resp = client
         .get(&entry.url)
-        .header(USER_AGENT, "ScriptLauncher/0.18.4")
+        .header(USER_AGENT, "ScriptLauncher/0.18.5")
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -332,7 +332,7 @@ pub async fn fetch_prism_component_index(component_uid: &str) -> Result<PrismCom
     let client = reqwest::Client::new();
     let resp = client
         .get(&url)
-        .header(USER_AGENT, "ScriptLauncher/0.18.4")
+        .header(USER_AGENT, "ScriptLauncher/0.18.5")
         .send()
         .await;
 
@@ -376,7 +376,7 @@ pub async fn fetch_prism_component_version(
     let client = reqwest::Client::new();
     let resp = client
         .get(&url)
-        .header(USER_AGENT, "ScriptLauncher/0.18.4")
+        .header(USER_AGENT, "ScriptLauncher/0.18.5")
         .send()
         .await
         .map_err(|e| e.to_string())?;

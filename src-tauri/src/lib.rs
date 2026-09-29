@@ -138,6 +138,7 @@ pub fn run() {
             discord_set_activity,
             discord_clear_activity,
             updater_check_for_updates,
+            updater_quit_and_install,
         ])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");

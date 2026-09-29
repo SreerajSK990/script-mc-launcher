@@ -184,7 +184,7 @@ async fn download_file_with_verify(
 
     let resp = client
         .get(&task.url)
-        .header(USER_AGENT, "ScriptLauncher/0.18.4")
+        .header(USER_AGENT, "ScriptLauncher/0.18.5")
         .send()
         .await
         .map_err(|e| format!("Failed to download {}: {e}", task.url))?;
@@ -480,7 +480,7 @@ fn build_arguments(
     if !jvm_args.iter().any(|a| a.starts_with("-Djava.library.path")) {
         jvm_args.push(format!("-Djava.library.path={}", natives_dir.display()));
         jvm_args.push("-Dminecraft.launcher.brand=ScriptLauncher".to_string());
-        jvm_args.push("-Dminecraft.launcher.version=0.18.4".to_string());
+        jvm_args.push("-Dminecraft.launcher.version=0.18.5".to_string());
         jvm_args.push("-cp".to_string());
         jvm_args.push(classpath_string.to_string());
     }

@@ -167,7 +167,7 @@ pub async fn fetch_mojang_java_products() -> Result<MojangJavaAllProducts, Strin
     let client = reqwest::Client::new();
     let resp = client
         .get(MOJANG_JAVA_ALL_PRODUCTS_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.4")
+        .header(USER_AGENT, "ScriptLauncher/0.18.5")
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -218,7 +218,7 @@ pub async fn ensure_java_runtime(
     let client = reqwest::Client::new();
     let manifest_resp = client
         .get(&chosen_product.manifest.url)
-        .header(USER_AGENT, "ScriptLauncher/0.18.4")
+        .header(USER_AGENT, "ScriptLauncher/0.18.5")
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -309,7 +309,7 @@ async fn download_and_verify_file(
 
     let resp = client
         .get(&task.url)
-        .header(USER_AGENT, "ScriptLauncher/0.18.4")
+        .header(USER_AGENT, "ScriptLauncher/0.18.5")
         .send()
         .await
         .map_err(|e| format!("Failed to download {}: {e}", task.url))?;

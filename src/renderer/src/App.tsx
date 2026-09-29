@@ -200,10 +200,14 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     if (!window.launcherAPI?.updater) return
+    const timer = setTimeout(() => {
+      window.launcherAPI?.updater?.checkForUpdates().catch(() => {})
+    }, 15000)
     const unsub = window.launcherAPI.updater.onDownloaded((info) => {
       setDownloadedUpdate(info)
     })
     return () => {
+      clearTimeout(timer)
       unsub()
     }
   }, [])

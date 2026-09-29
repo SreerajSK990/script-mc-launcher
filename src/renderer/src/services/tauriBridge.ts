@@ -254,10 +254,43 @@ export function createTauriBridge(): LauncherAPI {
     },
     updater: {
       checkForUpdates: () => invoke('updater_check_for_updates'),
-      quitAndInstall: async () => {},
-      onStatus: () => () => {},
-      onProgress: () => () => {},
-      onDownloaded: () => () => {}
+      quitAndInstall: () => invoke('updater_quit_and_install'),
+      onStatus: (callback) => {
+        let unlisten: (() => void) | undefined
+        listen<{ status: import('@shared/types/updater').UpdateStatus; message?: string }>(
+          'updater:status',
+          (event) => callback(event.payload.status, event.payload.message)
+        ).then((u) => {
+          unlisten = u
+        })
+        return () => {
+          unlisten?.()
+        }
+      },
+      onProgress: (callback) => {
+        let unlisten: (() => void) | undefined
+        listen<import('@shared/types/updater').UpdateProgressEvent>(
+          'updater:progress',
+          (event) => callback(event.payload)
+        ).then((u) => {
+          unlisten = u
+        })
+        return () => {
+          unlisten?.()
+        }
+      },
+      onDownloaded: (callback) => {
+        let unlisten: (() => void) | undefined
+        listen<import('@shared/types/updater').UpdateInfo>(
+          'updater:downloaded',
+          (event) => callback(event.payload)
+        ).then((u) => {
+          unlisten = u
+        })
+        return () => {
+          unlisten?.()
+        }
+      }
     },
     discord: {
       setActivity: (payload) => invoke('discord_set_activity', { payload }),
