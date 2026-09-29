@@ -281,14 +281,16 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
 
     let ms_resp = client
         .post(TOKEN_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.5")
+        .header(USER_AGENT, "ScriptLauncher/0.18.7")
         .form(&token_params)
         .send()
         .await
         .map_err(|e| format!("Token request failed: {e}"))?;
 
-    if !ms_resp.status().is_success() {
-        return Err(format!("Microsoft token exchange HTTP {}", ms_resp.status()));
+    let ms_status = ms_resp.status();
+    if !ms_status.is_success() {
+        let err_body = ms_resp.text().await.unwrap_or_default();
+        return Err(format!("Microsoft token exchange HTTP {ms_status}: {err_body}"));
     }
 
     let ms_tokens = ms_resp
@@ -308,14 +310,18 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
 
     let xbl_resp = client
         .post(XBOX_AUTH_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.5")
+        .header(USER_AGENT, "ScriptLauncher/0.18.7")
+        .header(reqwest::header::ACCEPT, "application/json")
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
         .json(&xbl_payload)
         .send()
         .await
         .map_err(|e| format!("Xbox Live auth failed: {e}"))?;
 
-    if !xbl_resp.status().is_success() {
-        return Err(format!("Xbox Live auth HTTP {}", xbl_resp.status()));
+    let xbl_status = xbl_resp.status();
+    if !xbl_status.is_success() {
+        let err_body = xbl_resp.text().await.unwrap_or_default();
+        return Err(format!("Xbox Live auth HTTP {xbl_status}: {err_body}"));
     }
 
     let xbl_data = xbl_resp
@@ -341,14 +347,28 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
 
     let xsts_resp = client
         .post(XSTS_AUTH_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.5")
+        .header(USER_AGENT, "ScriptLauncher/0.18.7")
+        .header(reqwest::header::ACCEPT, "application/json")
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
         .json(&xsts_payload)
         .send()
         .await
         .map_err(|e| format!("XSTS auth failed: {e}"))?;
 
-    if !xsts_resp.status().is_success() {
-        return Err(format!("XSTS authorization HTTP {}", xsts_resp.status()));
+    let xsts_status = xsts_resp.status();
+    if !xsts_status.is_success() {
+        let err_body = xsts_resp.text().await.unwrap_or_default();
+        if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&err_body) {
+            if let Some(err_code) = error_json.get("XErr").and_then(|v| v.as_i64()) {
+                if err_code == 2148916233 {
+                    return Err("This Microsoft account does not have an active Xbox account. Please create one on xbox.com.".to_string());
+                }
+                if err_code == 2148916238 {
+                    return Err("This account is a child account and requires adult verification in Microsoft Family Safety.".to_string());
+                }
+            }
+        }
+        return Err(format!("XSTS authorization HTTP {xsts_status}: {err_body}"));
     }
 
     let xsts_data = xsts_resp
@@ -362,14 +382,18 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
 
     let mc_resp = client
         .post(MINECRAFT_LOGIN_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.5")
+        .header(USER_AGENT, "ScriptLauncher/0.18.7")
+        .header(reqwest::header::ACCEPT, "application/json")
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
         .json(&mc_payload)
         .send()
         .await
         .map_err(|e| format!("Minecraft login failed: {e}"))?;
 
-    if !mc_resp.status().is_success() {
-        return Err(format!("Minecraft login HTTP {}", mc_resp.status()));
+    let mc_status = mc_resp.status();
+    if !mc_status.is_success() {
+        let err_body = mc_resp.text().await.unwrap_or_default();
+        return Err(format!("Minecraft login HTTP {mc_status}: {err_body}"));
     }
 
     let mc_data = mc_resp
@@ -379,14 +403,19 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
 
     let profile_resp = client
         .get(MINECRAFT_PROFILE_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.5")
+        .header(USER_AGENT, "ScriptLauncher/0.18.7")
         .header("Authorization", format!("Bearer {}", mc_data.access_token))
         .send()
         .await
         .map_err(|e| format!("Profile request failed: {e}"))?;
 
-    if !profile_resp.status().is_success() {
-        return Err(format!("Profile request HTTP {}", profile_resp.status()));
+    let profile_status = profile_resp.status();
+    if !profile_status.is_success() {
+        let err_body = profile_resp.text().await.unwrap_or_default();
+        if profile_status.as_u16() == 404 {
+            return Err("This Microsoft account does not own Minecraft Java Edition.".to_string());
+        }
+        return Err(format!("Profile request HTTP {profile_status}: {err_body}"));
     }
 
     let profile = profile_resp

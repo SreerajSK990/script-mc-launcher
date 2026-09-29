@@ -35,7 +35,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
       setErrorMessage(null)
       await onLoginMicrosoft()
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Microsoft login failed.'
+      const message = typeof error === 'string' ? error : error instanceof Error ? error.message : 'Microsoft login failed.'
       setErrorMessage(message)
     } finally {
       setIsMicrosoftLoading(false)
@@ -55,7 +55,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
       await onLoginOffline(offlineName.trim())
       setOfflineName('')
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to add offline player.'
+      const message = typeof error === 'string' ? error : error instanceof Error ? error.message : 'Failed to add offline player.'
       setErrorMessage(message)
     } finally {
       setIsOfflineLoading(false)
