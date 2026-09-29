@@ -4,6 +4,7 @@ mod core;
 use commands::auth::*;
 use commands::cloner::*;
 use commands::content::*;
+use commands::discord::*;
 use commands::fonts::*;
 use commands::game_settings::*;
 use commands::instances::*;
@@ -17,6 +18,7 @@ use commands::screenshots::*;
 use commands::servers::*;
 use commands::skins::*;
 use commands::system::*;
+use commands::updater::*;
 use commands::window::*;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -133,6 +135,9 @@ pub fn run() {
             launchers_scan_all,
             launchers_scan_directory,
             launchers_clone,
+            discord_set_activity,
+            discord_clear_activity,
+            updater_check_for_updates,
         ])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");

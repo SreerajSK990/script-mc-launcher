@@ -253,15 +253,15 @@ export function createTauriBridge(): LauncherAPI {
         invoke('game_settings_open_file', { instanceId, fileType })
     },
     updater: {
-      checkForUpdates: async () => ({} as unknown as import('@shared/types/updater').UpdateCheckResult),
+      checkForUpdates: () => invoke('updater_check_for_updates'),
       quitAndInstall: async () => {},
       onStatus: () => () => {},
       onProgress: () => () => {},
       onDownloaded: () => () => {}
     },
     discord: {
-      setActivity: async () => {},
-      clearActivity: async () => {}
+      setActivity: (payload) => invoke('discord_set_activity', { payload }),
+      clearActivity: () => invoke('discord_clear_activity')
     },
     content: {
       planMods: (payloads) => wrapOp(invoke('content_plan_mods', { payloads })),

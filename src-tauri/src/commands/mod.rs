@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod cloner;
 pub mod content;
+pub mod discord;
 pub mod fonts;
 pub mod game_settings;
 pub mod instances;
@@ -14,4 +15,5 @@ pub mod screenshots;
 pub mod servers;
 pub mod skins;
 pub mod system;
+pub mod updater;
 pub mod window;
