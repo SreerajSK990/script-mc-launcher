@@ -8,9 +8,12 @@ pub mod meta;
 pub mod minecraft;
 pub mod mods;
 pub mod paths;
+pub mod recovery;
 pub mod resourcepacks;
 pub mod screenshots;
 pub mod servers;
+pub mod shaders;
 pub mod skins;
 pub mod skins_presets;
 pub mod system;
+

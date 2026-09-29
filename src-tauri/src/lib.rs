@@ -2,6 +2,7 @@ mod commands;
 mod core;
 
 use commands::auth::*;
+use commands::content::*;
 use commands::fonts::*;
 use commands::game_settings::*;
 use commands::instances::*;
@@ -112,6 +113,18 @@ pub fn run() {
             auth_login_microsoft,
             auth_switch_account,
             auth_logout,
+            content_list_shaders,
+            content_install_shader,
+            content_import_shaders,
+            content_delete_shader,
+            content_shader_environment,
+            content_open_shader_folder,
+            content_list_backups,
+            content_backup_saves,
+            content_restore_backup,
+            content_get_recovery_settings,
+            content_save_recovery_settings,
+            content_plan_mods,
         ])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");

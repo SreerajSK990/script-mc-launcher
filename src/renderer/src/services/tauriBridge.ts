@@ -7,6 +7,14 @@ export function isRunningInTauri(): boolean {
   return typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
 }
 
+async function wrapOp<T>(promise: Promise<T>): Promise<import('@shared/types/operations').OperationResult<T>> {
+  try {
+    return { success: true, data: await promise }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
 export function createTauriBridge(): LauncherAPI {
   return {
     window: {
@@ -204,20 +212,28 @@ export function createTauriBridge(): LauncherAPI {
       clearActivity: async () => {}
     },
     content: {
-      planMods: async () => ({} as unknown as import('@shared/types/operations').OperationResult<import('@shared/types/operations').DependencyPlan>),
-      listBackups: async () => ({ success: true, data: [] }),
-      backupSaves: async () => ({} as unknown as import('@shared/types/operations').OperationResult<import('@shared/types/operations').BackupEntry>),
-      restoreBackup: async () => ({ success: true, data: undefined }),
-      getRecoverySettings: async () => ({} as unknown as import('@shared/types/operations').OperationResult<import('@shared/types/operations').RecoverySettings>),
-      saveRecoverySettings: async () => ({ success: true, data: undefined }),
-      listShaders: async () => ({ success: true, data: [] }),
-      installShader: async () => ({} as unknown as import('@shared/types/operations').OperationResult<import('@shared/types/operations').ShaderPack>),
-      importShaders: async () => ({ success: true, data: [] }),
-      deleteShader: async () => ({ success: true, data: undefined }),
-      shaderEnvironment: async () => ({} as unknown as import('@shared/types/operations').OperationResult<import('@shared/types/operations').ShaderEnvironment>),
-      openShaderFolder: async () => ({ success: true, data: undefined }),
-      cancelTransfer: async () => ({ success: true, data: undefined }),
-      onTransfer: () => () => {}
+      planMods: (payloads) => wrapOp(invoke('content_plan_mods', { payloads })),
+      listBackups: (instanceId: string) => wrapOp(invoke('content_list_backups', { instanceId })),
+      backupSaves: (instanceId: string) => wrapOp(invoke('content_backup_saves', { instanceId })),
+      restoreBackup: (instanceId: string, id: string) => wrapOp(invoke('content_restore_backup', { instanceId, backupId: id })),
+      getRecoverySettings: (instanceId: string) => wrapOp(invoke('content_get_recovery_settings', { instanceId })),
+      saveRecoverySettings: (instanceId: string, settings) => wrapOp(invoke('content_save_recovery_settings', { instanceId, settings })),
+      listShaders: (instanceId: string) => wrapOp(invoke('content_list_shaders', { instanceId })),
+      installShader: (payload) => wrapOp(invoke('content_install_shader', { payload })),
+      importShaders: (instanceId: string, paths: string[]) => wrapOp(invoke('content_import_shaders', { instanceId, filePaths: paths })),
+      deleteShader: (instanceId: string, filename: string) => wrapOp(invoke('content_delete_shader', { instanceId, filename })),
+      shaderEnvironment: (instanceId: string) => wrapOp(invoke('content_shader_environment', { instanceId })),
+      openShaderFolder: (instanceId: string) => wrapOp(invoke('content_open_shader_folder', { instanceId })),
+      cancelTransfer: async (_instanceId: string) => ({ success: true, data: undefined }),
+      onTransfer: (callback) => {
+        let unlisten: (() => void) | undefined
+        listen<import('@shared/types/operations').TransferProgress>('content:transfer-progress', (event) => callback(event.payload)).then((u) => {
+          unlisten = u
+        })
+        return () => {
+          unlisten?.()
+        }
+      }
     }
   }
 }
