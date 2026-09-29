@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { Minus, Square, Copy, X, Terminal } from 'lucide-react'
 import { LAUNCHER_METADATA } from '@shared/constants/defaults'
+import { isRunningInTauri } from '@renderer/services/tauriBridge'
 
 export const TitleBar: React.FC = () => {
   const [isMaximized, setIsMaximized] = useState(false)
+  const isRust = isRunningInTauri()
 
   useEffect(() => {
     const checkMaximized = async () => {
@@ -40,6 +42,15 @@ export const TitleBar: React.FC = () => {
         <div className="flex items-baseline gap-2">
           <span className="text-xs font-semibold tracking-wide text-slate-200">SCRIPT LAUNCHER</span>
           <span className="text-[10px] text-slate-500 font-mono">v{LAUNCHER_METADATA.VERSION}</span>
+          <span
+            className={`text-[9px] font-mono px-1.5 py-0.5 rounded border uppercase tracking-wider ${
+              isRust
+                ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                : 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30'
+            }`}
+          >
+            {isRust ? 'Rust' : 'Electron'}
+          </span>
         </div>
       </div>
 

@@ -23,6 +23,7 @@ import type { UpdateStatus, UpdateProgressEvent, UpdateInfo } from '@shared/type
 import { LAUNCHER_METADATA } from '@shared/constants/defaults'
 import { Button } from '@renderer/components/common/Button'
 import { FontSettingsSection } from '@renderer/components/settings/FontSettingsSection'
+import { isRunningInTauri } from '@renderer/services/tauriBridge'
 
 interface SettingsPageProps {
   systemEnv: SystemEnvironment | null
@@ -196,6 +197,50 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ systemEnv }) => {
             >
               Open Folder
             </Button>
+          </div>
+        </div>
+
+        <div className="pt-6 border-t border-border-subtle/60">
+          <h3 className="text-sm font-semibold text-slate-200 uppercase tracking-wider mb-1">
+            Engine Architecture
+          </h3>
+          <p className="text-xs text-slate-400 mb-3">
+            Active runtime powering instance isolation, downloads, and game process management
+          </p>
+
+          <div className="p-4 rounded-xl bg-background-darkest border border-border-subtle flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-9 h-9 rounded-lg flex items-center justify-center font-mono font-bold text-xs border ${
+                  isRunningInTauri()
+                    ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                    : 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30'
+                }`}
+              >
+                <Cpu size={18} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-white">
+                    {isRunningInTauri() ? 'Rust Desktop Engine (Tauri v2)' : 'Electron Desktop Engine (Node.js)'}
+                  </span>
+                  <span
+                    className={`text-[9px] font-mono px-1.5 py-0.5 rounded border uppercase tracking-wider ${
+                      isRunningInTauri()
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                        : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
+                    }`}
+                  >
+                    Active
+                  </span>
+                </div>
+                <span className="text-xs text-slate-400 block mt-0.5">
+                  {isRunningInTauri()
+                    ? 'High-performance native Rust core with minimal RAM footprint and native OS pipes.'
+                    : 'Chromium and Node.js runtime environment.'}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
