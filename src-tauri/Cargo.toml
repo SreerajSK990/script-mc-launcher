@@ -1,6 +1,6 @@
 [package]
 name = "script-mc-launcher"
-version = "0.18.5"
+version = "0.18.6"
 description = "Custom modern Minecraft launcher with instance isolation and mod loader support"
 authors = ["Sreeraj SK"]
 edition = "2024"

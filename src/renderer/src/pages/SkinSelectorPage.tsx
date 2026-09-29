@@ -82,6 +82,8 @@ export const SkinSelectorPage: React.FC<SkinSelectorPageProps> = ({ onNotificati
           if (activeCape) {
             setPreviewCape((prev) => prev || activeCape)
           }
+        } else if (res.capes.length > 0) {
+          setPreviewCape((prev) => prev || res.capes[0])
         }
       }
     } catch (err) {

@@ -103,6 +103,9 @@ export const SkinViewer3D: React.FC<SkinViewer3DProps> = ({
     if (!viewerRef.current) return
     if (capeUrl && backEquipment !== 'none') {
       try {
+        if (viewerRef.current.playerObject) {
+          viewerRef.current.playerObject.backEquipment = backEquipment === 'elytra' ? 'elytra' : 'cape'
+        }
         const res = viewerRef.current.loadCape(capeUrl, {
           backEquipment: backEquipment === 'elytra' ? 'elytra' : 'cape'
         })
@@ -116,6 +119,9 @@ export const SkinViewer3D: React.FC<SkinViewer3DProps> = ({
       }
     } else {
       try {
+        if (viewerRef.current.playerObject) {
+          viewerRef.current.playerObject.backEquipment = null
+        }
         viewerRef.current.loadCape(null)
       } catch {}
     }
