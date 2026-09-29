@@ -30,14 +30,22 @@ export function createTauriBridge(): LauncherAPI {
       openFolder: (instanceId: string) => invoke('instances_open_folder', { instanceId }),
       setGroup: (instanceId: string, group: string | null) =>
         invoke('instances_set_group', { instanceId, group }),
-      renameGroup: async () => {},
-      disbandGroup: async () => {},
-      deleteGroup: async () => {},
-      saveCustomIcon: async () => '',
-      toggleFavorite: (instanceId: string) => invoke('instances_toggle_favorite', { instanceId }),
-      repair: async () => ({ success: true, message: 'Repaired' }),
-      backupSaves: async () => ({ success: true, backupPath: '' }),
-      clone: async () => invoke('instances_get', { instanceId: '' })
+      renameGroup: (oldName: string, newName: string) =>
+        invoke('instances_rename_group', { oldName, newName }),
+      disbandGroup: (groupName: string) =>
+        invoke('instances_disband_group', { groupName }),
+      deleteGroup: (groupName: string) =>
+        invoke('instances_delete_group', { groupName }),
+      saveCustomIcon: (instanceId: string, dataUrl: string) =>
+        invoke('instances_save_custom_icon', { instanceId, dataUrl }),
+      toggleFavorite: (instanceId: string) =>
+        invoke('instances_toggle_favorite', { instanceId }),
+      repair: (instanceId: string) =>
+        invoke('instances_repair', { instanceId }),
+      backupSaves: (instanceId: string) =>
+        invoke('instances_backup_saves', { instanceId }),
+      clone: (instanceId: string, customName?: string) =>
+        invoke('instances_clone', { instanceId, customName })
     },
     auth: {
       getState: async () => ({ accounts: [], activeAccountId: null, activeAccount: null }),
@@ -66,8 +74,9 @@ export function createTauriBridge(): LauncherAPI {
       onLog: () => () => {}
     },
     meta: {
-      getVersions: async () => [],
-      getLoaderVersions: async () => []
+      getVersions: () => invoke('meta_get_versions'),
+      getLoaderVersions: (loaderType: string, minecraftVersion: string) =>
+        invoke('meta_get_loader_versions', { loaderType, minecraftVersion })
     },
     mods: {
       search: async () => [],

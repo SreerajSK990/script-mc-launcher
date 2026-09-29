@@ -2,6 +2,7 @@ mod commands;
 mod core;
 
 use commands::instances::*;
+use commands::meta::*;
 use commands::system::*;
 use commands::window::*;
 
@@ -37,7 +38,16 @@ pub fn run() {
             instances_delete,
             instances_open_folder,
             instances_set_group,
+            instances_rename_group,
+            instances_disband_group,
+            instances_delete_group,
+            instances_save_custom_icon,
             instances_toggle_favorite,
+            instances_repair,
+            instances_backup_saves,
+            instances_clone,
+            meta_get_versions,
+            meta_get_loader_versions,
         ])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");
