@@ -121,8 +121,9 @@ export function createTauriBridge(): LauncherAPI {
       onProgress: () => () => {}
     },
     java: {
-      getRuntimes: async () => [],
-      downloadRuntime: async () => ''
+      getRuntimes: () => invoke('java_get_runtimes'),
+      downloadRuntime: (componentOrVersion: string) =>
+        invoke('java_download_runtime', { componentOrVersion })
     },
     fonts: {
       list: async () => [],

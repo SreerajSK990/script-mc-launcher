@@ -2,6 +2,7 @@ mod commands;
 mod core;
 
 use commands::instances::*;
+use commands::java::*;
 use commands::meta::*;
 use commands::system::*;
 use commands::window::*;
@@ -48,6 +49,8 @@ pub fn run() {
             instances_clone,
             meta_get_versions,
             meta_get_loader_versions,
+            java_get_runtimes,
+            java_download_runtime,
         ])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");
