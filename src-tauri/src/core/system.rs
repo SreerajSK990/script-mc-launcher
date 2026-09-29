@@ -78,7 +78,13 @@ pub fn detect_system_java_path() -> Option<String> {
     }
 
     let lookup_cmd = if cfg!(target_os = "windows") { "where" } else { "which" };
-    if let Ok(output) = std::process::Command::new(lookup_cmd).arg("java").output() {
+    let mut cmd = std::process::Command::new(lookup_cmd);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
+    if let Ok(output) = cmd.arg("java").output() {
         if output.status.success() {
             if let Ok(text) = String::from_utf8(output.stdout) {
                 if let Some(first_line) = text.lines().next() {

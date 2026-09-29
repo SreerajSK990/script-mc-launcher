@@ -73,7 +73,9 @@ pub async fn stop_running_instance(instance_id: &str) -> bool {
     if let Some(pid) = map.remove(instance_id) {
         #[cfg(target_os = "windows")]
         {
+            use std::os::windows::process::CommandExt;
             let _ = std::process::Command::new("taskkill")
+                .creation_flags(0x08000000)
                 .args(["/F", "/T", "/PID", &pid.to_string()])
                 .output();
         }
@@ -105,6 +107,10 @@ fn is_rule_allowed(rules: Option<&[LibraryRule]>) -> bool {
 
     let mut allowed = false;
     for rule in rules {
+        if rule.features.is_some() {
+            continue;
+        }
+
         let os_match = match &rule.os {
             Some(os) => os.name.as_deref() == Some(current_os),
             None => true,
@@ -521,16 +527,35 @@ fn build_arguments(
     }
 
     if let Some(qp) = quick_play {
+        let parts: Vec<u32> = instance
+            .minecraft_version
+            .split('.')
+            .map(|p| p.parse::<u32>().unwrap_or(0))
+            .collect();
+        let is_at_least_1_20 = parts.first().copied().unwrap_or(0) > 1
+            || (parts.first().copied().unwrap_or(0) == 1 && parts.get(1).copied().unwrap_or(0) >= 20);
+
         if qp.target_type == "server" {
             if let Some(host) = &qp.host {
-                let port_str = qp.port.unwrap_or(25565);
-                game_args.push("--quickPlayMultiplayer".to_string());
-                game_args.push(format!("{host}:{port_str}"));
+                let port_num = qp.port.unwrap_or(25565);
+                if is_at_least_1_20 {
+                    game_args.push("--quickPlayMultiplayer".to_string());
+                    game_args.push(format!("{host}:{port_num}"));
+                } else {
+                    game_args.push("--server".to_string());
+                    game_args.push(host.clone());
+                    if qp.port.is_some() {
+                        game_args.push("--port".to_string());
+                        game_args.push(port_num.to_string());
+                    }
+                }
             }
         } else if qp.target_type == "world" {
             if let Some(wf) = &qp.world_folder {
-                game_args.push("--quickPlaySingleplayer".to_string());
-                game_args.push(wf.clone());
+                if is_at_least_1_20 {
+                    game_args.push("--quickPlaySingleplayer".to_string());
+                    game_args.push(wf.clone());
+                }
             }
         }
     }
@@ -651,6 +676,8 @@ pub async fn launch_minecraft(
     emit_log(&format!("Working directory: {}", working_dir.display()), "info");
 
     let mut cmd = tokio::process::Command::new(&java_executable);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000);
     cmd.current_dir(&working_dir);
     cmd.args(&jvm_args);
     cmd.arg(&main_class);
