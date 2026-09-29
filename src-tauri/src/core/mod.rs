@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod cloner;
 pub mod fonts;
 pub mod game_settings;
 pub mod instances;

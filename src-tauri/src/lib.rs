@@ -2,6 +2,7 @@ mod commands;
 mod core;
 
 use commands::auth::*;
+use commands::cloner::*;
 use commands::content::*;
 use commands::fonts::*;
 use commands::game_settings::*;
@@ -129,6 +130,9 @@ pub fn run() {
             modpacks_inspect,
             modpacks_import,
             modpacks_install_remote,
+            launchers_scan_all,
+            launchers_scan_directory,
+            launchers_clone,
         ])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");

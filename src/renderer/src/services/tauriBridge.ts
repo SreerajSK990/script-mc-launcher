@@ -178,11 +178,38 @@ export function createTauriBridge(): LauncherAPI {
         invoke('screenshots_open_folder', { instanceId })
     },
     externalLaunchers: {
-      scanAll: async () => [],
-      scanDirectory: async () => [],
-      selectDirectory: async () => null,
-      clone: async () => ({} as unknown as import('@shared/types/instance').InstanceConfiguration),
-      onProgress: () => () => {}
+      scanAll: () => invoke('launchers_scan_all'),
+      scanDirectory: (directoryPath: string) =>
+        invoke('launchers_scan_directory', { directoryPath }),
+      selectDirectory: () =>
+        new Promise<string | null>((resolve) => {
+          const input = document.createElement('input')
+          input.type = 'file'
+          input.setAttribute('webkitdirectory', 'true')
+          input.onchange = () => {
+            const file = input.files?.[0]
+            if (!file) return resolve(null)
+            const filePath = (file as { path?: string }).path
+            if (!filePath) return resolve(null)
+            const parent = filePath.replace(/[\\/][^\\/]+$/, '')
+            resolve(parent || filePath)
+          }
+          input.oncancel = () => resolve(null)
+          input.click()
+        }),
+      clone: (payload) => invoke('launchers_clone', { payload }),
+      onProgress: (callback) => {
+        let unlisten: (() => void) | undefined
+        listen<import('@shared/types/externalLauncher').CloneProgressEvent>(
+          'launchers:clone-progress-event',
+          (event) => callback(event.payload)
+        ).then((u) => {
+          unlisten = u
+        })
+        return () => {
+          unlisten?.()
+        }
+      }
     },
     java: {
       getRuntimes: () => invoke('java_get_runtimes'),
