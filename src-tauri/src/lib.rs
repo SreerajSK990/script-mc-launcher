@@ -1,0 +1,44 @@
+mod commands;
+mod core;
+
+use commands::instances::*;
+use commands::system::*;
+use commands::window::*;
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    if let Err(e) = core::paths::initialize_launcher_directories() {
+        eprintln!("Failed to initialize launcher directories: {e}");
+    }
+
+    tauri::Builder::default()
+        .setup(|app| {
+            if cfg!(debug_assertions) {
+                app.handle().plugin(
+                    tauri_plugin_log::Builder::default()
+                        .level(log::LevelFilter::Info)
+                        .build(),
+                )?;
+            }
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            window_minimize,
+            window_maximize,
+            window_is_maximized,
+            window_close,
+            system_get_environment,
+            system_open_external,
+            system_open_directory,
+            instances_list,
+            instances_get,
+            instances_create,
+            instances_update,
+            instances_delete,
+            instances_open_folder,
+            instances_set_group,
+            instances_toggle_favorite,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while building tauri application");
+}
