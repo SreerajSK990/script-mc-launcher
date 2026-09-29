@@ -129,9 +129,11 @@ export function createTauriBridge(): LauncherAPI {
       openFolder: async () => {}
     },
     screenshots: {
-      list: async () => [],
-      delete: async () => true,
-      openFolder: async () => {}
+      list: (instanceId: string) => invoke('screenshots_list', { instanceId }),
+      delete: (instanceId: string, filename: string) =>
+        invoke('screenshots_delete', { instanceId, filename }),
+      openFolder: (instanceId: string) =>
+        invoke('screenshots_open_folder', { instanceId })
     },
     externalLaunchers: {
       scanAll: async () => [],

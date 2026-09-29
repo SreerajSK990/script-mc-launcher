@@ -6,6 +6,7 @@ use commands::instances::*;
 use commands::java::*;
 use commands::launch::*;
 use commands::meta::*;
+use commands::screenshots::*;
 use commands::servers::*;
 use commands::system::*;
 use commands::window::*;
@@ -59,6 +60,9 @@ pub fn run() {
             servers_add,
             servers_remove,
             servers_ping,
+            screenshots_list,
+            screenshots_delete,
+            screenshots_open_folder,
             launch_start,
             launch_quick_play,
             launch_stop,

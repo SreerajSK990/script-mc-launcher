@@ -5,7 +5,6 @@ pub mod loaders;
 pub mod meta;
 pub mod minecraft;
 pub mod paths;
+pub mod screenshots;
 pub mod servers;
 pub mod system;
-
-
