@@ -3,6 +3,7 @@ mod core;
 
 use commands::auth::*;
 use commands::fonts::*;
+use commands::game_settings::*;
 use commands::instances::*;
 use commands::java::*;
 use commands::launch::*;
@@ -67,6 +68,9 @@ pub fn run() {
             fonts_list,
             fonts_install,
             fonts_delete,
+            game_settings_get,
+            game_settings_save,
+            game_settings_open_file,
             launch_start,
             launch_quick_play,
             launch_stop,

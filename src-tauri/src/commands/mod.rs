@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod fonts;
+pub mod game_settings;
 pub mod instances;
 pub mod java;
 pub mod launch;

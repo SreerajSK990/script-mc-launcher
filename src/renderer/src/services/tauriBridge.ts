@@ -175,9 +175,11 @@ export function createTauriBridge(): LauncherAPI {
       searchOptifineCape: async () => null
     },
     gameSettings: {
-      get: async () => ({} as unknown as import('@shared/types/settings').GameSettingsPayload),
-      save: async () => true,
-      openFile: async () => {}
+      get: (instanceId: string) => invoke('game_settings_get', { instanceId }),
+      save: (instanceId: string, payload) =>
+        invoke('game_settings_save', { instanceId, payload }),
+      openFile: (instanceId: string, fileType: 'options' | 'sodium' | 'optifine') =>
+        invoke('game_settings_open_file', { instanceId, fileType })
     },
     updater: {
       checkForUpdates: async () => ({} as unknown as import('@shared/types/updater').UpdateCheckResult),
