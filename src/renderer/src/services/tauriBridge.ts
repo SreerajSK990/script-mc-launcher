@@ -162,17 +162,19 @@ export function createTauriBridge(): LauncherAPI {
         invoke('servers_ping', { host, port })
     },
     skins: {
-      list: async () => ({ activeSkinId: null, skins: [] }),
-      getActive: async () => null,
-      apply: async () => ({} as unknown as import('@shared/types/skins').ApplySkinResult),
-      save: async () => ({} as unknown as import('@shared/types/skins').SkinEntry),
-      delete: async () => true,
-      searchPlayer: async () => ({} as unknown as import('@shared/types/skins').PlayerSkinSearchResult),
-      listCapes: async () => ({ activeCapeId: null, capes: [] }),
-      applyCape: async () => ({} as unknown as import('@shared/types/skins').ApplyCapeResult),
-      saveCape: async () => ({} as unknown as import('@shared/types/skins').CapeEntry),
-      deleteCape: async () => true,
-      searchOptifineCape: async () => null
+      list: () => invoke('skins_list'),
+      getActive: () => invoke('skins_get_active'),
+      apply: (skinId: string) => invoke('skins_apply', { skinId }),
+      save: (params) => invoke('skins_save', { params }),
+      delete: (skinId: string) => invoke('skins_delete', { skinId }),
+      searchPlayer: (username: string) => invoke('skins_search_player', { username }),
+      listCapes: () => invoke('skins_list_capes'),
+      applyCape: (capeId: string | null) => invoke('skins_apply_cape', { capeId }),
+      saveCape: (params: { name: string; textureData: string }) =>
+        invoke('skins_save_cape', { name: params.name, textureData: params.textureData }),
+      deleteCape: (capeId: string) => invoke('skins_delete_cape', { capeId }),
+      searchOptifineCape: (username: string) =>
+        invoke('skins_search_optifine_cape', { username })
     },
     gameSettings: {
       get: (instanceId: string) => invoke('game_settings_get', { instanceId }),

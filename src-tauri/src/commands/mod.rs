@@ -7,5 +7,6 @@ pub mod launch;
 pub mod meta;
 pub mod screenshots;
 pub mod servers;
+pub mod skins;
 pub mod system;
 pub mod window;

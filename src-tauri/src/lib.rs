@@ -10,6 +10,7 @@ use commands::launch::*;
 use commands::meta::*;
 use commands::screenshots::*;
 use commands::servers::*;
+use commands::skins::*;
 use commands::system::*;
 use commands::window::*;
 
@@ -71,6 +72,17 @@ pub fn run() {
             game_settings_get,
             game_settings_save,
             game_settings_open_file,
+            skins_list,
+            skins_get_active,
+            skins_apply,
+            skins_save,
+            skins_delete,
+            skins_search_player,
+            skins_list_capes,
+            skins_apply_cape,
+            skins_save_cape,
+            skins_delete_cape,
+            skins_search_optifine_cape,
             launch_start,
             launch_quick_play,
             launch_stop,

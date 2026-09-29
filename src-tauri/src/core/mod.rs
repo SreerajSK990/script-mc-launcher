@@ -9,4 +9,6 @@ pub mod minecraft;
 pub mod paths;
 pub mod screenshots;
 pub mod servers;
+pub mod skins;
+pub mod skins_presets;
 pub mod system;
