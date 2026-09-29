@@ -12,7 +12,7 @@ const MINECRAFT_GAME_ID: u64 = 432;
 const MODS_CLASS_ID: u64 = 6;
 const RESOURCEPACKS_CLASS_ID: u64 = 12;
 const MODPACKS_CLASS_ID: u64 = 4471;
-const USER_AGENT: &str = "ScriptLauncher/0.18.2 (github.com/SreerajSK990/script-mc-launcher)";
+const USER_AGENT: &str = "ScriptLauncher/0.18.3 (github.com/SreerajSK990/script-mc-launcher)";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

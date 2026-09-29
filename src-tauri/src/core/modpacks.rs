@@ -18,7 +18,7 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 const CURSEFORGE_API_BASE: &str = "https://api.curseforge.com/v1";
-const USER_AGENT: &str = "ScriptLauncher/0.18.2 (github.com/SreerajSK990/script-mc-launcher)";
+const USER_AGENT: &str = "ScriptLauncher/0.18.3 (github.com/SreerajSK990/script-mc-launcher)";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

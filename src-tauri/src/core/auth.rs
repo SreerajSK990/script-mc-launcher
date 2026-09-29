@@ -281,7 +281,7 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
 
     let ms_resp = client
         .post(TOKEN_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.2")
+        .header(USER_AGENT, "ScriptLauncher/0.18.3")
         .form(&token_params)
         .send()
         .await
@@ -308,7 +308,7 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
 
     let xbl_resp = client
         .post(XBOX_AUTH_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.2")
+        .header(USER_AGENT, "ScriptLauncher/0.18.3")
         .json(&xbl_payload)
         .send()
         .await
@@ -341,7 +341,7 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
 
     let xsts_resp = client
         .post(XSTS_AUTH_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.2")
+        .header(USER_AGENT, "ScriptLauncher/0.18.3")
         .json(&xsts_payload)
         .send()
         .await
@@ -362,7 +362,7 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
 
     let mc_resp = client
         .post(MINECRAFT_LOGIN_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.2")
+        .header(USER_AGENT, "ScriptLauncher/0.18.3")
         .json(&mc_payload)
         .send()
         .await
@@ -379,7 +379,7 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
 
     let profile_resp = client
         .get(MINECRAFT_PROFILE_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.2")
+        .header(USER_AGENT, "ScriptLauncher/0.18.3")
         .header("Authorization", format!("Bearer {}", mc_data.access_token))
         .send()
         .await

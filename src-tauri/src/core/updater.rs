@@ -19,7 +19,7 @@ pub async fn check_for_updates() -> Result<UpdateCheckResult, String> {
     let client = reqwest::Client::new();
     let resp = client
         .get("https://api.github.com/repos/SreerajSK990/script-mc-launcher/releases/latest")
-        .header(reqwest::header::USER_AGENT, "ScriptLauncher/0.18.2")
+        .header(reqwest::header::USER_AGENT, "ScriptLauncher/0.18.3")
         .send()
         .await;
 
