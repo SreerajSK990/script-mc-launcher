@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import type { LauncherAPI } from '@shared/types/ipc'
+import type { LaunchProgressEvent, LaunchLogEvent } from '@shared/types/launch'
 
 export function isRunningInTauri(): boolean {
   return typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
@@ -66,12 +68,41 @@ export function createTauriBridge(): LauncherAPI {
       switchAccount: async () => ({ accounts: [], activeAccountId: null, activeAccount: null })
     },
     launch: {
-      start: async () => {},
-      quickPlay: async () => true,
-      stop: async () => {},
-      onProgress: () => () => {},
-      onStatus: () => () => {},
-      onLog: () => () => {}
+      start: (instanceId: string) => invoke('launch_start', { instanceId }),
+      quickPlay: (instanceId: string, options) =>
+        invoke('launch_quick_play', { instanceId, options }),
+      stop: (instanceId: string) => invoke('launch_stop', { instanceId }),
+      onProgress: (callback) => {
+        let unlisten: (() => void) | null = null
+        listen<LaunchProgressEvent>('launch:status', (event) => callback(event.payload)).then(
+          (fn) => {
+            unlisten = fn
+          }
+        )
+        return () => {
+          if (unlisten) unlisten()
+        }
+      },
+      onStatus: (callback) => {
+        let unlisten: (() => void) | null = null
+        listen<LaunchProgressEvent>('launch:status', (event) => callback(event.payload)).then(
+          (fn) => {
+            unlisten = fn
+          }
+        )
+        return () => {
+          if (unlisten) unlisten()
+        }
+      },
+      onLog: (callback) => {
+        let unlisten: (() => void) | null = null
+        listen<LaunchLogEvent>('launch:log', (event) => callback(event.payload)).then((fn) => {
+          unlisten = fn
+        })
+        return () => {
+          if (unlisten) unlisten()
+        }
+      }
     },
     meta: {
       getVersions: () => invoke('meta_get_versions'),

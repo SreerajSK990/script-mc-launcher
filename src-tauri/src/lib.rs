@@ -3,6 +3,7 @@ mod core;
 
 use commands::instances::*;
 use commands::java::*;
+use commands::launch::*;
 use commands::meta::*;
 use commands::servers::*;
 use commands::system::*;
@@ -57,6 +58,10 @@ pub fn run() {
             servers_add,
             servers_remove,
             servers_ping,
+            launch_start,
+            launch_quick_play,
+            launch_stop,
+            launch_is_running,
         ])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");
