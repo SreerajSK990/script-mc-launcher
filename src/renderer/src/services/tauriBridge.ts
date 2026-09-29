@@ -131,18 +131,13 @@ export function createTauriBridge(): LauncherAPI {
       delete: async () => true
     },
     servers: {
-      listAll: async () => [],
-      listForInstance: async () => [],
-      add: async () => [],
-      remove: async () => [],
-      ping: async () => ({
-        online: false,
-        latencyMs: 0,
-        version: '',
-        protocol: 0,
-        players: { max: 0, online: 0 },
-        motd: ''
-      })
+      listAll: () => invoke('servers_list_all'),
+      listForInstance: (instanceId: string) =>
+        invoke('servers_list_instance', { instanceId }),
+      add: (payload) => invoke('servers_add', { payload }),
+      remove: (payload) => invoke('servers_remove', { payload }),
+      ping: (host: string, port?: number) =>
+        invoke('servers_ping', { host, port })
     },
     skins: {
       list: async () => ({ activeSkinId: null, skins: [] }),
