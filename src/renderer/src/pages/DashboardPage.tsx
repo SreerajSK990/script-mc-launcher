@@ -102,6 +102,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       )
       if (servers.length > 0) {
         setIsPinging(true)
+        await new Promise((resolve) => setTimeout(resolve, 150))
         const pingResults: Record<string, ServerPingStatus> = {}
         await Promise.all(
           servers.map(async (server) => {

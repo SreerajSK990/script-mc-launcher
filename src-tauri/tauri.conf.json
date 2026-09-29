@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Script Minecraft Launcher",
-  "version": "0.18.3",
+  "version": "0.18.4",
   "identifier": "com.sreeraj.scriptlauncher",
   "build": {
     "frontendDist": "../out/renderer",
@@ -11,6 +11,8 @@
     "windows": [
       {
         "title": "Script Minecraft Launcher",
+        "theme": "Dark",
+        "backgroundColor": "#0A0D14",
         "width": 1280,
         "height": 800,
         "minWidth": 1024,

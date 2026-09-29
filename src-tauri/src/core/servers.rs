@@ -166,16 +166,22 @@ pub async fn ping_minecraft_server(host: &str, port: u16) -> ServerPingStatus {
     let timeout_duration = Duration::from_millis(4000);
     match tokio::time::timeout(timeout_duration, ping_internal(host, port)).await {
         Ok(Ok(status)) => status,
-        _ => ServerPingStatus {
-            online: false,
-            latency_ms: -1,
-            motd: None,
-            clean_motd: Some("Can't connect to server".to_string()),
-            version_name: None,
-            protocol_version: None,
-            players: None,
-            favicon: None,
-        },
+        _ => {
+            tokio::time::sleep(Duration::from_millis(250)).await;
+            match tokio::time::timeout(timeout_duration, ping_internal(host, port)).await {
+                Ok(Ok(status)) => status,
+                _ => ServerPingStatus {
+                    online: false,
+                    latency_ms: -1,
+                    motd: None,
+                    clean_motd: Some("Can't connect to server".to_string()),
+                    version_name: None,
+                    protocol_version: None,
+                    players: None,
+                    favicon: None,
+                },
+            }
+        }
     }
 }
 
@@ -210,18 +216,52 @@ async fn ping_internal(host: &str, port: u16) -> Result<ServerPingStatus, String
         .await
         .map_err(|e| e.to_string())?;
 
-    let mut read_buf = vec![0u8; 65536];
-    let n = stream.read(&mut read_buf).await.map_err(|e| e.to_string())?;
-    let latency = start_time.elapsed().as_millis() as i64;
+    let mut read_buf = Vec::new();
+    let mut chunk = [0u8; 8192];
+    let mut expected_total: Option<usize> = None;
+    let mut first_byte_latency: Option<i64> = None;
+
+    loop {
+        let n = stream.read(&mut chunk).await.map_err(|e| e.to_string())?;
+        if n == 0 {
+            break;
+        }
+        if first_byte_latency.is_none() {
+            first_byte_latency = Some(start_time.elapsed().as_millis() as i64);
+        }
+        read_buf.extend_from_slice(&chunk[..n]);
+
+        if expected_total.is_none() {
+            let mut offset = 0;
+            if let Ok(_packet_len) = read_var_int(&read_buf, &mut offset) {
+                if let Ok(packet_id) = read_var_int(&read_buf, &mut offset) {
+                    if packet_id != 0 {
+                        return Err("Unexpected packet id".to_string());
+                    }
+                    if let Ok(json_len) = read_var_int(&read_buf, &mut offset) {
+                        expected_total = Some(offset + (json_len as usize));
+                    }
+                }
+            }
+        }
+
+        if let Some(total) = expected_total {
+            if read_buf.len() >= total {
+                break;
+            }
+        }
+    }
+
+    let latency = first_byte_latency.unwrap_or_else(|| start_time.elapsed().as_millis() as i64);
 
     let mut offset = 0;
-    let _packet_len = read_var_int(&read_buf[..n], &mut offset)?;
-    let packet_id = read_var_int(&read_buf[..n], &mut offset)?;
+    let _packet_len = read_var_int(&read_buf, &mut offset)?;
+    let packet_id = read_var_int(&read_buf, &mut offset)?;
     if packet_id != 0 {
         return Err("Unexpected packet id".to_string());
     }
-    let json_len = read_var_int(&read_buf[..n], &mut offset)? as usize;
-    if offset + json_len > n {
+    let json_len = read_var_int(&read_buf, &mut offset)? as usize;
+    if offset + json_len > read_buf.len() {
         return Err("Incomplete JSON packet".to_string());
     }
     let json_str =

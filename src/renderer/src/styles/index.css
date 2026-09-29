@@ -12,6 +12,16 @@
 }
 
 html,
+body {
+  background-color: #0A0D14;
+  overscroll-behavior: none;
+}
+
+* {
+  overscroll-behavior: none;
+}
+
+html,
 body,
 button,
 input,

@@ -386,7 +386,7 @@ export const App: React.FC = () => {
         <DependencyInstallHost />
         <TransferStatus />
         <main
-          className={`flex-1 p-6 md:p-8 bg-background-dark/50 ${
+          className={`flex-1 p-6 md:p-8 bg-background-dark/50 overscroll-y-none ${
             activeTab === 'mods' || activeTab === 'logs' || activeTab === 'skins'
               ? 'overflow-hidden flex flex-col'
               : 'overflow-y-auto'
