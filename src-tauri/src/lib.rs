@@ -2,6 +2,7 @@ mod commands;
 mod core;
 
 use commands::auth::*;
+use commands::fonts::*;
 use commands::instances::*;
 use commands::java::*;
 use commands::launch::*;
@@ -63,6 +64,9 @@ pub fn run() {
             screenshots_list,
             screenshots_delete,
             screenshots_open_folder,
+            fonts_list,
+            fonts_install,
+            fonts_delete,
             launch_start,
             launch_quick_play,
             launch_stop,

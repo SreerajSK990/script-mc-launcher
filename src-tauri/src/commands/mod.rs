@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod fonts;
 pub mod instances;
 pub mod java;
 pub mod launch;

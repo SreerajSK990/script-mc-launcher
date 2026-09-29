@@ -148,9 +148,9 @@ export function createTauriBridge(): LauncherAPI {
         invoke('java_download_runtime', { componentOrVersion })
     },
     fonts: {
-      list: async () => [],
-      install: async () => ({} as unknown as import('@shared/types/fonts').CustomFontEntry),
-      delete: async () => true
+      list: () => invoke('fonts_list'),
+      install: (filePath: string) => invoke('fonts_install', { filePath }),
+      delete: (fileName: string) => invoke('fonts_delete', { fileName })
     },
     servers: {
       listAll: () => invoke('servers_list_all'),
