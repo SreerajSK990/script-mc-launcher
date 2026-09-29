@@ -5,6 +5,8 @@ pub mod instances;
 pub mod java;
 pub mod launch;
 pub mod meta;
+pub mod mods;
+pub mod resourcepacks;
 pub mod screenshots;
 pub mod servers;
 pub mod skins;

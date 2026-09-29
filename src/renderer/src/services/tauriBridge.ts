@@ -99,18 +99,24 @@ export function createTauriBridge(): LauncherAPI {
         invoke('meta_get_loader_versions', { loaderType, minecraftVersion })
     },
     mods: {
-      search: async () => [],
-      getDetail: async () => ({} as unknown as import('@shared/types/mods').ModDetail),
-      getVersions: async () => [],
-      install: async () => ({} as unknown as import('@shared/types/mods').InstalledModRecord),
-      listInstalled: async () => [],
-      toggleInstalled: async () => true,
-      deleteInstalled: async () => true,
-      setCurseForgeKey: async () => true,
-      getCurseForgeKey: async () => null,
-      checkUpdates: async () => [],
-      updateAll: async () => ({ success: true, updatedCount: 0, failedCount: 0, errors: [], failures: [] }),
-      installDropped: async () => ({ success: true, installedMods: [] }),
+      search: (params) => invoke('mods_search', { params }),
+      getDetail: (source, id) => invoke('mods_get_detail', { source, id }),
+      getVersions: (projectId, source, minecraftVersion, loader) =>
+        invoke('mods_get_versions', { projectId, source, minecraftVersion, loader }),
+      install: (payload) => invoke('mods_install', { payload }),
+      listInstalled: (instanceId) => invoke('mods_list_installed', { instanceId }),
+      toggleInstalled: (instanceId, filename, enable) =>
+        invoke('mods_toggle_installed', { instanceId, filename, enable }),
+      deleteInstalled: (instanceId, filename) =>
+        invoke('mods_delete_installed', { instanceId, filename }),
+      setCurseForgeKey: (key) => invoke('mods_set_curseforge_key', { key }),
+      getCurseForgeKey: () => invoke('mods_get_curseforge_key'),
+      checkUpdates: (instanceId, forceRefresh) =>
+        invoke('mods_check_updates', { instanceId, forceRefresh }),
+      updateAll: (instanceId, updates) =>
+        invoke('mods_update_all', { instanceId, updates }),
+      installDropped: (instanceId, filePaths) =>
+        invoke('mods_install_dropped', { instanceId, filePaths }),
       onUpdateProgress: () => () => {}
     },
     modpacks: {
@@ -121,12 +127,15 @@ export function createTauriBridge(): LauncherAPI {
       onProgress: () => () => {}
     },
     resourcepacks: {
-      listInstalled: async () => [],
-      install: async () => ({} as unknown as import('@shared/types/mods').InstalledResourcePackRecord),
-      toggleInstalled: async () => true,
-      deleteInstalled: async () => true,
-      installDropped: async () => ({ success: true, installedPacks: [] }),
-      openFolder: async () => {}
+      listInstalled: (instanceId) => invoke('resourcepacks_list_installed', { instanceId }),
+      install: (payload) => invoke('resourcepacks_install', { payload }),
+      toggleInstalled: (instanceId, filename, enable) =>
+        invoke('resourcepacks_toggle_installed', { instanceId, filename, enable }),
+      deleteInstalled: (instanceId, filename) =>
+        invoke('resourcepacks_delete_installed', { instanceId, filename }),
+      installDropped: (instanceId, filePaths) =>
+        invoke('resourcepacks_install_dropped', { instanceId, filePaths }),
+      openFolder: (instanceId) => invoke('resourcepacks_open_folder', { instanceId })
     },
     screenshots: {
       list: (instanceId: string) => invoke('screenshots_list', { instanceId }),

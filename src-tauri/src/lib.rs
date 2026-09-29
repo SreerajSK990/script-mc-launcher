@@ -8,6 +8,8 @@ use commands::instances::*;
 use commands::java::*;
 use commands::launch::*;
 use commands::meta::*;
+use commands::mods::*;
+use commands::resourcepacks::*;
 use commands::screenshots::*;
 use commands::servers::*;
 use commands::skins::*;
@@ -83,6 +85,24 @@ pub fn run() {
             skins_save_cape,
             skins_delete_cape,
             skins_search_optifine_cape,
+            mods_search,
+            mods_get_detail,
+            mods_get_versions,
+            mods_install,
+            mods_list_installed,
+            mods_toggle_installed,
+            mods_delete_installed,
+            mods_set_curseforge_key,
+            mods_get_curseforge_key,
+            mods_check_updates,
+            mods_update_all,
+            mods_install_dropped,
+            resourcepacks_list_installed,
+            resourcepacks_install,
+            resourcepacks_toggle_installed,
+            resourcepacks_delete_installed,
+            resourcepacks_install_dropped,
+            resourcepacks_open_folder,
             launch_start,
             launch_quick_play,
             launch_stop,
