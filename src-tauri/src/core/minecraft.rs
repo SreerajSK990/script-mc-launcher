@@ -1,3 +1,4 @@
+use crate::core::auth::{self, StoredAccount};
 use crate::core::instances::{self, InstanceConfiguration};
 use crate::core::java;
 use crate::core::loaders::{self, DownloadTask};
@@ -420,8 +421,7 @@ fn replace_template_variables(
 fn build_arguments(
     instance: &InstanceConfiguration,
     version_package: &VersionPackage,
-    username: &str,
-    uuid: &str,
+    account: &StoredAccount,
     natives_dir: &Path,
     classpath_string: &str,
     quick_play: Option<&QuickPlayLaunchOptions>,
@@ -429,12 +429,15 @@ fn build_arguments(
     let path_sep = if cfg!(target_os = "windows") { ";" } else { ":" };
     let mc_dir = paths::get_instance_minecraft_path(&instance.id);
     let assets_dir = paths::get_assets_directory();
+    let user_type = if account.account_type == "microsoft" { "msa" } else { "mojang" };
 
     let mut vars: HashMap<&str, String> = HashMap::new();
-    vars.insert("${auth_player_name}", username.to_string());
-    vars.insert("${auth_uuid}", uuid.to_string());
-    vars.insert("${auth_access_token}", "offline".to_string());
-    vars.insert("${user_type}", "mojang".to_string());
+    vars.insert("${auth_player_name}", account.username.clone());
+    vars.insert("${auth_uuid}", account.uuid.clone());
+    vars.insert("${auth_access_token}", account.access_token.clone());
+    vars.insert("${auth_session}", account.access_token.clone());
+    vars.insert("${user_properties}", "{}".to_string());
+    vars.insert("${user_type}", user_type.to_string());
     vars.insert("${version_name}", instance.minecraft_version.clone());
     vars.insert("${version_type}", "release".to_string());
     vars.insert("${game_directory}", mc_dir.to_string_lossy().to_string());
@@ -443,8 +446,8 @@ fn build_arguments(
     vars.insert("${natives_directory}", natives_dir.to_string_lossy().to_string());
     vars.insert("${classpath}", classpath_string.to_string());
     vars.insert("${classpath_separator}", path_sep.to_string());
-    vars.insert("${clientid}", uuid.to_string());
-    vars.insert("${auth_xuid}", uuid.to_string());
+    vars.insert("${clientid}", account.uuid.clone());
+    vars.insert("${auth_xuid}", account.uuid.clone());
 
     let mut jvm_args: Vec<String> = Vec::new();
     jvm_args.push("-Xms512M".to_string());
@@ -486,7 +489,7 @@ fn build_arguments(
     if !jvm_args.iter().any(|a| a.starts_with("-Djava.library.path")) {
         jvm_args.push(format!("-Djava.library.path={}", natives_dir.display()));
         jvm_args.push("-Dminecraft.launcher.brand=ScriptLauncher".to_string());
-        jvm_args.push("-Dminecraft.launcher.version=0.18.5".to_string());
+        jvm_args.push("-Dminecraft.launcher.version=0.18.9".to_string());
         jvm_args.push("-cp".to_string());
         jvm_args.push(classpath_string.to_string());
     }
@@ -613,9 +616,8 @@ pub async fn launch_minecraft(
     let instance = instances::get_instance_by_id(&instance_id)?
         .ok_or_else(|| format!("Instance {instance_id} not found"))?;
 
-    let username = "Player";
-    let uuid = "00000000-0000-0000-0000-000000000000";
-    emit_log(&format!("Authenticated as: {username} (offline)"), "info");
+    let account = auth::get_valid_active_account().await;
+    emit_log(&format!("Authenticated as: {} ({})", account.username, account.account_type), "info");
 
     let base_package = meta::fetch_version_package(&instance.minecraft_version).await?;
     emit_log(&format!("Loaded version metadata for Minecraft {}", base_package.id), "info");
@@ -651,8 +653,7 @@ pub async fn launch_minecraft(
     let (mut jvm_args, game_args, main_class) = build_arguments(
         &instance,
         &resolved_package,
-        username,
-        uuid,
+        &account,
         &natives_dir,
         &classpath_string,
         quick_play.as_ref(),

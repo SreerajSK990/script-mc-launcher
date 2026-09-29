@@ -2,7 +2,7 @@
 
 A fast, sleek, and modular Minecraft launcher built with **Electron**, **React**, **TypeScript**, and **Tailwind CSS**.
 
-**Latest release: [v0.18.8](https://github.com/SreerajSK990/script-mc-launcher/releases/tag/v0.18.8)** — native Rust (Tauri v2) desktop backend with silent windowless Java process execution, isolated quick-play argument resolution, reliable Microsoft OAuth authentication, offline-embedded official cape textures, live 3D back-equipment preview, in-app auto-updater, multi-packet TCP server ping accumulator, and zero-flash dark composition. Read the [release notes](release-notes/v0.18.8.md) for details.
+**Latest release: [v0.18.9](https://github.com/SreerajSK990/script-mc-launcher/releases/tag/v0.18.9)** — native Rust (Tauri v2) desktop backend with full Microsoft account session authentication for multiplayer/Realms, silent windowless Java process execution, isolated quick-play argument resolution, offline-embedded official cape textures, live 3D back-equipment preview, in-app auto-updater, multi-packet TCP server ping accumulator, and zero-flash dark composition. Read the [release notes](release-notes/v0.18.9.md) for details.
 
 Most Minecraft launchers out there either look like they're stuck in 2010 with clunky Java Swing windows, or they're bloated with electron bloatware and ads. Script Launcher is built to be fast, clean, and completely isolated so your mod setups and game versions never conflict with each other.
 
