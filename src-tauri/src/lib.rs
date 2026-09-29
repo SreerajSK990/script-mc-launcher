@@ -1,6 +1,7 @@
 mod commands;
 mod core;
 
+use commands::auth::*;
 use commands::instances::*;
 use commands::java::*;
 use commands::launch::*;
@@ -62,6 +63,11 @@ pub fn run() {
             launch_quick_play,
             launch_stop,
             launch_is_running,
+            auth_get_state,
+            auth_login_offline,
+            auth_login_microsoft,
+            auth_switch_account,
+            auth_logout,
         ])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");

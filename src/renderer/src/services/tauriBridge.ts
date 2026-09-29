@@ -50,22 +50,11 @@ export function createTauriBridge(): LauncherAPI {
         invoke('instances_clone', { instanceId, customName })
     },
     auth: {
-      getState: async () => ({ accounts: [], activeAccountId: null, activeAccount: null }),
-      loginMicrosoft: async () => {
-        throw new Error('Microsoft authentication will be enabled in next migration step.')
-      },
-      loginOffline: async (username: string) => ({
-        id: `offline-${username.toLowerCase()}`,
-        username,
-        uuid: '00000000-0000-0000-0000-000000000000',
-        accessToken: 'offline',
-        accountType: 'offline',
-        refreshToken: null,
-        expiresAt: 0,
-        createdAt: new Date().toISOString()
-      }),
-      logout: async () => ({ accounts: [], activeAccountId: null, activeAccount: null }),
-      switchAccount: async () => ({ accounts: [], activeAccountId: null, activeAccount: null })
+      getState: () => invoke('auth_get_state'),
+      loginMicrosoft: () => invoke('auth_login_microsoft'),
+      loginOffline: (username: string) => invoke('auth_login_offline', { username }),
+      logout: (accountId: string) => invoke('auth_logout', { accountId }),
+      switchAccount: (accountId: string) => invoke('auth_switch_account', { accountId })
     },
     launch: {
       start: (instanceId: string) => invoke('launch_start', { instanceId }),
