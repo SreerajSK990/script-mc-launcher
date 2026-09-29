@@ -7,6 +7,7 @@ pub mod loaders;
 pub mod meta;
 pub mod minecraft;
 pub mod mods;
+pub mod modpacks;
 pub mod paths;
 pub mod recovery;
 pub mod resourcepacks;

@@ -10,6 +10,7 @@ use commands::java::*;
 use commands::launch::*;
 use commands::meta::*;
 use commands::mods::*;
+use commands::modpacks::*;
 use commands::resourcepacks::*;
 use commands::screenshots::*;
 use commands::servers::*;
@@ -125,6 +126,9 @@ pub fn run() {
             content_get_recovery_settings,
             content_save_recovery_settings,
             content_plan_mods,
+            modpacks_inspect,
+            modpacks_import,
+            modpacks_install_remote,
         ])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");

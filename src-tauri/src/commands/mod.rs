@@ -7,6 +7,7 @@ pub mod java;
 pub mod launch;
 pub mod meta;
 pub mod mods;
+pub mod modpacks;
 pub mod resourcepacks;
 pub mod screenshots;
 pub mod servers;

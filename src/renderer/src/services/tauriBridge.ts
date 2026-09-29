@@ -128,11 +128,36 @@ export function createTauriBridge(): LauncherAPI {
       onUpdateProgress: () => () => {}
     },
     modpacks: {
-      selectFile: async () => null,
-      inspect: async () => ({} as unknown as import('@shared/types/modpack').ModpackManifestInfo),
-      import: async () => ({} as unknown as import('@shared/types/instance').InstanceConfiguration),
-      installRemote: async () => ({} as unknown as import('@shared/types/instance').InstanceConfiguration),
-      onProgress: () => () => {}
+      selectFile: () =>
+        new Promise<string | null>((resolve) => {
+          const input = document.createElement('input')
+          input.type = 'file'
+          input.accept = '.mrpack,.zip'
+          input.onchange = () => {
+            const file = input.files?.[0]
+            if (!file) return resolve(null)
+            const filePath = (file as { path?: string }).path
+            resolve(filePath || null)
+          }
+          input.oncancel = () => resolve(null)
+          input.click()
+        }),
+      inspect: (filePath: string) => invoke('modpacks_inspect', { filePath }),
+      import: (filePath: string, customName?: string) =>
+        invoke('modpacks_import', { filePath, customName }),
+      installRemote: (payload) => invoke('modpacks_install_remote', { payload }),
+      onProgress: (callback) => {
+        let unlisten: (() => void) | undefined
+        listen<import('@shared/types/modpack').ModpackImportProgressEvent>(
+          'modpacks:progress-event',
+          (event) => callback(event.payload)
+        ).then((u) => {
+          unlisten = u
+        })
+        return () => {
+          unlisten?.()
+        }
+      }
     },
     resourcepacks: {
       listInstalled: (instanceId) => invoke('resourcepacks_list_installed', { instanceId }),
