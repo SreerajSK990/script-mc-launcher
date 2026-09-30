@@ -11,10 +11,29 @@ const CLIENT_ID: &str = "00000000402b5328";
 const REDIRECT_URI: &str = "https://login.microsoftonline.com/common/oauth2/nativeclient";
 const SCOPE: &str = "XboxLive.signin offline_access";
 const TOKEN_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
+const COMMON_TOKEN_URL: &str = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
 const XBOX_AUTH_URL: &str = "https://user.auth.xboxlive.com/user/authenticate";
 const XSTS_AUTH_URL: &str = "https://xsts.auth.xboxlive.com/xsts/authorize";
 const MINECRAFT_LOGIN_URL: &str = "https://api.minecraftservices.com/authentication/login_with_xbox";
 const MINECRAFT_PROFILE_URL: &str = "https://api.minecraftservices.com/minecraft/profile";
+
+fn create_auth_http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .connect_timeout(std::time::Duration::from_secs(15))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new())
+}
+
+fn format_reqwest_error(prefix: &str, err: &reqwest::Error) -> String {
+    let mut details = format!("{prefix}: {err}");
+    let mut source = std::error::Error::source(err);
+    while let Some(s) = source {
+        details.push_str(&format!(" -> {s}"));
+        source = std::error::Error::source(s);
+    }
+    details
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -269,7 +288,7 @@ pub fn logout_account(account_id: &str) -> Result<AuthState, String> {
 }
 
 pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAccount, String> {
-    let client = reqwest::Client::new();
+    let client = create_auth_http_client();
 
     let token_params = [
         ("client_id", CLIENT_ID),
@@ -279,13 +298,33 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
         ("scope", SCOPE),
     ];
 
-    let ms_resp = client
+    let mut ms_resp = client
         .post(TOKEN_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.7")
+        .header(USER_AGENT, "ScriptLauncher/0.18.10")
         .form(&token_params)
         .send()
-        .await
-        .map_err(|e| format!("Token request failed: {e}"))?;
+        .await;
+
+    let should_try_common = match &ms_resp {
+        Ok(resp) => !resp.status().is_success(),
+        Err(_) => true,
+    };
+
+    if should_try_common {
+        if let Ok(retry) = client
+            .post(COMMON_TOKEN_URL)
+            .header(USER_AGENT, "ScriptLauncher/0.18.10")
+            .form(&token_params)
+            .send()
+            .await
+        {
+            if retry.status().is_success() || ms_resp.is_err() {
+                ms_resp = Ok(retry);
+            }
+        }
+    }
+
+    let ms_resp = ms_resp.map_err(|e| format_reqwest_error("Token request failed", &e))?;
 
     let ms_status = ms_resp.status();
     if !ms_status.is_success() {
@@ -296,7 +335,7 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
     let ms_tokens = ms_resp
         .json::<MicrosoftTokenResponse>()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format_reqwest_error("Failed to parse Microsoft token response", &e))?;
 
     let xbl_payload = serde_json::json!({
         "Properties": {
@@ -310,13 +349,13 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
 
     let xbl_resp = client
         .post(XBOX_AUTH_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.7")
+        .header(USER_AGENT, "ScriptLauncher/0.18.10")
         .header(reqwest::header::ACCEPT, "application/json")
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .json(&xbl_payload)
         .send()
         .await
-        .map_err(|e| format!("Xbox Live auth failed: {e}"))?;
+        .map_err(|e| format_reqwest_error("Xbox Live auth failed", &e))?;
 
     let xbl_status = xbl_resp.status();
     if !xbl_status.is_success() {
@@ -327,7 +366,7 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
     let xbl_data = xbl_resp
         .json::<XboxLiveAuthResponse>()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format_reqwest_error("Failed to parse Xbox Live response", &e))?;
 
     let user_hash = xbl_data
         .display_claims
@@ -347,13 +386,13 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
 
     let xsts_resp = client
         .post(XSTS_AUTH_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.7")
+        .header(USER_AGENT, "ScriptLauncher/0.18.10")
         .header(reqwest::header::ACCEPT, "application/json")
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .json(&xsts_payload)
         .send()
         .await
-        .map_err(|e| format!("XSTS auth failed: {e}"))?;
+        .map_err(|e| format_reqwest_error("XSTS auth failed", &e))?;
 
     let xsts_status = xsts_resp.status();
     if !xsts_status.is_success() {
@@ -374,7 +413,7 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
     let xsts_data = xsts_resp
         .json::<XboxLiveAuthResponse>()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format_reqwest_error("Failed to parse XSTS response", &e))?;
 
     let mc_payload = serde_json::json!({
         "identityToken": format!("XBL3.0 x={};{}", user_hash, xsts_data.token)
@@ -382,13 +421,13 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
 
     let mc_resp = client
         .post(MINECRAFT_LOGIN_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.7")
+        .header(USER_AGENT, "ScriptLauncher/0.18.10")
         .header(reqwest::header::ACCEPT, "application/json")
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .json(&mc_payload)
         .send()
         .await
-        .map_err(|e| format!("Minecraft login failed: {e}"))?;
+        .map_err(|e| format_reqwest_error("Minecraft login failed", &e))?;
 
     let mc_status = mc_resp.status();
     if !mc_status.is_success() {
@@ -399,15 +438,15 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
     let mc_data = mc_resp
         .json::<MinecraftAuthResponse>()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format_reqwest_error("Failed to parse Minecraft auth response", &e))?;
 
     let profile_resp = client
         .get(MINECRAFT_PROFILE_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.7")
+        .header(USER_AGENT, "ScriptLauncher/0.18.10")
         .header("Authorization", format!("Bearer {}", mc_data.access_token))
         .send()
         .await
-        .map_err(|e| format!("Profile request failed: {e}"))?;
+        .map_err(|e| format_reqwest_error("Profile request failed", &e))?;
 
     let profile_status = profile_resp.status();
     if !profile_status.is_success() {
@@ -421,7 +460,7 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
     let profile = profile_resp
         .json::<MinecraftProfile>()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format_reqwest_error("Failed to parse Minecraft profile", &e))?;
 
     let skin_url = profile.skins.as_ref().and_then(|skins| {
         skins.iter().find(|s| s.state == "ACTIVE").map(|s| s.url.clone())
@@ -456,7 +495,7 @@ pub async fn refresh_microsoft_account(account: &StoredAccount) -> Result<Stored
         .as_deref()
         .ok_or_else(|| "No refresh token available".to_string())?;
 
-    let client = reqwest::Client::new();
+    let client = create_auth_http_client();
     let token_params = [
         ("client_id", CLIENT_ID),
         ("refresh_token", refresh_token),
@@ -465,13 +504,33 @@ pub async fn refresh_microsoft_account(account: &StoredAccount) -> Result<Stored
         ("scope", SCOPE),
     ];
 
-    let ms_resp = client
+    let mut ms_resp = client
         .post(TOKEN_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.9")
+        .header(USER_AGENT, "ScriptLauncher/0.18.10")
         .form(&token_params)
         .send()
-        .await
-        .map_err(|e| format!("Token refresh request failed: {e}"))?;
+        .await;
+
+    let should_try_common = match &ms_resp {
+        Ok(resp) => !resp.status().is_success(),
+        Err(_) => true,
+    };
+
+    if should_try_common {
+        if let Ok(retry) = client
+            .post(COMMON_TOKEN_URL)
+            .header(USER_AGENT, "ScriptLauncher/0.18.10")
+            .form(&token_params)
+            .send()
+            .await
+        {
+            if retry.status().is_success() || ms_resp.is_err() {
+                ms_resp = Ok(retry);
+            }
+        }
+    }
+
+    let ms_resp = ms_resp.map_err(|e| format_reqwest_error("Token refresh request failed", &e))?;
 
     let ms_status = ms_resp.status();
     if !ms_status.is_success() {
@@ -482,7 +541,7 @@ pub async fn refresh_microsoft_account(account: &StoredAccount) -> Result<Stored
     let ms_tokens = ms_resp
         .json::<MicrosoftTokenResponse>()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format_reqwest_error("Failed to parse Microsoft token refresh response", &e))?;
 
     let xbl_payload = serde_json::json!({
         "Properties": {
@@ -496,13 +555,13 @@ pub async fn refresh_microsoft_account(account: &StoredAccount) -> Result<Stored
 
     let xbl_resp = client
         .post(XBOX_AUTH_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.9")
+        .header(USER_AGENT, "ScriptLauncher/0.18.10")
         .header(reqwest::header::ACCEPT, "application/json")
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .json(&xbl_payload)
         .send()
         .await
-        .map_err(|e| format!("Xbox Live auth failed: {e}"))?;
+        .map_err(|e| format_reqwest_error("Xbox Live auth failed", &e))?;
 
     let xbl_status = xbl_resp.status();
     if !xbl_status.is_success() {
@@ -513,7 +572,7 @@ pub async fn refresh_microsoft_account(account: &StoredAccount) -> Result<Stored
     let xbl_data = xbl_resp
         .json::<XboxLiveAuthResponse>()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format_reqwest_error("Failed to parse Xbox Live response", &e))?;
 
     let user_hash = xbl_data
         .display_claims
@@ -533,13 +592,13 @@ pub async fn refresh_microsoft_account(account: &StoredAccount) -> Result<Stored
 
     let xsts_resp = client
         .post(XSTS_AUTH_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.9")
+        .header(USER_AGENT, "ScriptLauncher/0.18.10")
         .header(reqwest::header::ACCEPT, "application/json")
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .json(&xsts_payload)
         .send()
         .await
-        .map_err(|e| format!("XSTS auth failed: {e}"))?;
+        .map_err(|e| format_reqwest_error("XSTS auth failed", &e))?;
 
     let xsts_status = xsts_resp.status();
     if !xsts_status.is_success() {
@@ -550,7 +609,7 @@ pub async fn refresh_microsoft_account(account: &StoredAccount) -> Result<Stored
     let xsts_data = xsts_resp
         .json::<XboxLiveAuthResponse>()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format_reqwest_error("Failed to parse XSTS response", &e))?;
 
     let mc_payload = serde_json::json!({
         "identityToken": format!("XBL3.0 x={};{}", user_hash, xsts_data.token)
@@ -558,13 +617,13 @@ pub async fn refresh_microsoft_account(account: &StoredAccount) -> Result<Stored
 
     let mc_resp = client
         .post(MINECRAFT_LOGIN_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.9")
+        .header(USER_AGENT, "ScriptLauncher/0.18.10")
         .header(reqwest::header::ACCEPT, "application/json")
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .json(&mc_payload)
         .send()
         .await
-        .map_err(|e| format!("Minecraft login failed: {e}"))?;
+        .map_err(|e| format_reqwest_error("Minecraft login failed", &e))?;
 
     let mc_status = mc_resp.status();
     if !mc_status.is_success() {
@@ -575,15 +634,15 @@ pub async fn refresh_microsoft_account(account: &StoredAccount) -> Result<Stored
     let mc_data = mc_resp
         .json::<MinecraftAuthResponse>()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format_reqwest_error("Failed to parse Minecraft auth response", &e))?;
 
     let profile_resp = client
         .get(MINECRAFT_PROFILE_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.9")
+        .header(USER_AGENT, "ScriptLauncher/0.18.10")
         .header("Authorization", format!("Bearer {}", mc_data.access_token))
         .send()
         .await
-        .map_err(|e| format!("Profile request failed: {e}"))?;
+        .map_err(|e| format_reqwest_error("Profile request failed", &e))?;
 
     let profile_status = profile_resp.status();
     if !profile_status.is_success() {
@@ -594,7 +653,7 @@ pub async fn refresh_microsoft_account(account: &StoredAccount) -> Result<Stored
     let profile = profile_resp
         .json::<MinecraftProfile>()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format_reqwest_error("Failed to parse Minecraft profile", &e))?;
 
     let skin_url = profile.skins.as_ref().and_then(|skins| {
         skins.iter().find(|s| s.state == "ACTIVE").map(|s| s.url.clone())

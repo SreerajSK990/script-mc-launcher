@@ -1,6 +1,6 @@
 export const LAUNCHER_METADATA = {
   NAME: 'Script Launcher',
-  VERSION: '0.18.9',
+  VERSION: '0.18.10',
   DATA_DIRECTORY_NAME: '.scriptlauncher'
 } as const
 

@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{Arc, OnceLock};
 use std::time::Instant;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::{Mutex, Semaphore};
 use tokio::task::JoinSet;
@@ -489,7 +489,7 @@ fn build_arguments(
     if !jvm_args.iter().any(|a| a.starts_with("-Djava.library.path")) {
         jvm_args.push(format!("-Djava.library.path={}", natives_dir.display()));
         jvm_args.push("-Dminecraft.launcher.brand=ScriptLauncher".to_string());
-        jvm_args.push("-Dminecraft.launcher.version=0.18.9".to_string());
+        jvm_args.push("-Dminecraft.launcher.version=0.18.10".to_string());
         jvm_args.push("-cp".to_string());
         jvm_args.push(classpath_string.to_string());
     }
@@ -587,29 +587,31 @@ pub async fn launch_minecraft(
     }
 
     let emit_progress = |step: &str, status: &str, current: Option<u64>, total: Option<u64>, pct: Option<u32>| {
-        let _ = app.emit(
-            "launch:status",
-            LaunchProgressEvent {
-                instance_id: instance_id.clone(),
-                step: step.to_string(),
-                status_text: status.to_string(),
-                current_items: current,
-                total_items: total,
-                percentage: pct,
-            },
-        );
+        let payload = LaunchProgressEvent {
+            instance_id: instance_id.clone(),
+            step: step.to_string(),
+            status_text: status.to_string(),
+            current_items: current,
+            total_items: total,
+            percentage: pct,
+        };
+        let _ = app.emit("launch:status", payload.clone());
+        if let Some(main_win) = app.get_webview_window("main") {
+            let _ = main_win.emit("launch:status", payload);
+        }
     };
 
     let emit_log = |text: &str, level: &str| {
-        let _ = app.emit(
-            "launch:log",
-            LaunchLogEvent {
-                instance_id: instance_id.clone(),
-                text: text.to_string(),
-                level: level.to_string(),
-                timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-            },
-        );
+        let payload = LaunchLogEvent {
+            instance_id: instance_id.clone(),
+            text: text.to_string(),
+            level: level.to_string(),
+            timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+        };
+        let _ = app.emit("launch:log", payload.clone());
+        if let Some(main_win) = app.get_webview_window("main") {
+            let _ = main_win.emit("launch:log", payload);
+        }
     };
 
     emit_progress("FETCHING_METADATA", "Preparing instance environment...", None, None, None);
@@ -707,15 +709,16 @@ pub async fn launch_minecraft(
             let mut reader = BufReader::new(out).lines();
             while let Ok(Some(line)) = reader.next_line().await {
                 let level = determine_log_level(&line);
-                let _ = app_clone_1.emit(
-                    "launch:log",
-                    LaunchLogEvent {
-                        instance_id: inst_id_1.clone(),
-                        text: line,
-                        level: level.to_string(),
-                        timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                    },
-                );
+                let payload = LaunchLogEvent {
+                    instance_id: inst_id_1.clone(),
+                    text: line,
+                    level: level.to_string(),
+                    timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                };
+                let _ = app_clone_1.emit("launch:log", payload.clone());
+                if let Some(main_win) = app_clone_1.get_webview_window("main") {
+                    let _ = main_win.emit("launch:log", payload);
+                }
             }
         });
     }
@@ -727,15 +730,16 @@ pub async fn launch_minecraft(
             let mut reader = BufReader::new(err).lines();
             while let Ok(Some(line)) = reader.next_line().await {
                 let level = determine_log_level(&line);
-                let _ = app_clone_2.emit(
-                    "launch:log",
-                    LaunchLogEvent {
-                        instance_id: inst_id_2.clone(),
-                        text: line,
-                        level: level.to_string(),
-                        timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                    },
-                );
+                let payload = LaunchLogEvent {
+                    instance_id: inst_id_2.clone(),
+                    text: line,
+                    level: level.to_string(),
+                    timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                };
+                let _ = app_clone_2.emit("launch:log", payload.clone());
+                if let Some(main_win) = app_clone_2.get_webview_window("main") {
+                    let _ = main_win.emit("launch:log", payload);
+                }
             }
         });
     }
@@ -756,47 +760,53 @@ pub async fn launch_minecraft(
         let exit_code = status.map(|s| s.code().unwrap_or(0)).unwrap_or(-1);
 
         if exit_code == 0 {
-            let _ = app_clone_3.emit(
-                "launch:log",
-                LaunchLogEvent {
-                    instance_id: inst_id_3.clone(),
-                    text: format!("Minecraft process completed cleanly (Duration: {duration_secs}s)"),
-                    level: "info".to_string(),
-                    timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                },
-            );
-            let _ = app_clone_3.emit(
-                "launch:status",
-                LaunchProgressEvent {
-                    instance_id: inst_id_3.clone(),
-                    step: "COMPLETED".to_string(),
-                    status_text: "Game closed".to_string(),
-                    current_items: None,
-                    total_items: None,
-                    percentage: None,
-                },
-            );
+            let log_payload = LaunchLogEvent {
+                instance_id: inst_id_3.clone(),
+                text: format!("Minecraft process completed cleanly (Duration: {duration_secs}s)"),
+                level: "info".to_string(),
+                timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+            };
+            let _ = app_clone_3.emit("launch:log", log_payload.clone());
+            if let Some(main_win) = app_clone_3.get_webview_window("main") {
+                let _ = main_win.emit("launch:log", log_payload);
+            }
+
+            let status_payload = LaunchProgressEvent {
+                instance_id: inst_id_3.clone(),
+                step: "COMPLETED".to_string(),
+                status_text: "Game closed".to_string(),
+                current_items: None,
+                total_items: None,
+                percentage: None,
+            };
+            let _ = app_clone_3.emit("launch:status", status_payload.clone());
+            if let Some(main_win) = app_clone_3.get_webview_window("main") {
+                let _ = main_win.emit("launch:status", status_payload);
+            }
         } else {
-            let _ = app_clone_3.emit(
-                "launch:log",
-                LaunchLogEvent {
-                    instance_id: inst_id_3.clone(),
-                    text: format!("Minecraft process exited with code {exit_code}"),
-                    level: "error".to_string(),
-                    timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                },
-            );
-            let _ = app_clone_3.emit(
-                "launch:status",
-                LaunchProgressEvent {
-                    instance_id: inst_id_3.clone(),
-                    step: "CRASHED".to_string(),
-                    status_text: format!("Game closed with code {exit_code}"),
-                    current_items: None,
-                    total_items: None,
-                    percentage: None,
-                },
-            );
+            let log_payload = LaunchLogEvent {
+                instance_id: inst_id_3.clone(),
+                text: format!("Minecraft process exited with code {exit_code}"),
+                level: "error".to_string(),
+                timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+            };
+            let _ = app_clone_3.emit("launch:log", log_payload.clone());
+            if let Some(main_win) = app_clone_3.get_webview_window("main") {
+                let _ = main_win.emit("launch:log", log_payload);
+            }
+
+            let status_payload = LaunchProgressEvent {
+                instance_id: inst_id_3.clone(),
+                step: "CRASHED".to_string(),
+                status_text: format!("Game closed with code {exit_code}"),
+                current_items: None,
+                total_items: None,
+                percentage: None,
+            };
+            let _ = app_clone_3.emit("launch:status", status_payload.clone());
+            if let Some(main_win) = app_clone_3.get_webview_window("main") {
+                let _ = main_win.emit("launch:status", status_payload);
+            }
         }
 
         if let Ok(Some(inst)) = instances::get_instance_by_id(&inst_id_3) {

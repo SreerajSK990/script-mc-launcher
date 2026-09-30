@@ -15,6 +15,28 @@ async function wrapOp<T>(promise: Promise<T>): Promise<import('@shared/types/ope
   }
 }
 
+function createSafeListener<T>(event: string, callback: (payload: T) => void): () => void {
+  let active = true
+  let unlisten: (() => void) | null = null
+  listen<T>(event, (e) => {
+    if (active) {
+      callback(e.payload)
+    }
+  }).then((fn) => {
+    if (!active) {
+      fn()
+    } else {
+      unlisten = fn
+    }
+  })
+  return () => {
+    active = false
+    if (unlisten) {
+      unlisten()
+    }
+  }
+}
+
 export function createTauriBridge(): LauncherAPI {
   return {
     window: {
@@ -69,37 +91,9 @@ export function createTauriBridge(): LauncherAPI {
       quickPlay: (instanceId: string, options) =>
         invoke('launch_quick_play', { instanceId, options }),
       stop: (instanceId: string) => invoke('launch_stop', { instanceId }),
-      onProgress: (callback) => {
-        let unlisten: (() => void) | null = null
-        listen<LaunchProgressEvent>('launch:status', (event) => callback(event.payload)).then(
-          (fn) => {
-            unlisten = fn
-          }
-        )
-        return () => {
-          if (unlisten) unlisten()
-        }
-      },
-      onStatus: (callback) => {
-        let unlisten: (() => void) | null = null
-        listen<LaunchProgressEvent>('launch:status', (event) => callback(event.payload)).then(
-          (fn) => {
-            unlisten = fn
-          }
-        )
-        return () => {
-          if (unlisten) unlisten()
-        }
-      },
-      onLog: (callback) => {
-        let unlisten: (() => void) | null = null
-        listen<LaunchLogEvent>('launch:log', (event) => callback(event.payload)).then((fn) => {
-          unlisten = fn
-        })
-        return () => {
-          if (unlisten) unlisten()
-        }
-      }
+      onProgress: (callback) => createSafeListener<LaunchProgressEvent>('launch:status', callback),
+      onStatus: (callback) => createSafeListener<LaunchProgressEvent>('launch:status', callback),
+      onLog: (callback) => createSafeListener<LaunchLogEvent>('launch:log', callback)
     },
     meta: {
       getVersions: () => invoke('meta_get_versions'),
@@ -146,18 +140,11 @@ export function createTauriBridge(): LauncherAPI {
       import: (filePath: string, customName?: string) =>
         invoke('modpacks_import', { filePath, customName }),
       installRemote: (payload) => invoke('modpacks_install_remote', { payload }),
-      onProgress: (callback) => {
-        let unlisten: (() => void) | undefined
-        listen<import('@shared/types/modpack').ModpackImportProgressEvent>(
+      onProgress: (callback) =>
+        createSafeListener<import('@shared/types/modpack').ModpackImportProgressEvent>(
           'modpacks:progress-event',
-          (event) => callback(event.payload)
-        ).then((u) => {
-          unlisten = u
-        })
-        return () => {
-          unlisten?.()
-        }
-      }
+          callback
+        )
     },
     resourcepacks: {
       listInstalled: (instanceId) => invoke('resourcepacks_list_installed', { instanceId }),
@@ -198,18 +185,11 @@ export function createTauriBridge(): LauncherAPI {
           input.click()
         }),
       clone: (payload) => invoke('launchers_clone', { payload }),
-      onProgress: (callback) => {
-        let unlisten: (() => void) | undefined
-        listen<import('@shared/types/externalLauncher').CloneProgressEvent>(
+      onProgress: (callback) =>
+        createSafeListener<import('@shared/types/externalLauncher').CloneProgressEvent>(
           'launchers:clone-progress-event',
-          (event) => callback(event.payload)
-        ).then((u) => {
-          unlisten = u
-        })
-        return () => {
-          unlisten?.()
-        }
-      }
+          callback
+        )
     },
     java: {
       getRuntimes: () => invoke('java_get_runtimes'),
@@ -255,42 +235,21 @@ export function createTauriBridge(): LauncherAPI {
     updater: {
       checkForUpdates: () => invoke('updater_check_for_updates'),
       quitAndInstall: () => invoke('updater_quit_and_install'),
-      onStatus: (callback) => {
-        let unlisten: (() => void) | undefined
-        listen<{ status: import('@shared/types/updater').UpdateStatus; message?: string }>(
+      onStatus: (callback) =>
+        createSafeListener<{ status: import('@shared/types/updater').UpdateStatus; message?: string }>(
           'updater:status',
-          (event) => callback(event.payload.status, event.payload.message)
-        ).then((u) => {
-          unlisten = u
-        })
-        return () => {
-          unlisten?.()
-        }
-      },
-      onProgress: (callback) => {
-        let unlisten: (() => void) | undefined
-        listen<import('@shared/types/updater').UpdateProgressEvent>(
+          (payload) => callback(payload.status, payload.message)
+        ),
+      onProgress: (callback) =>
+        createSafeListener<import('@shared/types/updater').UpdateProgressEvent>(
           'updater:progress',
-          (event) => callback(event.payload)
-        ).then((u) => {
-          unlisten = u
-        })
-        return () => {
-          unlisten?.()
-        }
-      },
-      onDownloaded: (callback) => {
-        let unlisten: (() => void) | undefined
-        listen<import('@shared/types/updater').UpdateInfo>(
+          callback
+        ),
+      onDownloaded: (callback) =>
+        createSafeListener<import('@shared/types/updater').UpdateInfo>(
           'updater:downloaded',
-          (event) => callback(event.payload)
-        ).then((u) => {
-          unlisten = u
-        })
-        return () => {
-          unlisten?.()
-        }
-      }
+          callback
+        )
     },
     discord: {
       setActivity: (payload) => invoke('discord_set_activity', { payload }),
@@ -310,15 +269,11 @@ export function createTauriBridge(): LauncherAPI {
       shaderEnvironment: (instanceId: string) => wrapOp(invoke('content_shader_environment', { instanceId })),
       openShaderFolder: (instanceId: string) => wrapOp(invoke('content_open_shader_folder', { instanceId })),
       cancelTransfer: async (_instanceId: string) => ({ success: true, data: undefined }),
-      onTransfer: (callback) => {
-        let unlisten: (() => void) | undefined
-        listen<import('@shared/types/operations').TransferProgress>('content:transfer-progress', (event) => callback(event.payload)).then((u) => {
-          unlisten = u
-        })
-        return () => {
-          unlisten?.()
-        }
-      }
+      onTransfer: (callback) =>
+        createSafeListener<import('@shared/types/operations').TransferProgress>(
+          'content:transfer-progress',
+          callback
+        )
     }
   }
 }

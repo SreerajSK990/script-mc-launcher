@@ -29,7 +29,7 @@ pub async fn auth_login_microsoft(app: AppHandle) -> Result<StoredAccount, Strin
 
     for (label, window) in app.webview_windows() {
         if label.starts_with("ms-login") {
-            let _ = window.destroy();
+            let _ = window.close();
         }
     }
 
@@ -88,6 +88,8 @@ pub async fn auth_login_microsoft(app: AppHandle) -> Result<StoredAccount, Strin
         Ok(result) => result?,
         Err(_) => return Err("Login was cancelled".to_string()),
     };
-    let _ = win.destroy();
-    auth::exchange_code_for_minecraft_account(&code).await
+    let _ = win.hide();
+    let result = auth::exchange_code_for_minecraft_account(&code).await;
+    let _ = win.close();
+    result
 }
