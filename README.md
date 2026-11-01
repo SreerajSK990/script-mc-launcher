@@ -2,7 +2,7 @@
 
 A fast, sleek, and modular Minecraft launcher with a native **Rust** backend on **Tauri 2** and a **React**, **TypeScript** and **Tailwind CSS** interface.
 
-**Latest release: [v0.19.1](https://github.com/SreerajSK990/script-mc-launcher/releases/tag/v0.19.1)** — mod rollback snapshots, cancellable downloads, a working Discord Rich Presence connection, SRV-aware server status, session-refreshing skin uploads, and a faster screenshot gallery. Read the [release notes](release-notes/v0.19.1.md) for details.
+**Latest release: [v0.20.0](https://github.com/SreerajSK990/script-mc-launcher/releases/tag/v0.20.0)** — crash reports in the console with better crash explanations, saved session logs, reattaching to a game that is still running after a launcher restart, and a remembered window layout. Read the [release notes](release-notes/v0.20.0.md) for details.
 
 Most Minecraft launchers out there either look like they're stuck in 2010 with clunky Java Swing windows, or they're bloated with electron bloatware and ads. Script Launcher is built to be fast, clean, and completely isolated so your mod setups and game versions never conflict with each other.
 
@@ -252,6 +252,7 @@ npm run test:shaders:live
 - [x] **Resource Pack (Texture Pack) Browser & Manager:** Modrinth & CurseForge search, resolution filters, in-app management, drag-and-drop installer, and pack metadata extraction
 - [x] **Batch Mod Update Engine:** SHA-512 batch hash lookup, per-mod update badges, one-click individual update, and batch "Update All" with live progress
 - [x] **Enhanced Version Listing & Web Download Engine:** External browser download for restricted CurseForge files, channel filters (Release/Beta/Alpha), loader badges, changelog accordions, and modpack project ID self-healing
+- [x] **Crash Reports & Session Logs:** Crash report excerpts in the console, saved per-session logs, and reattaching to running games
 - [x] **Native Rust Backend:** Tauri 2 migration with security hardening, mod dependency resolution, mod rollback snapshots, verified updates, and live smoke tests
 - [x] **Modal Portaling Architecture & UI Polish:** Top-level React portals for zero CSS transform modal flickering, dynamic 3-dot action menus with outside-click dismissal, collapsible Jump In section, and playtime-based quick-join sorting
 
