@@ -6,7 +6,7 @@ Official guidelines, architecture standards, coding conventions, Git workflow, R
 
 ## 1. Project Overview & Philosophy
 
-Script Minecraft Launcher is a modern, high-performance, isolated Minecraft launcher. The shipping desktop app is a **Tauri 2** shell with a **Rust** backend (`src-tauri/`) and a **React 19**, **TypeScript (ESM)** and **Tailwind CSS** renderer. The original **Electron** main process (`src/main/`, `src/preload/`) is kept as a reference implementation and is not shipped.
+Script Minecraft Launcher is a modern, high-performance, isolated Minecraft launcher. The shipping desktop app is a **Tauri 2** shell with a **Rust** backend (`src-tauri/`) and a **React 19**, **TypeScript (ESM)** and **Tailwind CSS** renderer.
 
 ### Core Tenets
 1. **Zero Bloat & Peak Performance:** Ultra-fast startup, low RAM footprint, native OS responsiveness.
@@ -19,7 +19,7 @@ Script Minecraft Launcher is a modern, high-performance, isolated Minecraft laun
 
 ## 2. Architecture & Directory Structure
 
-The shipping app is a Tauri 2 application: a **Rust backend** (`src-tauri/`) exposes Tauri commands and events, the **renderer bridge** (`src/renderer/src/services/tauriBridge.ts`) maps them onto the typed `window.launcherAPI` contract from `src/shared/types/ipc.ts`, and the **React renderer** consumes that contract. The Electron tree below is the legacy reference implementation of the same contract.
+The shipping app is a Tauri 2 application: a **Rust backend** (`src-tauri/`) exposes Tauri commands and events, the **renderer bridge** (`src/renderer/src/services/tauriBridge.ts`) maps them onto the typed `window.launcherAPI` contract from `src/shared/types/ipc.ts`, and the **React renderer** consumes that contract.
 
 ### Rust Backend (`src-tauri/`)
 
@@ -45,90 +45,24 @@ src-tauri/
 └── tauri.conf.json              # Window, CSP, asset protocol scope, bundle settings
 ```
 
-### Legacy Electron Reference
+### Renderer (`src/renderer/`) and Shared Types (`src/shared/`)
 
 ```
-script-mc-launcher/
-├── src/
-│   ├── main/                            # Electron Main Process (Node.js runtime)
-│   │   ├── index.ts                     # App lifecycle, single-instance lock, window manager
-│   │   ├── ipc/                         # IPC handler registrations (bridge endpoints)
-│   │   │   ├── auth.ts                  # Microsoft OAuth & offline account handlers
-│   │   │   ├── instances.ts             # CRUD, folder opening, duplicate, export
-│   │   │   ├── install.ts               # Loader installation handlers
-│   │   │   ├── launch.ts                # Game launch, process supervision, kill
-│   │   │   ├── mods.ts                  # Mod search, toggle, delete, version switch
-│   │   │   ├── modpacks.ts              # Modpack archive & online install
-│   │   │   ├── servers.ts               # Multiplayer servers.dat reader/writer & pinger
-│   │   │   ├── screenshots.ts           # Screenshots gallery scanner & clipboard
-│   │   │   ├── cloner.ts                # External launcher detection & deep cloner
-│   │   │   ├── meta.ts                  # Mojang & Prism metadata handlers
-│   │   │   ├── system.ts                # System specs & memory detection
-│   │   │   ├── discordRpc.ts            # Discord Rich Presence IPC bridge
-│   │   │   ├── updater.ts               # Auto-updater check & install handlers
-│   │   │   └── register.ts              # Central registry initializing all IPC handlers
-│   │   ├── core/                        # Launcher core business logic
-│   │   │   ├── auth/                    # OAuth window, Xbox Live, XSTS, tokens, DPAPI encryption
-│   │   │   ├── importers/               # Deep cloner for Prism, Modrinth, CurseForge, Vanilla
-│   │   │   ├── java/                    # Mojang JRE API client, runtime auto-downloader
-│   │   │   ├── loaders/                 # Fabric, Quilt, Forge, NeoForge resolvers
-│   │   │   ├── meta/                    # Mojang manifest & Prism Meta client (disk cache + TTL)
-│   │   │   ├── minecraft/               # Assets, libraries, natives, JVM args, Java spawner
-│   │   │   ├── modpacks/                # .mrpack & .zip manifest parser, override extractor
-│   │   │   ├── mods/                    # Modrinth API, CurseForge API, local mod manager
-│   │   │   └── servers/                 # NBT parser/writer for servers.dat & TCP pinger
-│   │   ├── services/                    # Stateful singleton services
-│   │   │   ├── instances.ts             # Instance state manager & config writer
-│   │   │   ├── auth.ts                  # Active account session manager
-│   │   │   ├── launch.ts                # Active process manager & log broadcaster
-│   │   │   ├── discordRpc.ts            # Discord RPC client lifecycle & presence formatter
-│   │   │   ├── paths.ts                 # Launcher data directories resolver
-│   │   │   └── system.ts                # Host RAM and CPU detector
-│   │   └── utils/                       # Low-level utilities
-│   │       ├── download.ts              # Concurrency-limited batch downloader + hash verify
-│   │       ├── fs.ts                    # Safe atomic file writer, directory copy/clean
-│   │       └── zip.ts                   # Zip extractor & archive tools
-│   ├── preload/                         # Secure Preload Scripts
-│   │   └── index.ts                     # contextBridge exposing window.launcherAPI
-│   ├── renderer/                        # Electron Renderer Process (React 19 UI)
-│   │   ├── index.html                   # Shell HTML
-│   │   └── src/
-│   │       ├── App.tsx                  # Root layout, router, tab state, global modals
-│   │       ├── main.tsx                 # React entry point
-│   │       ├── index.css                # Tailwind directives & global styling
-│   │       ├── components/              # Reusable UI components
-│   │       │   ├── TitleBar.tsx         # Frameless window drag region & window controls
-│   │       │   ├── Sidebar.tsx          # Main navigation bar with active badges
-│   │       │   ├── InstanceCard.tsx     # Instance tile with status, loader badge, launch
-│   │       │   ├── Toast.tsx            # Floating notification alerts
-│   │       │   └── modals/              # CreateInstance, EditInstance, AddServer, etc.
-│   │       └── pages/                   # Main view pages
-│   │           ├── Dashboard.tsx        # Quick launch, recent instances, stats
-│   │           ├── Instances.tsx        # Instance grid/list, filter, search, actions
-│   │           ├── InstanceDetail.tsx   # Per-instance RAM, JVM flags, mods, servers, screenshots
-│   │           ├── ModBrowser.tsx       # Modrinth + CurseForge browser with installed status
-│   │           ├── SkinStudio.tsx       # Interactive 3D skin viewer & preset applicator
-│   │           ├── Logs.tsx             # Live streaming console log viewer
-│   │           └── Settings.tsx         # Global JVM memory, custom paths, updater, accounts
-│   └── shared/                          # Shared Types & Constants (Isomorphic)
-│       ├── constants/
-│       │   ├── channels.ts              # IPC channel string constants
-│       │   └── defaults.ts              # Default memory, launcher version, API endpoints
-│       └── types/
-│           ├── instance.ts              # Instance, loader types, memory configs
-│           ├── auth.ts                  # UserAccount, AuthProfile, token payloads
-│           ├── launch.ts                # LaunchState, LaunchProgress, LogEntry
-│           ├── mods.ts                  # Mod, ModVersion, Modpack, InstalledMod
-│           ├── servers.ts               # ServerEntry, ServerPingResult
-│           ├── discord.ts               # Discord presence payload & page types
-│           ├── cloner.ts                # DetectedLauncher, ImportableInstance
-│           └── ipc.ts                   # Strongly typed LauncherAPI interface
-├── scripts/
-│   └── test-services.mjs                # Automated standalone sandbox test suite
-├── electron.vite.config.ts              # Vite configuration for main, preload, and renderer
-├── electron-builder.json                # Packaging configuration (NSIS, portable, icons)
-├── package.json                         # Dependencies and build scripts
-└── tsconfig.json                        # Root TypeScript configuration
+src/
+├── renderer/
+│   ├── index.html                       # Shell HTML
+│   └── src/
+│       ├── App.tsx                      # Root layout, routing, global modals
+│       ├── services/tauriBridge.ts      # Maps window.launcherAPI onto Tauri commands and events
+│       ├── services/fileDrop.ts         # Native drag-and-drop routing to drop zones
+│       ├── components/                  # Shared UI, instance, mod, server, skin and settings components
+│       └── pages/                       # Dashboard, Instances, InstanceDetail, ModBrowser, Skins, Logs, Settings
+└── shared/
+    ├── constants/                       # Launcher defaults, icons, auth constants
+    ├── crashDiagnosis.ts                # Crash pattern matching used by the Logs page
+    └── types/                           # Typed launcherAPI contract and domain types
+scripts/release-tauri.mjs                # Signed release build: installer, portable exe, latest.yml, latest.json
+vite.config.ts                           # Renderer build (aliases, dev port 5173, out/renderer)
 ```
 
 ---
@@ -250,7 +184,7 @@ npm test
 npm run build
 ```
 
-`npm test` runs the TypeScript service suites and `cargo test` for the Rust backend. Every command must succeed with 0 errors before creating a commit.
+`npm test` runs `cargo test` for the Rust backend; `npm run typecheck` covers the TypeScript renderer and shared types. Every command must succeed with 0 errors before creating a commit.
 
 Live checks that touch the network, Discord or a real Minecraft launch are `#[ignore]` tests in the Rust crate. Run them explicitly when changing those areas, for example:
 
@@ -298,11 +232,14 @@ After every successful verification pipeline and build, release and push changes
    ```bash
    npm run release:tauri
    ```
-   This checks that all four versions match, builds the renderer, runs `tauri build` for the NSIS installer, and writes the release set into `dist/` with a fresh `latest.yml` containing the installer's SHA-512. The in-app updater refuses any installer whose checksum does not match `latest.yml`.
+   This checks that all four versions match, builds the renderer, runs `tauri build` for the NSIS installer, signs it with the updater key, and writes the release set into `dist/`.
+   - The updater signing key lives outside the repository at `~/.tauri/script-mc-launcher.key`, with its password in `~/.tauri/script-mc-launcher.key.password`. Back both up; without them, existing installs cannot receive updates. Never commit them.
+   - `latest.json` is the signed manifest read by the Tauri updater (v0.24.0 and newer). `latest.yml` is still published so installs older than v0.24.0 can update.
 3. **Verify Build Artifacts in `dist/`:**
    - Setup Installer: `Script-Minecraft-Launcher-Setup-X.Y.Z.exe`
    - Portable binary: `Script.Minecraft.Launcher.X.Y.Z.exe`
-   - Auto-updater manifest: `latest.yml`
+   - Signed updater manifest: `latest.json`
+   - Legacy updater manifest: `latest.yml`
 4. **Git Commit & Push:**
    ```bash
    git add .
@@ -315,6 +252,7 @@ After every successful verification pipeline and build, release and push changes
    gh release create vX.Y.Z \
      dist/Script-Minecraft-Launcher-Setup-X.Y.Z.exe \
      dist/Script.Minecraft.Launcher.X.Y.Z.exe \
+     dist/latest.json \
      dist/latest.yml \
      --title "Script Minecraft Launcher vX.Y.Z" \
      --notes-file <release-notes-path>

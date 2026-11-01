@@ -2,7 +2,7 @@
 
 A fast, sleek, and modular Minecraft launcher with a native **Rust** backend on **Tauri 2** and a **React**, **TypeScript** and **Tailwind CSS** interface.
 
-**Latest release: [v0.23.0](https://github.com/SreerajSK990/script-mc-launcher/releases/tag/v0.23.0)** — sign in with a code at microsoft.com/link, per-world datapacks from Modrinth, guided manual downloads for restricted CurseForge files, and Modrinth App imports with real metadata. Read the [release notes](release-notes/v0.23.0.md) for details.
+**Latest release: [v0.24.0](https://github.com/SreerajSK990/script-mc-launcher/releases/tag/v0.24.0)** — cryptographically signed updates through the Tauri updater and removal of the legacy Electron code. Read the [release notes](release-notes/v0.24.0.md) for details.
 
 Most Minecraft launchers out there either look like they're stuck in 2010 with clunky Java Swing windows, or they're bloated with electron bloatware and ads. Script Launcher is built to be fast, clean, and completely isolated so your mod setups and game versions never conflict with each other.
 
@@ -15,7 +15,7 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 - **Unified Shader Browser & Manager:** Dedicated first-class Shaders tab in the Mod Browser alongside Mods, Resource Packs, and Modpacks with unified title, subtitle, target instance selector, and Browse / Installed subtabs. Browse shader projects from Modrinth or CurseForge with interactive cards, inspect descriptions, change versions, import shader ZIPs via file picker or drag-and-drop, and manage packs in each instance's isolated `shaderpacks/` folder with full live in-game install support while Minecraft is running. Non-blocking detection of Iris, Oculus, and OptiFine with one-click setup of Iris or Oculus. Features smooth infinite scrolling powered by `IntersectionObserver`, seamless pagination without view jumps, a quick scroll-to-top button, and accurate installed badges for both catalog downloads and locally imported ZIP packs. Select the active shader inside Minecraft. Vanilla instances first need a compatible mod-loader setup through Installation settings.
 - **Backup History & Restore:** The instance Backups tab lists mod recovery snapshots, world-save backups, and existing version-upgrade save ZIPs. Restore with integrity verification and a backup of the current state first. Configure retention for recovery snapshots and optional save backups after a clean game exit; legacy ZIP backups are retained separately. Backups remain local to the instance and do not survive deleting it.
 - **Actionable Crash Explanations:** The Logs page recognizes common memory, Java-version, missing-dependency, duplicate-mod, and OpenGL failures, showing the supporting log line and a suggested next step. Unrecognized crashes retain the full log workflow.
-- **On-demand Page Loading:** Load the skin studio, content browser, instance details, and settings when opened to reduce the initial renderer bundle. Run `npm run build` followed by `npm run measure:startup` for three local startup samples using temporary profiles.
+- **On-demand Page Loading:** Load the skin studio, content browser, instance details, and settings when opened to reduce the initial renderer bundle.
 - **Download Recovery:** File downloads retry transient failures and time out stalled transfers. Managed mod and shader installations show transfer speed and offer cancellation; failed or cancelled mod installations restore the previous files.
 
 - **Complete Instance Isolation:** Every instance has its own dedicated directory (`instances/<id>/minecraft/`). Mods, configs, resource packs, and saves stay strictly inside that instance. No shared messy `.minecraft` folder.
@@ -113,7 +113,7 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 ## Tech Stack
 
 - **Desktop Framework:** Tauri 2 with a Rust backend (Tokio, Reqwest)
-- **Frontend:** React 19, Tailwind CSS, Lucide Icons, built with Vite through Electron-Vite's renderer pipeline
+- **Frontend:** React 19, Tailwind CSS, Lucide Icons, built with Vite
 - **Languages:** Rust (backend) and TypeScript (ESM, interface)
 - **Metadata Engines:** Mojang Piston API + Prism Meta API (`meta.prismlauncher.org`)
 - **Mod Providers:** Modrinth API v2 + CurseForge API v1
@@ -129,35 +129,14 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 │   ├── src/core/                # Launch pipeline, loaders, Java, mods, modpacks, recovery, auth, updater
 │   └── tauri.conf.json          # Window, security policy, asset protocol and bundle settings
 ├── src/
-│   ├── main/                    # Legacy Electron main process kept as a reference implementation
-│   │   ├── index.ts             # App lifecycle and window creation
-│   │   ├── core/                # Core launcher business logic
-│   │   │   ├── auth/            # OAuth window, Xbox Live, tokens, encrypted storage
-│   │   │   ├── importers/       # External launcher detection & deep cloner (Prism, Modrinth, CurseForge, Vanilla)
-│   │   │   ├── java/            # Mojang JRE API client and auto-downloader
-│   │   │   ├── loaders/         # Fabric, Quilt, Forge, NeoForge resolvers
-│   │   │   ├── meta/            # Prism Meta client with disk cache & TTL
-│   │   │   ├── minecraft/       # Piston manifest, assets, libraries, args, process spawner, screenshots
-│   │   │   ├── modpacks/        # Modrinth (.mrpack) and CurseForge (.zip) archive & online importer
-│   │   │   ├── mods/            # Modrinth client, CurseForge client, instance mod manager
-│   │   │   ├── shaders/         # Shader validation, installation, and loader detection
-│   │   │   └── resourcepacks/   # Resource pack manager, metadata extractor & zip installer
-│   │   ├── services/            # Instances, auth, launch, paths, operation guards, recovery
-│   │   ├── ipc/                 # Typed IPC handlers (bridge to renderer)
-│   │   └── utils/               # Atomic filesystem writers, batch downloader, zip extract
 │   ├── renderer/                # React interface (src/services/tauriBridge.ts connects it to Rust)
 │   │   ├── src/
 │   │   │   ├── components/      # TitleBar, Sidebar, Modals, Cards, Buttons
 │   │   │   ├── pages/           # Dashboard, Instances, InstanceDetail, ModBrowser, Logs, Settings
 │   │   │   └── App.tsx          # Root routing and state management
-│   ├── preload/                 # Legacy Electron contextBridge for window.launcherAPI
 │   └── shared/                  # Shared types (instances, auth, launch, mods, externalLauncher, ipc)
 ├── scripts/
-│   ├── test-services.mjs        # Launcher service and provider integration tests
-│   ├── test-content.mjs         # Isolated dependency, rollback, shader, and backup tests
-│   ├── test-shaders-live.mjs     # Optional real shader and loader download checks
-│   ├── measure-startup.mjs      # Production startup samples in temporary profiles
-│   └── release-tauri.mjs        # Builds the installer, portable exe and latest.yml into dist/
+│   └── release-tauri.mjs        # Builds the signed installer, portable exe, latest.json and latest.yml into dist/
 ├── release-notes/              # Versioned release notes and download guidance
 ├── package.json
 └── tsconfig.json
@@ -197,7 +176,7 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
    ```bash
    npm test
    ```
-   This runs the TypeScript service suites and the Rust unit tests. Network, Discord and real-launch checks are ignored Rust tests you can run on demand, for example `cargo test --manifest-path src-tauri/Cargo.toml vanilla_launch_smoke_test -- --ignored`.
+   This runs the Rust unit tests; `npm run typecheck` checks the interface code. Network, Discord and real-launch checks are ignored Rust tests you can run on demand, for example `cargo test --manifest-path src-tauri/Cargo.toml vanilla_launch_smoke_test -- --ignored`.
 
 5. **Build production bundle:**
    ```bash
@@ -208,15 +187,10 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
    ```bash
    npm run release:tauri
    ```
-   Windows builds are written to `dist/`: `Script-Minecraft-Launcher-Setup-<version>.exe`, `Script.Minecraft.Launcher.<version>.exe`, and `latest.yml`, whose SHA-512 the in-app updater verifies before installing.
+   Windows builds are written to `dist/`: `Script-Minecraft-Launcher-Setup-<version>.exe`, `Script.Minecraft.Launcher.<version>.exe`, the signed updater manifest `latest.json`, and `latest.yml` for installs older than v0.24.0. Signing needs the updater key in `~/.tauri/` (see AGENTS.md).
 
 Before committing release changes, run `npm run typecheck`, `npm test`, and `npm run build` in that order.
 
-Optional live shader checks download Iris, Oculus, their required dependencies, and a shader pack into temporary instances; they do not launch Minecraft:
-
-```bash
-npm run test:shaders:live
-```
 
 ---
 
@@ -252,6 +226,7 @@ npm run test:shaders:live
 - [x] **Resource Pack (Texture Pack) Browser & Manager:** Modrinth & CurseForge search, resolution filters, in-app management, drag-and-drop installer, and pack metadata extraction
 - [x] **Batch Mod Update Engine:** SHA-512 batch hash lookup, per-mod update badges, one-click individual update, and batch "Update All" with live progress
 - [x] **Enhanced Version Listing & Web Download Engine:** External browser download for restricted CurseForge files, channel filters (Release/Beta/Alpha), loader badges, changelog accordions, and modpack project ID self-healing
+- [x] **Signed Updates:** Minisign-verified updates through the Tauri updater, with the legacy Electron implementation removed
 - [x] **Code Sign-in, Datapacks & Import Polish:** Device-code Microsoft sign-in, per-world datapacks, CurseForge manual-download flow, and Modrinth App database import
 - [x] **Launch Options & Conflict Warnings:** Per-instance window size, fullscreen and launch commands, with duplicate and incompatible mod warnings
 - [x] **Modpack Export & World Manager:** Export instances as `.mrpack` files and manage singleplayer worlds per instance

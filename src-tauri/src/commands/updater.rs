@@ -7,6 +7,6 @@ pub async fn updater_check_for_updates(app: AppHandle) -> Result<UpdateCheckResu
 }
 
 #[tauri::command]
-pub async fn updater_quit_and_install() -> Result<(), String> {
-    updater::quit_and_install()
+pub async fn updater_quit_and_install(app: AppHandle) -> Result<(), String> {
+    updater::quit_and_install(app)
 }

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { execSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 const projectRoot = resolve(import.meta.dirname, '..')
@@ -20,6 +21,18 @@ for (const [file, found] of Object.entries(versionSources)) {
   if (found !== version) {
     throw new Error(`${file} has version ${found}, expected ${version} from package.json`)
   }
+}
+
+const signingKeyPath = join(homedir(), '.tauri', 'script-mc-launcher.key')
+const signingPasswordPath = `${signingKeyPath}.password`
+if (!process.env.TAURI_SIGNING_PRIVATE_KEY) {
+  if (!existsSync(signingKeyPath)) {
+    throw new Error(`Updater signing key not found at ${signingKeyPath}`)
+  }
+  process.env.TAURI_SIGNING_PRIVATE_KEY = readFileSync(signingKeyPath, 'utf-8').trim()
+}
+if (!process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD && existsSync(signingPasswordPath)) {
+  process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD = readFileSync(signingPasswordPath, 'utf-8').trim()
 }
 
 const skipBuild = process.argv.includes('--skip-build')
@@ -65,6 +78,24 @@ const manifest = [
   ''
 ].join('\n')
 writeFileSync(join(distDirectory, 'latest.yml'), manifest)
+
+const signaturePath = join(nsisDirectory, `${bundledInstaller}.sig`)
+if (!existsSync(signaturePath)) {
+  throw new Error(`Updater signature ${signaturePath} was not produced; check the signing key`)
+}
+const releaseNotesPath = join(projectRoot, 'release-notes', `v${version}.md`)
+const updaterManifest = {
+  version,
+  notes: existsSync(releaseNotesPath) ? readFileSync(releaseNotesPath, 'utf-8') : `Script Minecraft Launcher v${version}`,
+  pub_date: new Date().toISOString(),
+  platforms: {
+    'windows-x86_64': {
+      signature: readFileSync(signaturePath, 'utf-8').trim(),
+      url: `https://github.com/SreerajSK990/script-mc-launcher/releases/download/v${version}/${installerName}`
+    }
+  }
+}
+writeFileSync(join(distDirectory, 'latest.json'), `${JSON.stringify(updaterManifest, null, 2)}\n`)
 
 console.log(`Release artifacts for v${version}:`)
 for (const name of readdirSync(distDirectory)) {
