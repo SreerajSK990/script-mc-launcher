@@ -27,5 +27,6 @@ pub mod shaders;
 pub mod skins;
 pub mod skins_presets;
 pub mod system;
+pub mod transfers;
 pub mod updater;
 

@@ -2,7 +2,6 @@ use crate::core::fs_util::write_json_atomic;
 use crate::core::mods::{list_installed_mods, InstallModPayload};
 use crate::core::paths;
 use serde::{Deserialize, Serialize};
-use sha1::Digest;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -103,31 +102,18 @@ pub async fn install_shader(payload: InstallModPayload) -> Result<ShaderPack, St
     let filename = &payload.version_file.filename;
     let target = dir.join(filename);
 
-    let client = crate::core::net::http_client().clone();
-    let resp = client.get(download_url).send().await.map_err(|e| e.to_string())?;
-    if !resp.status().is_success() {
-        return Err(format!("Download failed: HTTP {}", resp.status()));
-    }
-
-    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
-
-    if let Some(expected_512) = &payload.version_file.sha512 {
-        let mut hasher = sha2::Sha512::new();
-        hasher.update(&bytes);
-        let actual = format!("{:x}", hasher.finalize());
-        if !actual.eq_ignore_ascii_case(expected_512) {
-            return Err("SHA-512 integrity check failed for shader pack".to_string());
-        }
-    } else if let Some(expected_1) = &payload.version_file.sha1 {
-        let mut hasher = sha1::Sha1::new();
-        hasher.update(&bytes);
-        let actual = format!("{:x}", hasher.finalize());
-        if !actual.eq_ignore_ascii_case(expected_1) {
-            return Err("SHA-1 integrity check failed for shader pack".to_string());
-        }
-    }
-
-    fs::write(&target, &bytes).map_err(|e| e.to_string())?;
+    let checksum = crate::core::download::Checksum::from_hashes(
+        payload.version_file.sha512.clone(),
+        payload.version_file.sha1.clone(),
+    );
+    let downloaded_bytes = crate::core::transfers::download_for_instance(
+        &payload.instance_id,
+        download_url,
+        &target,
+        checksum.as_ref(),
+        Some(payload.version_file.size_bytes),
+    )
+    .await?;
 
     if let Some(old) = &payload.old_filename {
         if old != filename {
@@ -142,7 +128,7 @@ pub async fn install_shader(payload: InstallModPayload) -> Result<ShaderPack, St
         filename: filename.clone(),
         version: payload.version_file.version_number,
         source: Some(payload.mod_metadata.source),
-        size_bytes: bytes.len() as u64,
+        size_bytes: downloaded_bytes,
     };
 
     let meta_path = get_shader_metadata_path(&payload.instance_id);

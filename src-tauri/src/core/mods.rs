@@ -821,13 +821,32 @@ pub async fn get_mod_versions(
     get_modrinth_project_versions(project_id, minecraft_version, loader).await
 }
 
+async fn fetch_modrinth_members(project_id: &str) -> Vec<ModDetailCreator> {
+    let Ok(members) =
+        crate::core::net::get_json::<Vec<serde_json::Value>>(&format!("{MODRINTH_API_BASE}/project/{project_id}/members")).await
+    else {
+        return Vec::new();
+    };
+    members
+        .iter()
+        .filter_map(|member| {
+            let user = member.get("user")?;
+            Some(ModDetailCreator {
+                name: user.get("username").and_then(|v| v.as_str())?.to_string(),
+                role: member.get("role").and_then(|v| v.as_str()).map(str::to_string),
+                avatar_url: user.get("avatar_url").and_then(|v| v.as_str()).map(str::to_string),
+            })
+        })
+        .collect()
+}
+
 pub async fn get_mod_detail(source: &str, id: &str) -> Result<ModDetail, String> {
     if source == "curseforge" {
         let key = get_curseforge_key().ok_or("CurseForge API key not configured")?;
         let client = crate::core::net::http_client().clone();
         let resp = client
             .get(format!("{CURSEFORGE_API_BASE}/mods/{id}"))
-            .header("x-api-key", key)
+            .header("x-api-key", &key)
             .send()
             .await
             .map_err(|e| e.to_string())?;
@@ -862,12 +881,46 @@ pub async fn get_mod_detail(source: &str, id: &str) -> Result<ModDetail, String>
             })
             .unwrap_or_default();
 
+        let full_description = crate::core::net::send_with_retry(|| {
+            crate::core::net::http_client()
+                .get(format!("{CURSEFORGE_API_BASE}/mods/{id}/description"))
+                .header("x-api-key", &key)
+        })
+        .await
+        .ok()
+        .filter(|response| response.status().is_success());
+        let description = match full_description {
+            Some(response) => response
+                .json::<serde_json::Value>()
+                .await
+                .ok()
+                .and_then(|body| body.get("data").and_then(|d| d.as_str()).map(str::to_string))
+                .filter(|text| !text.trim().is_empty())
+                .unwrap_or_else(|| summary.clone()),
+            None => summary.clone(),
+        };
+        let gallery: Vec<ModDetailGalleryItem> = m
+            .get("screenshots")
+            .and_then(|list| list.as_array())
+            .map(|list| {
+                list.iter()
+                    .filter_map(|shot| {
+                        shot.get("url").and_then(|u| u.as_str()).map(|url| ModDetailGalleryItem {
+                            url: url.to_string(),
+                            title: shot.get("title").and_then(|t| t.as_str()).map(str::to_string),
+                            description: shot.get("description").and_then(|d| d.as_str()).map(str::to_string),
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
         return Ok(ModDetail {
             id: id_str,
             slug,
             name,
             summary: summary.clone(),
-            description: summary,
+            description,
             icon_url,
             downloads,
             followers: None,
@@ -886,7 +939,7 @@ pub async fn get_mod_detail(source: &str, id: &str) -> Result<ModDetail, String>
             },
             license: None,
             creators,
-            gallery: Vec::new(),
+            gallery,
             published_at: m.get("dateCreated").and_then(|v| v.as_str()).map(|s| s.to_string()),
             updated_at: m.get("dateModified").and_then(|v| v.as_str()).map(|s| s.to_string()),
         });
@@ -972,7 +1025,7 @@ pub async fn get_mod_detail(source: &str, id: &str) -> Result<ModDetail, String>
             name: p.get("license").and_then(|l| l.get("name")).and_then(|n| n.as_str()).map(|s| s.to_string()),
             url: p.get("license").and_then(|l| l.get("url")).and_then(|u| u.as_str()).map(|s| s.to_string()),
         }),
-        creators: Vec::new(),
+        creators: fetch_modrinth_members(id).await,
         gallery,
         published_at: p.get("published").and_then(|v| v.as_str()).map(|s| s.to_string()),
         updated_at: p.get("updated").and_then(|v| v.as_str()).map(|s| s.to_string()),
@@ -1087,7 +1140,14 @@ pub async fn install_mod_to_instance(payload: InstallModPayload) -> Result<Insta
         payload.version_file.sha512.clone(),
         payload.version_file.sha1.clone(),
     );
-    let downloaded_bytes = download::fetch_to_path(download_url, &target_dest, checksum.as_ref(), |_| {}).await?;
+    let downloaded_bytes = crate::core::transfers::download_for_instance(
+        &payload.instance_id,
+        download_url,
+        &target_dest,
+        checksum.as_ref(),
+        Some(payload.version_file.size_bytes),
+    )
+    .await?;
 
     if let Some(old_name) = &payload.old_filename {
         if old_name != filename {
@@ -1391,6 +1451,13 @@ where
     let mut failures = Vec::new();
 
     let total = updates.len();
+    if total > 0 {
+        let snapshot_instance = instance_id.to_string();
+        let label = format!("Before updating {total} mod(s)");
+        tokio::task::spawn_blocking(move || crate::core::recovery::create_mod_snapshot(&snapshot_instance, &label))
+            .await
+            .map_err(|e| e.to_string())??;
+    }
     for (index, u) in updates.iter().enumerate() {
         on_progress(format!("Updating {}", u.name), index, total);
         let payload = InstallModPayload {
@@ -1435,6 +1502,14 @@ where
 #[cfg(test)]
 mod version_parsing_tests {
     use super::*;
+
+    #[tokio::test]
+    #[ignore]
+    async fn live_modrinth_detail_includes_members() {
+        let detail = get_mod_detail("modrinth", "sodium").await.unwrap();
+        println!("{} creators, {} chars of description", detail.creators.len(), detail.description.len());
+        assert!(!detail.creators.is_empty());
+    }
 
     #[tokio::test]
     #[ignore]

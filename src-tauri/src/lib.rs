@@ -38,6 +38,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            core::transfers::initialize(app.handle().clone());
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
@@ -138,6 +139,7 @@ pub fn run() {
             content_get_recovery_settings,
             content_save_recovery_settings,
             content_plan_mods,
+            content_cancel_transfer,
             modpacks_inspect,
             modpacks_import,
             modpacks_install_remote,

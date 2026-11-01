@@ -3,7 +3,6 @@ use crate::core::paths;
 use base64::Engine;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use sha1::Digest;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -241,31 +240,18 @@ pub async fn install_resource_pack_to_instance(
     let filename = &payload.version_file.filename;
     let destination = packs_dir.join(filename);
 
-    let client = crate::core::net::http_client().clone();
-    let resp = client.get(download_url).send().await.map_err(|e| e.to_string())?;
-    if !resp.status().is_success() {
-        return Err(format!("Download failed: HTTP {}", resp.status()));
-    }
-
-    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
-
-    if let Some(expected_512) = &payload.version_file.sha512 {
-        let mut hasher = sha2::Sha512::new();
-        hasher.update(&bytes);
-        let actual = format!("{:x}", hasher.finalize());
-        if !actual.eq_ignore_ascii_case(expected_512) {
-            return Err("SHA-512 integrity check failed for downloaded resource pack".to_string());
-        }
-    } else if let Some(expected_1) = &payload.version_file.sha1 {
-        let mut hasher = sha1::Sha1::new();
-        hasher.update(&bytes);
-        let actual = format!("{:x}", hasher.finalize());
-        if !actual.eq_ignore_ascii_case(expected_1) {
-            return Err("SHA-1 integrity check failed for downloaded resource pack".to_string());
-        }
-    }
-
-    fs::write(&destination, &bytes).map_err(|e| e.to_string())?;
+    let checksum = crate::core::download::Checksum::from_hashes(
+        payload.version_file.sha512.clone(),
+        payload.version_file.sha1.clone(),
+    );
+    let downloaded_bytes = crate::core::transfers::download_for_instance(
+        &payload.instance_id,
+        download_url,
+        &destination,
+        checksum.as_ref(),
+        Some(payload.version_file.size_bytes),
+    )
+    .await?;
 
     let (description, zip_icon) = extract_zip_pack_info(&destination);
     let icon_url = payload.mod_metadata.icon_url.or(zip_icon);
@@ -279,7 +265,7 @@ pub async fn install_resource_pack_to_instance(
         icon_url,
         installed_at: Utc::now().to_rfc3339(),
         enabled: true,
-        file_size_bytes: bytes.len() as u64,
+        file_size_bytes: downloaded_bytes,
         game_version: payload.version_file.game_versions.and_then(|v| v.first().cloned()),
         description,
     };

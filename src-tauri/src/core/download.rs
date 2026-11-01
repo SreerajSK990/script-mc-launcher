@@ -131,7 +131,7 @@ async fn fetch_once<F>(
     on_bytes: &mut F,
 ) -> Result<u64, FetchFailure>
 where
-    F: FnMut(u64),
+    F: FnMut(u64) -> bool,
 {
     if let Some(parent) = destination.parent() {
         tokio::fs::create_dir_all(parent)
@@ -184,7 +184,11 @@ where
             return Err(FetchFailure::Fatal(format!("Failed to write {}: {error}", part_path.display())));
         }
         transferred += chunk.len() as u64;
-        on_bytes(transferred);
+        if !on_bytes(transferred) {
+            drop(file);
+            let _ = tokio::fs::remove_file(&part_path).await;
+            return Err(FetchFailure::Fatal("Download cancelled".to_string()));
+        }
     }
 
     let flush_result = file.flush().await;
@@ -221,6 +225,22 @@ pub async fn fetch_to_path<F>(
 ) -> Result<u64, String>
 where
     F: FnMut(u64),
+{
+    fetch_to_path_cancellable(url, destination, checksum, |transferred| {
+        on_bytes(transferred);
+        true
+    })
+    .await
+}
+
+pub async fn fetch_to_path_cancellable<F>(
+    url: &str,
+    destination: &Path,
+    checksum: Option<&Checksum>,
+    mut on_bytes: F,
+) -> Result<u64, String>
+where
+    F: FnMut(u64) -> bool,
 {
     let mut last_error = format!("Download was not attempted: {url}");
     for attempt in 0..MAX_DOWNLOAD_ATTEMPTS {

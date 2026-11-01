@@ -68,6 +68,30 @@ pub fn copy_dir_recursive(source: &Path, destination: &Path, skip_names: &[&str]
     Ok(copied_files)
 }
 
+pub fn link_dir_recursive(source: &Path, destination: &Path) -> Result<u64, String> {
+    fs::create_dir_all(destination)
+        .map_err(|e| format!("Failed to create {}: {e}", destination.display()))?;
+    let mut linked_files = 0u64;
+    let entries = fs::read_dir(source).map_err(|e| format!("Failed to read {}: {e}", source.display()))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let source_path = entry.path();
+        let target_path = destination.join(entry.file_name());
+        let metadata = fs::metadata(&source_path)
+            .map_err(|e| format!("Failed to inspect {}: {e}", source_path.display()))?;
+        if metadata.is_dir() {
+            linked_files += link_dir_recursive(&source_path, &target_path)?;
+        } else if metadata.is_file() {
+            if fs::hard_link(&source_path, &target_path).is_err() {
+                fs::copy(&source_path, &target_path)
+                    .map_err(|e| format!("Failed to copy {}: {e}", source_path.display()))?;
+            }
+            linked_files += 1;
+        }
+    }
+    Ok(linked_files)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

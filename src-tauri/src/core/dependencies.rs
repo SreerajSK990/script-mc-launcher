@@ -409,6 +409,17 @@ pub async fn install_mod_with_dependencies(payload: InstallModPayload) -> Result
     let instance_id = payload.instance_id.clone();
     let plan = plan_mod_installation(vec![payload]).await?;
 
+    if !plan.items.is_empty() {
+        let snapshot_instance = instance_id.clone();
+        let label = format!(
+            "Before installing {}",
+            plan.items.last().map(|item| item.mod_metadata.name.clone()).unwrap_or_default()
+        );
+        tokio::task::spawn_blocking(move || crate::core::recovery::create_mod_snapshot(&snapshot_instance, &label))
+            .await
+            .map_err(|e| e.to_string())??;
+    }
+
     let mut requested_record = None;
     for item in plan.items {
         let is_requested = item.version_file.project_id == requested_project && item.mod_metadata.source == requested_source;

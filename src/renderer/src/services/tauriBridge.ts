@@ -269,7 +269,7 @@ export function createTauriBridge(): LauncherAPI {
       deleteShader: (instanceId: string, filename: string) => wrapOp(invoke('content_delete_shader', { instanceId, filename })),
       shaderEnvironment: (instanceId: string) => wrapOp(invoke('content_shader_environment', { instanceId })),
       openShaderFolder: (instanceId: string) => wrapOp(invoke('content_open_shader_folder', { instanceId })),
-      cancelTransfer: async (_instanceId: string) => ({ success: true, data: undefined }),
+      cancelTransfer: (instanceId: string) => wrapOp(invoke('content_cancel_transfer', { instanceId })),
       onTransfer: (callback) =>
         createSafeListener<import('@shared/types/operations').TransferProgress>(
           'content:transfer-progress',

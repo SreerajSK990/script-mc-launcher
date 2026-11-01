@@ -71,40 +71,134 @@ pub fn save_recovery_settings(
     Ok(())
 }
 
-pub fn list_backups(instance_id: &str) -> Result<Vec<BackupEntry>, String> {
-    let mut results = Vec::new();
-    let legacy_dir = paths::get_instance_path(instance_id).join("backups");
+const MOD_SNAPSHOT_PREFIX: &str = "mods-";
+const SNAPSHOT_METADATA_FILE: &str = "snapshot.json";
 
-    if legacy_dir.is_dir() {
-        if let Ok(entries) = fs::read_dir(&legacy_dir) {
-            for entry in entries.flatten() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if name.starts_with("saves-backup-") && name.ends_with(".zip") {
-                    let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-                    let created_at = entry
-                        .metadata()
-                        .ok()
-                        .and_then(|m| m.modified().ok())
-                        .map(|t| {
-                            let dt: chrono::DateTime<Utc> = t.into();
-                            dt.to_rfc3339()
-                        })
-                        .unwrap_or_else(|| Utc::now().to_rfc3339());
+fn snapshots_directory(instance_id: &str) -> PathBuf {
+    get_recovery_directory(instance_id).join("snapshots")
+}
 
-                    results.push(BackupEntry {
-                        id: name.clone(),
-                        kind: "saves".to_string(),
-                        created_at,
-                        label: "World saves backup".to_string(),
-                        size_bytes: size,
-                    });
-                }
+fn saves_backups_directory(instance_id: &str) -> PathBuf {
+    paths::get_instance_path(instance_id).join("backups")
+}
+
+fn directory_size(path: &Path) -> u64 {
+    let Ok(entries) = fs::read_dir(path) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .map(|entry| match entry.metadata() {
+            Ok(meta) if meta.is_dir() => directory_size(&entry.path()),
+            Ok(meta) => meta.len(),
+            Err(_) => 0,
+        })
+        .sum()
+}
+
+fn list_mod_snapshots(instance_id: &str) -> Vec<BackupEntry> {
+    let Ok(entries) = fs::read_dir(snapshots_directory(instance_id)) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let raw = fs::read_to_string(entry.path().join(SNAPSHOT_METADATA_FILE)).ok()?;
+            let mut snapshot: BackupEntry = serde_json::from_str(&raw).ok()?;
+            snapshot.size_bytes = directory_size(&entry.path());
+            Some(snapshot)
+        })
+        .collect()
+}
+
+fn list_saves_backups(instance_id: &str) -> Vec<BackupEntry> {
+    let Ok(entries) = fs::read_dir(saves_backups_directory(instance_id)) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !(name.starts_with("saves-backup-") && name.ends_with(".zip")) {
+                return None;
             }
-        }
-    }
+            let metadata = entry.metadata().ok()?;
+            let created_at = metadata
+                .modified()
+                .ok()
+                .map(|time| chrono::DateTime::<Utc>::from(time).to_rfc3339())
+                .unwrap_or_else(|| Utc::now().to_rfc3339());
+            Some(BackupEntry {
+                id: name,
+                kind: "saves".to_string(),
+                created_at,
+                label: "World saves backup".to_string(),
+                size_bytes: metadata.len(),
+            })
+        })
+        .collect()
+}
 
+pub fn list_backups(instance_id: &str) -> Result<Vec<BackupEntry>, String> {
+    let mut results = list_mod_snapshots(instance_id);
+    results.extend(list_saves_backups(instance_id));
     results.sort_by(|a, b| b.created_at.cmp(&a.created_at));
     Ok(results)
+}
+
+pub fn prune_backups(instance_id: &str) -> Result<(), String> {
+    let keep = get_recovery_settings(instance_id)?.keep_backups.max(1);
+    let mut snapshots = list_mod_snapshots(instance_id);
+    snapshots.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    for stale in snapshots.iter().skip(keep) {
+        let _ = fs::remove_dir_all(snapshots_directory(instance_id).join(&stale.id));
+    }
+    let mut saves = list_saves_backups(instance_id);
+    saves.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    for stale in saves.iter().skip(keep) {
+        let _ = fs::remove_file(saves_backups_directory(instance_id).join(&stale.id));
+    }
+    Ok(())
+}
+
+pub fn create_mod_snapshot(instance_id: &str, label: &str) -> Result<BackupEntry, String> {
+    let created_at = Utc::now();
+    let id = format!("{MOD_SNAPSHOT_PREFIX}{}", created_at.format("%Y%m%d-%H%M%S%.3f")).replace('.', "-");
+    let snapshot_dir = snapshots_directory(instance_id).join(&id);
+    let mods_dir = paths::get_instance_minecraft_path(instance_id).join("mods");
+    fs::create_dir_all(&snapshot_dir).map_err(|e| e.to_string())?;
+
+    let result = (|| -> Result<BackupEntry, String> {
+        if mods_dir.is_dir() {
+            crate::core::fs_util::link_dir_recursive(&mods_dir, &snapshot_dir.join("mods"))?;
+        } else {
+            fs::create_dir_all(snapshot_dir.join("mods")).map_err(|e| e.to_string())?;
+        }
+        let metadata_path = paths::get_instance_path(instance_id).join("mods.json");
+        if metadata_path.is_file() {
+            fs::copy(&metadata_path, snapshot_dir.join("mods.json")).map_err(|e| e.to_string())?;
+        }
+        let entry = BackupEntry {
+            id: id.clone(),
+            kind: "mods".to_string(),
+            created_at: created_at.to_rfc3339(),
+            label: label.to_string(),
+            size_bytes: directory_size(&snapshot_dir),
+        };
+        write_json_atomic(&snapshot_dir.join(SNAPSHOT_METADATA_FILE), &entry)?;
+        Ok(entry)
+    })();
+
+    match result {
+        Ok(entry) => {
+            prune_backups(instance_id)?;
+            Ok(entry)
+        }
+        Err(error) => {
+            let _ = fs::remove_dir_all(&snapshot_dir);
+            Err(error)
+        }
+    }
 }
 
 pub fn create_saves_backup(instance_id: &str) -> Result<BackupEntry, String> {
@@ -112,6 +206,7 @@ pub fn create_saves_backup(instance_id: &str) -> Result<BackupEntry, String> {
     let p = Path::new(&res.backup_path);
     let filename = p.file_name().and_then(|n| n.to_str()).unwrap_or("backup.zip").to_string();
     let size = p.metadata().map(|m| m.len()).unwrap_or(0);
+    prune_backups(instance_id)?;
 
     Ok(BackupEntry {
         id: filename,
@@ -120,6 +215,49 @@ pub fn create_saves_backup(instance_id: &str) -> Result<BackupEntry, String> {
         label: "World saves backup".to_string(),
         size_bytes: size,
     })
+}
+
+fn restore_mod_snapshot(instance_id: &str, snapshot_id: &str) -> Result<(), String> {
+    let snapshot_dir = snapshots_directory(instance_id).join(snapshot_id);
+    if !snapshot_dir.join(SNAPSHOT_METADATA_FILE).is_file() {
+        return Err(format!("Mod snapshot not found: {snapshot_id}"));
+    }
+    create_mod_snapshot(instance_id, "Before restoring an earlier mod setup")?;
+
+    let minecraft_dir = paths::get_instance_minecraft_path(instance_id);
+    let mods_dir = minecraft_dir.join("mods");
+    let stamp = Utc::now().format("%Y%m%d-%H%M%S").to_string();
+    let staging_dir = minecraft_dir.join(format!("mods.restoring-{stamp}"));
+    let previous_dir = minecraft_dir.join(format!("mods.replaced-{stamp}"));
+
+    if let Err(error) = crate::core::fs_util::link_dir_recursive(&snapshot_dir.join("mods"), &staging_dir) {
+        let _ = fs::remove_dir_all(&staging_dir);
+        return Err(error);
+    }
+    if mods_dir.exists() {
+        if let Err(error) = fs::rename(&mods_dir, &previous_dir) {
+            let _ = fs::remove_dir_all(&staging_dir);
+            return Err(format!("Could not move the current mods aside (is the game still open?): {error}"));
+        }
+    }
+    if let Err(error) = fs::rename(&staging_dir, &mods_dir) {
+        if previous_dir.exists() {
+            let _ = fs::rename(&previous_dir, &mods_dir);
+        }
+        let _ = fs::remove_dir_all(&staging_dir);
+        return Err(format!("Could not put the restored mods in place: {error}"));
+    }
+    let _ = fs::remove_dir_all(&previous_dir);
+
+    let metadata_target = paths::get_instance_path(instance_id).join("mods.json");
+    let snapshot_metadata = snapshot_dir.join("mods.json");
+    if snapshot_metadata.is_file() {
+        let bytes = fs::read(&snapshot_metadata).map_err(|e| e.to_string())?;
+        crate::core::fs_util::write_bytes_atomic(&metadata_target, &bytes)?;
+    } else {
+        let _ = fs::remove_file(metadata_target);
+    }
+    Ok(())
 }
 
 fn extract_backup_archive(archive_path: &Path, destination: &Path) -> Result<(), String> {
@@ -149,7 +287,10 @@ fn extract_backup_archive(archive_path: &Path, destination: &Path) -> Result<(),
 
 pub fn restore_backup(instance_id: &str, backup_id: &str) -> Result<(), String> {
     crate::core::safety::validate_file_name(backup_id)?;
-    let legacy_dir = paths::get_instance_path(instance_id).join("backups");
+    if backup_id.starts_with(MOD_SNAPSHOT_PREFIX) {
+        return restore_mod_snapshot(instance_id, backup_id);
+    }
+    let legacy_dir = saves_backups_directory(instance_id);
     let target_archive = legacy_dir.join(backup_id);
     if !target_archive.is_file() {
         return Err(format!("Backup archive not found: {backup_id}"));
@@ -157,6 +298,9 @@ pub fn restore_backup(instance_id: &str, backup_id: &str) -> Result<(), String> 
 
     let minecraft_dir = paths::get_instance_minecraft_path(instance_id);
     fs::create_dir_all(&minecraft_dir).map_err(|e| e.to_string())?;
+    if minecraft_dir.join("saves").is_dir() {
+        instances::backup_saves(instance_id)?;
+    }
     let stamp = Utc::now().format("%Y%m%d-%H%M%S").to_string();
     let staging_dir = minecraft_dir.join(format!("saves.restoring-{stamp}"));
     let saves_dir = minecraft_dir.join("saves");
@@ -181,6 +325,7 @@ pub fn restore_backup(instance_id: &str, backup_id: &str) -> Result<(), String> 
         let _ = fs::remove_dir_all(&staging_dir);
         return Err(format!("Could not put the restored worlds in place: {error}"));
     }
+    let _ = fs::remove_dir_all(&previous_dir);
 
     Ok(())
 }
@@ -199,6 +344,36 @@ mod tests {
             writer.write_all(content.as_bytes()).unwrap();
         }
         writer.finish().unwrap();
+    }
+
+    #[test]
+    fn mod_snapshots_restore_and_prune() {
+        let root = std::env::temp_dir().join(format!("script-launcher-snapshots-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        unsafe {
+            std::env::set_var("LAUNCHER_DATA_DIR", &root);
+        }
+        let instance_id = "snapshot-test";
+        let mods_dir = paths::get_instance_minecraft_path(instance_id).join("mods");
+        fs::create_dir_all(&mods_dir).unwrap();
+        fs::write(mods_dir.join("a.jar"), "a").unwrap();
+
+        let snapshot = create_mod_snapshot(instance_id, "Before test").unwrap();
+        fs::remove_file(mods_dir.join("a.jar")).unwrap();
+        fs::write(mods_dir.join("b.jar"), "b").unwrap();
+        restore_backup(instance_id, &snapshot.id).unwrap();
+        assert!(mods_dir.join("a.jar").is_file());
+        assert!(!mods_dir.join("b.jar").exists());
+        assert_eq!(list_backups(instance_id).unwrap().iter().filter(|b| b.kind == "mods").count(), 2);
+
+        save_recovery_settings(instance_id, &RecoverySettings { keep_backups: 1, backup_after_play: false }).unwrap();
+        prune_backups(instance_id).unwrap();
+        assert_eq!(list_backups(instance_id).unwrap().len(), 1);
+
+        unsafe {
+            std::env::remove_var("LAUNCHER_DATA_DIR");
+        }
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

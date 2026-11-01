@@ -123,3 +123,10 @@ pub async fn content_save_recovery_settings(
 pub async fn content_plan_mods(payloads: Vec<InstallModPayload>) -> Result<DependencyPlan, String> {
     crate::core::dependencies::plan_mod_installation(payloads).await
 }
+
+#[tauri::command]
+pub async fn content_cancel_transfer(instance_id: String) -> Result<(), String> {
+    safety::validate_identifier(&instance_id)?;
+    crate::core::transfers::request_cancel(&instance_id);
+    Ok(())
+}
