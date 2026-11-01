@@ -6,6 +6,7 @@ use crate::core::fs_util::{copy_dir_recursive, write_json_atomic};
 use crate::core::paths;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
@@ -296,6 +297,64 @@ pub fn parse_curseforge_instance(instance_dir: &Path) -> Option<DiscoveredExtern
     })
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModrinthAppProfile {
+    pub name: String,
+    pub game_version: Option<String>,
+    pub loader: Option<String>,
+    pub loader_version: Option<String>,
+}
+
+impl ModrinthAppProfile {
+    fn apply_to(&self, instance: &mut DiscoveredExternalInstance) {
+        instance.name = self.name.clone();
+        if let Some(version) = self.game_version.clone().filter(|v| !v.is_empty()) {
+            instance.minecraft_version = version;
+        }
+        if let Some(loader) = self.loader.as_deref().map(str::to_lowercase) {
+            if ["vanilla", "fabric", "forge", "neoforge", "quilt"].contains(&loader.as_str()) {
+                instance.loader_type = loader;
+            }
+        }
+        instance.loader_version = self.loader_version.clone().filter(|v| !v.is_empty() && instance.loader_type != "vanilla");
+    }
+}
+
+pub fn read_modrinth_app_metadata(database: &Path) -> HashMap<String, ModrinthAppProfile> {
+    let mut profiles = HashMap::new();
+    if !database.is_file() {
+        return profiles;
+    }
+    let uri = format!("file:{}?mode=ro", database.to_string_lossy().replace('\\', "/"));
+    let Ok(connection) = rusqlite::Connection::open_with_flags(
+        uri,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_URI,
+    ) else {
+        return profiles;
+    };
+    let query = "SELECT i.path, i.name, s.game_version, s.loader, s.loader_version                  FROM instances i LEFT JOIN instance_content_sets s ON s.id = i.applied_content_set_id";
+    let Ok(mut statement) = connection.prepare(query) else {
+        return profiles;
+    };
+    let rows = statement.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            ModrinthAppProfile {
+                name: row.get(1)?,
+                game_version: row.get(2)?,
+                loader: row.get(3)?,
+                loader_version: row.get(4)?,
+            },
+        ))
+    });
+    if let Ok(rows) = rows {
+        for (path, profile) in rows.flatten() {
+            profiles.insert(path, profile);
+        }
+    }
+    profiles
+}
+
 pub fn parse_modrinth_profile(profile_dir: &Path) -> Option<DiscoveredExternalInstance> {
     let folder_name = profile_dir
         .file_name()
@@ -508,12 +567,18 @@ pub fn scan_external_instances() -> Result<Vec<DiscoveredExternalInstance>, Stri
             }
         }
 
-        let modrinth_profiles = Path::new(ad).join("ModrinthApp").join("profiles");
+        let modrinth_app_dir = Path::new(ad).join("ModrinthApp");
+        let modrinth_profiles = modrinth_app_dir.join("profiles");
         if modrinth_profiles.is_dir() {
+            let app_metadata = read_modrinth_app_metadata(&modrinth_app_dir.join("app.db"));
             if let Ok(entries) = fs::read_dir(&modrinth_profiles) {
                 for entry in entries.flatten() {
                     if entry.path().is_dir() {
-                        if let Some(inst) = parse_modrinth_profile(&entry.path()) {
+                        if let Some(mut inst) = parse_modrinth_profile(&entry.path()) {
+                            let folder = entry.file_name().to_string_lossy().to_string();
+                            if let Some(metadata) = app_metadata.get(&folder) {
+                                metadata.apply_to(&mut inst);
+                            }
                             instances.push(inst);
                         }
                     }
@@ -853,4 +918,20 @@ where
     });
 
     Ok(new_instance)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[ignore]
+    fn reads_real_modrinth_app_database() {
+        let database = std::path::PathBuf::from(std::env::var("APPDATA").unwrap()).join("ModrinthApp").join("app.db");
+        let profiles = read_modrinth_app_metadata(&database);
+        for (path, profile) in profiles.iter().take(4) {
+            println!("{path} => {} | {:?} {:?} {:?}", profile.name, profile.game_version, profile.loader, profile.loader_version);
+        }
+        assert!(!profiles.is_empty());
+    }
 }
