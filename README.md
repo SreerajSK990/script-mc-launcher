@@ -1,6 +1,6 @@
 # Script Minecraft Launcher
 
-A fast, sleek, and modular Minecraft launcher built with **Electron**, **React**, **TypeScript**, and **Tailwind CSS**.
+A fast, sleek, and modular Minecraft launcher with a native **Rust** backend on **Tauri 2** and a **React**, **TypeScript** and **Tailwind CSS** interface.
 
 **Latest release: [v0.19.1](https://github.com/SreerajSK990/script-mc-launcher/releases/tag/v0.19.1)** — mod rollback snapshots, cancellable downloads, a working Discord Rich Presence connection, SRV-aware server status, session-refreshing skin uploads, and a faster screenshot gallery. Read the [release notes](release-notes/v0.19.1.md) for details.
 
@@ -70,7 +70,7 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
   - One-click copy image to system clipboard (paste directly into Discord, Slack, etc.).
   - Screenshot deletion and "Open Screenshots Folder" shortcuts.
 - **Microsoft OAuth & Local Dev Profiles:**
-  - Safe Microsoft Xbox Live login with tokens encrypted on disk via Electron's Windows DPAPI `safeStorage`.
+  - Safe Microsoft Xbox Live login with tokens encrypted on disk through Windows DPAPI, including automatic migration of accounts saved by the older Electron build.
   - Offline local player accounts for testing and dev environments.
 - **Direct External Launcher Cloning & Importing:**
   - One-click import and deep cloning from existing launchers installed on your machine: **Prism Launcher**, **Modrinth App**, **CurseForge App**, **Official Vanilla Launcher**, and **MultiMC**.
@@ -112,20 +112,24 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 
 ## Tech Stack
 
-- **Desktop Framework:** Electron + Electron-Vite
-- **Frontend:** React 19, Tailwind CSS, Lucide Icons
-- **Language:** TypeScript (ESM)
+- **Desktop Framework:** Tauri 2 with a Rust backend (Tokio, Reqwest)
+- **Frontend:** React 19, Tailwind CSS, Lucide Icons, built with Vite through Electron-Vite's renderer pipeline
+- **Languages:** Rust (backend) and TypeScript (ESM, interface)
 - **Metadata Engines:** Mojang Piston API + Prism Meta API (`meta.prismlauncher.org`)
 - **Mod Providers:** Modrinth API v2 + CurseForge API v1
-- **Encryption:** Electron `safeStorage` (Windows DPAPI)
+- **Encryption:** Windows DPAPI (`CryptProtectData`) for stored tokens
 
 ---
 
 ## Repository Structure
 
 ```
+├── src-tauri/                   # Shipping Rust backend (Tauri 2)
+│   ├── src/commands/            # Tauri commands exposed to the interface
+│   ├── src/core/                # Launch pipeline, loaders, Java, mods, modpacks, recovery, auth, updater
+│   └── tauri.conf.json          # Window, security policy, asset protocol and bundle settings
 ├── src/
-│   ├── main/                    # Electron Main Process (Node.js)
+│   ├── main/                    # Legacy Electron main process kept as a reference implementation
 │   │   ├── index.ts             # App lifecycle and window creation
 │   │   ├── core/                # Core launcher business logic
 │   │   │   ├── auth/            # OAuth window, Xbox Live, tokens, encrypted storage
@@ -141,18 +145,19 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 │   │   ├── services/            # Instances, auth, launch, paths, operation guards, recovery
 │   │   ├── ipc/                 # Typed IPC handlers (bridge to renderer)
 │   │   └── utils/               # Atomic filesystem writers, batch downloader, zip extract
-│   ├── renderer/                # Electron Renderer Process (React UI)
+│   ├── renderer/                # React interface (src/services/tauriBridge.ts connects it to Rust)
 │   │   ├── src/
 │   │   │   ├── components/      # TitleBar, Sidebar, Modals, Cards, Buttons
 │   │   │   ├── pages/           # Dashboard, Instances, InstanceDetail, ModBrowser, Logs, Settings
 │   │   │   └── App.tsx          # Root routing and state management
-│   ├── preload/                 # Secure contextBridge API exposing window.launcherAPI
+│   ├── preload/                 # Legacy Electron contextBridge for window.launcherAPI
 │   └── shared/                  # Shared types (instances, auth, launch, mods, externalLauncher, ipc)
 ├── scripts/
 │   ├── test-services.mjs        # Launcher service and provider integration tests
 │   ├── test-content.mjs         # Isolated dependency, rollback, shader, and backup tests
 │   ├── test-shaders-live.mjs     # Optional real shader and loader download checks
-│   └── measure-startup.mjs      # Production startup samples in temporary profiles
+│   ├── measure-startup.mjs      # Production startup samples in temporary profiles
+│   └── release-tauri.mjs        # Builds the installer, portable exe and latest.yml into dist/
 ├── release-notes/              # Versioned release notes and download guidance
 ├── package.json
 └── tsconfig.json
@@ -166,6 +171,8 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 
 - [Node.js](https://nodejs.org/) (v20.19+ or v22.12+; Node 22 LTS recommended)
 - npm or pnpm
+- [Rust](https://rustup.rs/) 1.90 or newer with the MSVC toolchain on Windows
+- Microsoft Edge WebView2 Runtime (preinstalled on Windows 10 and 11)
 
 ### Quick Setup
 
@@ -182,13 +189,15 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 
 3. **Start in development mode:**
    ```bash
-   npm run dev
+   npm run tauri:dev
    ```
+   This starts the interface dev server on port 5173 and opens the Rust app against it.
 
 4. **Run the automated test suite (in isolated sandbox):**
    ```bash
    npm test
    ```
+   This runs the TypeScript service suites and the Rust unit tests. Network, Discord and real-launch checks are ignored Rust tests you can run on demand, for example `cargo test --manifest-path src-tauri/Cargo.toml vanilla_launch_smoke_test -- --ignored`.
 
 5. **Build production bundle:**
    ```bash
@@ -197,9 +206,9 @@ Most Minecraft launchers out there either look like they're stuck in 2010 with c
 
 6. **Package the Windows installer and portable executable:**
    ```bash
-   npm run package
+   npm run release:tauri
    ```
-   Windows builds are written to `dist/`: `Script-Minecraft-Launcher-Setup-<version>.exe`, its `.blockmap`, `Script.Minecraft.Launcher.<version>.exe`, and `latest.yml` for the auto-updater.
+   Windows builds are written to `dist/`: `Script-Minecraft-Launcher-Setup-<version>.exe`, `Script.Minecraft.Launcher.<version>.exe`, and `latest.yml`, whose SHA-512 the in-app updater verifies before installing.
 
 Before committing release changes, run `npm run typecheck`, `npm test`, and `npm run build` in that order.
 
@@ -225,12 +234,12 @@ npm run test:shaders:live
 - [x] **Phase 2:** Microsoft OAuth & Encrypted Auth Storage
 - [x] **Phase 3:** Mojang Metadata, Assets, Libraries & Process Spawning
 - [x] **Phase 4 & 5:** Prism Meta Integration & Mod Loaders (Fabric, Quilt, Forge, NeoForge)
-- [x] **Phase 6:** Automatic Mojang Java Runtime Management (Java 8, 16, 17, 21)
+- [x] **Phase 6:** Automatic Mojang Java Runtime Management (Java 8, 16, 17, 21, 25)
 - [x] **Phase 7:** Integrated Mod Browser (Modrinth + CurseForge) & Mod Manager
 - [x] **Instance Detail & Settings View:** Per-instance RAM allocation, JVM argument flags, custom Java paths, screenshot gallery
 - [x] **Modpack System:** Import `.mrpack` and `.zip` modpacks locally + online modpack browser
 - [x] **External Launcher Cloning:** Direct import and cloning from Prism, Modrinth, CurseForge, and Vanilla launchers
-- [x] **Production Packaging:** Custom launcher icon, Windows NSIS `.exe` installer, and standalone portable executable via `electron-builder`
+- [x] **Production Packaging:** Custom launcher icon, Windows NSIS `.exe` installer, and standalone portable executable built with Tauri
 - [x] **Auto-Updater:** Differential background updates from GitHub Releases with restart prompts and manual checks
 - [x] **Silent Background Auto-Updater:** Automated 15-minute background update checks and one-click silent installer execution
 - [x] **Multiplayer Server Management:** Direct `servers.dat` management, real-time server ping, and one-click quick join
@@ -243,6 +252,7 @@ npm run test:shaders:live
 - [x] **Resource Pack (Texture Pack) Browser & Manager:** Modrinth & CurseForge search, resolution filters, in-app management, drag-and-drop installer, and pack metadata extraction
 - [x] **Batch Mod Update Engine:** SHA-512 batch hash lookup, per-mod update badges, one-click individual update, and batch "Update All" with live progress
 - [x] **Enhanced Version Listing & Web Download Engine:** External browser download for restricted CurseForge files, channel filters (Release/Beta/Alpha), loader badges, changelog accordions, and modpack project ID self-healing
+- [x] **Native Rust Backend:** Tauri 2 migration with security hardening, mod dependency resolution, mod rollback snapshots, verified updates, and live smoke tests
 - [x] **Modal Portaling Architecture & UI Polish:** Top-level React portals for zero CSS transform modal flickering, dynamic 3-dot action menus with outside-click dismissal, collapsible Jump In section, and playtime-based quick-join sorting
 
 ---

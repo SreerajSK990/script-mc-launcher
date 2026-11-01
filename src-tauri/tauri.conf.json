@@ -5,7 +5,8 @@
   "identifier": "com.sreeraj.scriptlauncher",
   "build": {
     "frontendDist": "../out/renderer",
-    "devUrl": "http://localhost:5173"
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev:renderer"
   },
   "app": {
     "windows": [

@@ -33,13 +33,6 @@ pub fn reserve_instance(instance_id: &str, description: &str) -> Result<Instance
     })
 }
 
-pub fn active_operation(instance_id: &str) -> Option<String> {
-    active_operations()
-        .lock()
-        .ok()
-        .and_then(|operations| operations.get(instance_id).cloned())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -49,9 +42,7 @@ mod tests {
         let guard = reserve_instance("ops-test", "Minecraft is running").unwrap();
         let error = reserve_instance("ops-test", "Deleting the instance").unwrap_err();
         assert!(error.contains("Minecraft is running"));
-        assert_eq!(active_operation("ops-test").as_deref(), Some("Minecraft is running"));
         drop(guard);
-        assert!(active_operation("ops-test").is_none());
         assert!(reserve_instance("ops-test", "Deleting the instance").is_ok());
     }
 }

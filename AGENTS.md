@@ -6,7 +6,7 @@ Official guidelines, architecture standards, coding conventions, Git workflow, R
 
 ## 1. Project Overview & Philosophy
 
-Script Minecraft Launcher is a modern, high-performance, isolated Minecraft launcher built with **Electron**, **React 19**, **TypeScript (ESM)**, and **Tailwind CSS**.
+Script Minecraft Launcher is a modern, high-performance, isolated Minecraft launcher. The shipping desktop app is a **Tauri 2** shell with a **Rust** backend (`src-tauri/`) and a **React 19**, **TypeScript (ESM)** and **Tailwind CSS** renderer. The original **Electron** main process (`src/main/`, `src/preload/`) is kept as a reference implementation and is not shipped.
 
 ### Core Tenets
 1. **Zero Bloat & Peak Performance:** Ultra-fast startup, low RAM footprint, native OS responsiveness.
@@ -19,7 +19,33 @@ Script Minecraft Launcher is a modern, high-performance, isolated Minecraft laun
 
 ## 2. Architecture & Directory Structure
 
-The project follows a strict three-tier Electron architecture: **Main Process**, **Preload Bridge**, and **Renderer Process**, backed by a shared type and constant system.
+The shipping app is a Tauri 2 application: a **Rust backend** (`src-tauri/`) exposes Tauri commands and events, the **renderer bridge** (`src/renderer/src/services/tauriBridge.ts`) maps them onto the typed `window.launcherAPI` contract from `src/shared/types/ipc.ts`, and the **React renderer** consumes that contract. The Electron tree below is the legacy reference implementation of the same contract.
+
+### Rust Backend (`src-tauri/`)
+
+```
+src-tauri/
+├── src/
+│   ├── lib.rs                   # Builder, plugins (dialog, single-instance), command registry
+│   ├── commands/                # Thin #[tauri::command] wrappers that validate input and offload blocking work
+│   └── core/
+│       ├── net.rs               # Shared HTTP client, user agent, retry helpers
+│       ├── download.rs          # Streaming downloader with SHA-1/SHA-512 verification, .part files, progress, cancel
+│       ├── safety.rs            # Identifier, file-name and path-containment validation
+│       ├── fs_util.rs           # Atomic writes, recursive copy and hard-link snapshots
+│       ├── secrets.rs           # DPAPI token sealing and Electron safeStorage migration
+│       ├── operations.rs        # Per-instance operation reservations
+│       ├── minecraft.rs         # Launch pipeline: libraries, natives, assets, arguments, process supervision
+│       ├── loaders.rs           # Fabric, Quilt, Forge and NeoForge via Prism meta components
+│       ├── dependencies.rs      # Mod dependency resolution and pre-launch checks
+│       ├── mods.rs              # Modrinth and CurseForge clients, installed mod records, update checks
+│       ├── recovery.rs          # World backups, mod snapshots, pruning and restore
+│       ├── transfers.rs         # Content download progress events and cancellation
+│       └── ...                  # auth, java, meta, modpacks, cloner, servers, skins, discord, updater
+└── tauri.conf.json              # Window, CSP, asset protocol scope, bundle settings
+```
+
+### Legacy Electron Reference
 
 ```
 script-mc-launcher/
@@ -110,9 +136,10 @@ script-mc-launcher/
 ## 3. Data Directories & Sandboxing
 
 All user data is stored strictly in the launcher's root data directory:
-- **Windows:** `%APPDATA%\script-launcher\`
-- **Linux:** `~/.config/script-launcher/`
-- **macOS:** `~/Library/Application Support/script-launcher/`
+- **Windows:** `%APPDATA%\.scriptlauncher\`
+- **Linux:** `~/.scriptlauncher/`
+- **macOS:** `~/Library/Application Support/.scriptlauncher/`
+- The `LAUNCHER_DATA_DIR` environment variable overrides the location (used by isolated tests).
 
 ### Subdirectory Structure
 ```
@@ -160,8 +187,10 @@ All user data is stored strictly in the launcher's root data directory:
 - Maintain strict null checks (`strict: true` in `tsconfig.json`). Safely handle `null` and `undefined` using optional chaining (`?.`) and nullish coalescing (`??`).
 
 ### Rule 3: Process Isolation & Security
-- **Main Process:** Sole owner of filesystem, network requests, child processes, and OS APIs. Never pass raw Node.js modules (`fs`, `child_process`, `net`) to the renderer.
-- **Preload Bridge:** Use `contextBridge.exposeInMainWorld('launcherAPI', ...)` exclusively. Keep preload strictly typed, safe, and minimal.
+- **Rust Backend:** Sole owner of filesystem, network requests, child processes, and OS APIs. Every command validates instance IDs with `safety::validate_identifier` and file names with `safety::validate_file_name`, and joins archive or manifest paths only through `safety::safe_join`.
+- **Blocking Work:** Commands that touch large folders or archives run inside `tauri::async_runtime::spawn_blocking` so the window never freezes.
+- **Bridge:** `tauriBridge.ts` is the only place that calls `invoke` or `listen`. It converts rejected command strings into `Error` objects.
+- **Content Security Policy:** `tauri.conf.json` enforces a strict CSP. Remote HTML such as mod descriptions must be sanitized with DOMPurify before rendering.
 - **Renderer Process:** Runs with web sandboxing (`contextIsolation: true`, `nodeIntegration: false`). The renderer only accesses functionality through `window.launcherAPI.<domain>.<method>()`.
 
 ### Rule 4: Exception Handling & App Stability
@@ -200,7 +229,9 @@ All user data is stored strictly in the launcher's root data directory:
   - `< 1.17` → `jre-legacy` (Java 8)
   - `1.17` → `java-runtime-alpha` (Java 16)
   - `1.18` to `1.20.4` → `java-runtime-gamma` (Java 17)
-  - `>= 1.20.5` → `java-runtime-delta` (Java 21)
+  - `1.20.5` to `1.21.x` → `java-runtime-delta` (Java 21)
+  - `26.x` and newer → `java-runtime-epsilon` (Java 25)
+- The version JSON's `javaVersion.component` always wins when present, and a runtime only counts as installed once its `.script-launcher-complete` marker exists.
 
 ---
 
@@ -219,7 +250,13 @@ npm test
 npm run build
 ```
 
-Every command must succeed with 0 errors before creating a commit.
+`npm test` runs the TypeScript service suites and `cargo test` for the Rust backend. Every command must succeed with 0 errors before creating a commit.
+
+Live checks that touch the network, Discord or a real Minecraft launch are `#[ignore]` tests in the Rust crate. Run them explicitly when changing those areas, for example:
+
+```bash
+cargo test --manifest-path src-tauri/Cargo.toml vanilla_launch_smoke_test -- --ignored
+```
 
 ### Commit Message Conventions
 Use clear, concise, imperative conventional commit messages:
@@ -255,14 +292,15 @@ After every successful verification pipeline and build, release and push changes
 1. **Version Bump:** Update the version string according to the rules above in:
    - `package.json` (`"version": "X.Y.Z"`)
    - `src/shared/constants/defaults.ts` (`VERSION: 'X.Y.Z'`)
+   - `src-tauri/Cargo.toml` (`version = "X.Y.Z"`)
+   - `src-tauri/tauri.conf.json` (`"version": "X.Y.Z"`)
 2. **Build Production Executables:**
    ```bash
-   npm run package
+   npm run release:tauri
    ```
-   This executes `electron-vite build` followed by `electron-builder`, outputting artifacts into `dist/`.
+   This checks that all four versions match, builds the renderer, runs `tauri build` for the NSIS installer, and writes the release set into `dist/` with a fresh `latest.yml` containing the installer's SHA-512. The in-app updater refuses any installer whose checksum does not match `latest.yml`.
 3. **Verify Build Artifacts in `dist/`:**
    - Setup Installer: `Script-Minecraft-Launcher-Setup-X.Y.Z.exe`
-   - Blockmap file: `Script-Minecraft-Launcher-Setup-X.Y.Z.exe.blockmap`
    - Portable binary: `Script.Minecraft.Launcher.X.Y.Z.exe`
    - Auto-updater manifest: `latest.yml`
 4. **Git Commit & Push:**
@@ -276,7 +314,6 @@ After every successful verification pipeline and build, release and push changes
    ```bash
    gh release create vX.Y.Z \
      dist/Script-Minecraft-Launcher-Setup-X.Y.Z.exe \
-     dist/Script-Minecraft-Launcher-Setup-X.Y.Z.exe.blockmap \
      dist/Script.Minecraft.Launcher.X.Y.Z.exe \
      dist/latest.yml \
      --title "Script Minecraft Launcher vX.Y.Z" \

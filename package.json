@@ -10,12 +10,15 @@
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "test": "tsx scripts/test-services.mjs && tsx scripts/test-content.mjs",
+    "test": "tsx scripts/test-services.mjs && tsx scripts/test-content.mjs && npm run test:rust",
     "measure:startup": "node scripts/measure-startup.mjs",
     "test:shaders:live": "tsx scripts/test-shaders-live.mjs",
     "package": "npm run build && electron-builder",
     "preview": "electron-vite preview",
-    "release:tauri": "node scripts/release-tauri.mjs"
+    "release:tauri": "node scripts/release-tauri.mjs",
+    "dev:renderer": "electron-vite dev --rendererOnly",
+    "tauri:dev": "tauri dev",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.0",
