@@ -124,9 +124,104 @@ pub fn read_embedded_metadata(jar_path: &Path) -> Option<EmbeddedModMetadata> {
     None
 }
 
+const KNOWN_CONFLICTS: [(&str, &str, &str); 6] = [
+    ("optifine", "sodium", "OptiFine and Sodium both replace the renderer and crash together."),
+    ("optifine", "embeddium", "OptiFine and Embeddium both replace the renderer and crash together."),
+    ("optifine", "rubidium", "OptiFine and Rubidium both replace the renderer and crash together."),
+    ("sodium", "embeddium", "Embeddium is a Sodium port; install only one of them."),
+    ("sodium", "rubidium", "Rubidium is a Sodium port; install only one of them."),
+    ("embeddium", "rubidium", "Embeddium replaces Rubidium; install only one of them."),
+];
+
+fn identify_mod(jar_path: &Path) -> Option<String> {
+    if let Some(metadata) = read_embedded_metadata(jar_path) {
+        return Some(metadata.id.to_lowercase());
+    }
+    let file_name = jar_path.file_name()?.to_string_lossy().to_lowercase();
+    file_name.contains("optifine").then(|| "optifine".to_string())
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+struct CachedIdentity {
+    size: u64,
+    modified: u64,
+    id: Option<String>,
+}
+
+const IDENTITY_CACHE_FILE: &str = ".mod-identity-cache.json";
+
+pub fn find_mod_conflicts(mods_dir: &Path) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(mods_dir) else {
+        return Vec::new();
+    };
+    let cache_path = mods_dir.join(IDENTITY_CACHE_FILE);
+    let previous: std::collections::HashMap<String, CachedIdentity> = std::fs::read_to_string(&cache_path)
+        .ok()
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default();
+    let mut current: std::collections::HashMap<String, CachedIdentity> = std::collections::HashMap::new();
+    let mut by_id: std::collections::BTreeMap<String, Vec<String>> = std::collections::BTreeMap::new();
+    for entry in entries.flatten() {
+        let file_name = entry.file_name().to_string_lossy().to_string();
+        if !file_name.ends_with(".jar") {
+            continue;
+        }
+        let Ok(metadata) = entry.metadata() else {
+            continue;
+        };
+        let size = metadata.len();
+        let modified = metadata
+            .modified()
+            .ok()
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0);
+        let identity = match previous.get(&file_name) {
+            Some(cached) if cached.size == size && cached.modified == modified => cached.clone(),
+            _ => CachedIdentity {
+                size,
+                modified,
+                id: identify_mod(&entry.path()),
+            },
+        };
+        if let Some(id) = identity.id.clone() {
+            by_id.entry(id).or_default().push(file_name.clone());
+        }
+        current.insert(file_name, identity);
+    }
+    if current != previous {
+        let _ = crate::core::fs_util::write_json_atomic(&cache_path, &current);
+    }
+
+    let mut warnings = Vec::new();
+    for (id, files) in &by_id {
+        if files.len() > 1 {
+            warnings.push(format!("Duplicate mod \"{id}\" found in: {}. Keep only one copy.", files.join(", ")));
+        }
+    }
+    for (first, second, reason) in KNOWN_CONFLICTS {
+        if by_id.contains_key(first) && by_id.contains_key(second) {
+            warnings.push(format!("{first} and {second} are installed together. {reason}"));
+        }
+    }
+    warnings
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore]
+    fn scans_real_mod_folder_for_conflicts() {
+        let directory = std::path::PathBuf::from(std::env::var("MOD_JAR_DIR").unwrap());
+        let started = std::time::Instant::now();
+        let warnings = find_mod_conflicts(&directory);
+        println!("{} warnings in {:?}", warnings.len(), started.elapsed());
+        for warning in warnings {
+            println!("{warning}");
+        }
+    }
 
     #[test]
     #[ignore]

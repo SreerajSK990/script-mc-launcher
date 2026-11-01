@@ -969,6 +969,9 @@ pub async fn launch_minecraft(
     let instance = instances::get_instance_by_id(&instance_id)?
         .ok_or_else(|| format!("Instance {instance_id} not found"))?;
 
+    let conflict_dir = paths::get_instance_minecraft_path(&instance_id).join("mods");
+    let conflict_scan =
+        tokio::task::spawn_blocking(move || crate::core::mod_metadata::find_mod_conflicts(&conflict_dir));
     if let Ok(installed_mods) = crate::core::mods::list_installed_mods(&instance_id) {
         for issue in crate::core::dependencies::find_managed_dependency_issues(&installed_mods) {
             emit_log(&format!("Mod requirement warning: {issue}"), "warn");
@@ -1034,6 +1037,12 @@ pub async fn launch_minecraft(
     )
     .await?;
     emit_log("All game assets verified successfully", "info");
+
+    if let Ok(conflicts) = conflict_scan.await {
+        for warning in conflicts {
+            emit_log(&format!("Mod conflict warning: {warning}"), "warn");
+        }
+    }
 
     emit_progress("BUILDING_ARGUMENTS", "Constructing JVM parameters...");
     let path_sep = if cfg!(target_os = "windows") { ";" } else { ":" };

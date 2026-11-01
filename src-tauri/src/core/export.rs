@@ -241,7 +241,11 @@ pub async fn export_instance_as_mrpack(instance_id: &str, output_path: &str) -> 
         zip.write_all(serde_json::to_string_pretty(&index).map_err(|e| e.to_string())?.as_bytes())
             .map_err(|e| e.to_string())?;
 
-        let skip = |archive_name: &str| linked_paths.contains(archive_name) || archive_name.ends_with(".disabled");
+        let skip = |archive_name: &str| {
+            linked_paths.contains(archive_name)
+                || archive_name.ends_with(".disabled")
+                || archive_name.ends_with(".mod-identity-cache.json")
+        };
         let mut bundled = 0;
         for folder in OVERRIDE_FOLDERS {
             let source = minecraft_dir.join(folder);

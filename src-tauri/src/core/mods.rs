@@ -1156,11 +1156,19 @@ pub async fn install_mod_to_instance(payload: InstallModPayload) -> Result<Insta
         }
     }
 
+    let display_name = if payload.mod_metadata.name == payload.version_file.name {
+        crate::core::mod_metadata::read_embedded_metadata(&target_dest)
+            .map(|metadata| metadata.name)
+            .unwrap_or_else(|| payload.mod_metadata.name.clone())
+    } else {
+        payload.mod_metadata.name.clone()
+    };
+
     let new_record = InstalledModRecord {
         version_id: Some(payload.version_file.id.clone()),
         dependencies: payload.version_file.dependencies.clone(),
         id: payload.mod_metadata.id.clone(),
-        name: payload.mod_metadata.name.clone(),
+        name: display_name,
         version: payload.version_file.version_number.clone(),
         filename: filename.clone(),
         source: payload.mod_metadata.source.clone(),
