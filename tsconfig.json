@@ -3,7 +3,11 @@
     "target": "ESNext",
     "useDefineForClassFields": true,
     "module": "ESNext",
-    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ESNext",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
@@ -17,13 +21,17 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@main/*": ["src/main/*"],
-      "@shared/*": ["src/shared/*"],
-      "@renderer/*": ["src/renderer/src/*"]
+      "@shared/*": [
+        "src/shared/*"
+      ],
+      "@renderer/*": [
+        "src/renderer/src/*"
+      ]
     }
   },
   "references": [
-    { "path": "./tsconfig.node.json" },
-    { "path": "./tsconfig.web.json" }
+    {
+      "path": "./tsconfig.web.json"
+    }
   ]
 }
