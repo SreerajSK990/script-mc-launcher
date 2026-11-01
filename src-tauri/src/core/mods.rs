@@ -1,6 +1,7 @@
 use crate::core::download::{self, Checksum};
 use crate::core::fs_util::write_json_atomic;
 use crate::core::paths;
+use crate::core::safety;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -169,6 +170,17 @@ pub struct InstallModPayload {
     pub version_file: ModVersionFile,
     pub mod_metadata: InstallModMetadata,
     pub old_filename: Option<String>,
+}
+
+impl InstallModPayload {
+    pub fn validate(&self) -> Result<(), String> {
+        safety::validate_identifier(&self.instance_id)?;
+        safety::validate_file_name(&self.version_file.filename)?;
+        if let Some(old_filename) = self.old_filename.as_deref() {
+            safety::validate_file_name(old_filename)?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -981,6 +993,7 @@ pub fn list_installed_mods(instance_id: &str) -> Result<Vec<InstalledModRecord>,
 }
 
 pub async fn install_mod_to_instance(payload: InstallModPayload) -> Result<InstalledModRecord, String> {
+    payload.validate()?;
     let mods_dir = get_mods_directory(&payload.instance_id);
     if !mods_dir.exists() {
         fs::create_dir_all(&mods_dir).map_err(|e| e.to_string())?;

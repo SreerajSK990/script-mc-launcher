@@ -483,6 +483,7 @@ pub fn add_instance_server(
     name: &str,
     ip: &str,
 ) -> Result<Vec<MinecraftServerEntry>, String> {
+    crate::core::safety::validate_identifier(instance_id)?;
     let instance = instances::get_instance_by_id(instance_id)?
         .ok_or_else(|| format!("Instance not found: {instance_id}"))?;
 
@@ -524,6 +525,7 @@ pub fn remove_instance_server(
     instance_id: &str,
     server_ip: &str,
 ) -> Result<Vec<MinecraftServerEntry>, String> {
+    crate::core::safety::validate_identifier(instance_id)?;
     let instance = instances::get_instance_by_id(instance_id)?
         .ok_or_else(|| format!("Instance not found: {instance_id}"))?;
 

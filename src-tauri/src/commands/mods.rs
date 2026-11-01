@@ -1,3 +1,4 @@
+use crate::core::safety;
 use crate::core::mods::{
     self, InstallDroppedModsResult, InstallModPayload, InstalledModRecord, ModDetail,
     ModSearchParams, ModSearchResult, ModUpdateInfo, ModUpdateResult, ModVersionFile,
@@ -38,6 +39,7 @@ pub async fn mods_install(payload: InstallModPayload) -> Result<InstalledModReco
 pub async fn mods_list_installed(
     instance_id: String,
 ) -> Result<Vec<InstalledModRecord>, String> {
+    safety::validate_identifier(&instance_id)?;
     mods::list_installed_mods(&instance_id)
 }
 
@@ -47,6 +49,8 @@ pub async fn mods_toggle_installed(
     filename: String,
     enable: bool,
 ) -> Result<bool, String> {
+    safety::validate_identifier(&instance_id)?;
+    safety::validate_file_name(&filename)?;
     mods::toggle_mod_enabled(&instance_id, &filename, enable)
 }
 
@@ -55,6 +59,8 @@ pub async fn mods_delete_installed(
     instance_id: String,
     filename: String,
 ) -> Result<bool, String> {
+    safety::validate_identifier(&instance_id)?;
+    safety::validate_file_name(&filename)?;
     mods::delete_installed_mod(&instance_id, &filename)
 }
 
@@ -73,6 +79,7 @@ pub async fn mods_check_updates(
     instance_id: String,
     _force_refresh: Option<bool>,
 ) -> Result<Vec<ModUpdateInfo>, String> {
+    safety::validate_identifier(&instance_id)?;
     mods::check_mod_updates(&instance_id).await
 }
 
@@ -81,6 +88,7 @@ pub async fn mods_update_all(
     instance_id: String,
     updates: Vec<ModUpdateInfo>,
 ) -> Result<ModUpdateResult, String> {
+    safety::validate_identifier(&instance_id)?;
     mods::update_all_mods(&instance_id, &updates).await
 }
 
@@ -89,5 +97,6 @@ pub async fn mods_install_dropped(
     instance_id: String,
     file_paths: Vec<String>,
 ) -> Result<InstallDroppedModsResult, String> {
+    safety::validate_identifier(&instance_id)?;
     mods::install_dropped_mod_files(&instance_id, &file_paths)
 }

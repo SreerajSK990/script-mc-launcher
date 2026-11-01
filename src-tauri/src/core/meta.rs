@@ -124,6 +124,30 @@ pub struct JavaVersionInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct LoggingFileInfo {
+    pub id: String,
+    pub sha1: String,
+    pub size: u64,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoggingClientInfo {
+    pub argument: String,
+    pub file: LoggingFileInfo,
+    #[serde(rename = "type")]
+    pub logging_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoggingInfo {
+    pub client: Option<LoggingClientInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VersionPackage {
     pub id: String,
     pub main_class: String,
@@ -137,6 +161,9 @@ pub struct VersionPackage {
     pub release_time: Option<String>,
     pub time: Option<String>,
     pub java_version: Option<JavaVersionInfo>,
+    #[serde(rename = "type")]
+    pub version_type: Option<String>,
+    pub logging: Option<LoggingInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -210,7 +237,7 @@ fn get_mojang_manifest_cache_path() -> PathBuf {
 fn get_version_package_cache_path(version_id: &str) -> PathBuf {
     paths::get_meta_cache_directory()
         .join("mojang")
-        .join("versions")
+        .join("versions-v2")
         .join(format!("{version_id}.json"))
 }
 
@@ -285,8 +312,10 @@ pub async fn fetch_version_package(version_id: &str) -> Result<VersionPackage, S
         return Err(format!("Failed to fetch version package: HTTP {}", resp.status()));
     }
 
-    let package = resp.json::<VersionPackage>().await.map_err(|e| e.to_string())?;
-    let _ = write_json_atomic(&cache_path, &package);
+    let raw_package = resp.text().await.map_err(|e| e.to_string())?;
+    let package = serde_json::from_str::<VersionPackage>(&raw_package)
+        .map_err(|e| format!("Invalid version metadata for {version_id}: {e}"))?;
+    let _ = crate::core::fs_util::write_bytes_atomic(&cache_path, raw_package.as_bytes());
     Ok(package)
 }
 

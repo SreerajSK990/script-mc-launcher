@@ -1,3 +1,4 @@
+use crate::core::safety;
 use crate::core::servers::{
     self, AddServerPayload, MinecraftServerEntry, QuickPlayTarget, RemoveServerPayload,
     ServerPingStatus,
@@ -10,6 +11,7 @@ pub async fn servers_list_all() -> Result<Vec<QuickPlayTarget>, String> {
 
 #[tauri::command]
 pub async fn servers_list_instance(instance_id: String) -> Result<Vec<MinecraftServerEntry>, String> {
+    safety::validate_identifier(&instance_id)?;
     servers::list_instance_servers(&instance_id)
 }
 

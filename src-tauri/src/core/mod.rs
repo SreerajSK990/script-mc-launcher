@@ -18,6 +18,7 @@ pub mod recovery;
 pub mod resourcepacks;
 pub mod safety;
 pub mod screenshots;
+pub mod secrets;
 pub mod servers;
 pub mod shaders;
 pub mod skins;

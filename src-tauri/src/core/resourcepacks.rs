@@ -222,6 +222,11 @@ pub fn list_installed_resource_packs(
 pub async fn install_resource_pack_to_instance(
     payload: InstallModPayload,
 ) -> Result<InstalledResourcePackRecord, String> {
+    crate::core::safety::validate_identifier(&payload.instance_id)?;
+    crate::core::safety::validate_file_name(&payload.version_file.filename)?;
+    if let Some(old_filename) = payload.old_filename.as_deref() {
+        crate::core::safety::validate_file_name(old_filename)?;
+    }
     let packs_dir = get_resource_packs_directory(&payload.instance_id);
     if !packs_dir.exists() {
         fs::create_dir_all(&packs_dir).map_err(|e| e.to_string())?;

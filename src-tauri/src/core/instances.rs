@@ -401,7 +401,7 @@ pub fn repair_instance(instance_id: &str) -> Result<OperationStatus, String> {
     }
     let meta_file = paths::get_meta_cache_directory()
         .join("mojang")
-        .join("versions")
+        .join("versions-v2")
         .join(format!("{}.json", instance.minecraft_version));
     if meta_file.exists() {
         let _ = fs::remove_file(&meta_file);

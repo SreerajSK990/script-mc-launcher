@@ -1,3 +1,4 @@
+use crate::core::safety;
 use crate::core::skins::{
     self, ApplyCapeResult, ApplySkinResult, CapeEntry, CapesListResponse, PlayerSkinSearchResult,
     SaveSkinParams, SkinEntry, SkinsListResponse,
@@ -15,6 +16,7 @@ pub async fn skins_get_active() -> Result<Option<String>, String> {
 
 #[tauri::command]
 pub async fn skins_apply(skin_id: String) -> Result<ApplySkinResult, String> {
+    safety::validate_identifier(&skin_id)?;
     skins::set_active_skin(&skin_id).await
 }
 
@@ -25,6 +27,7 @@ pub async fn skins_save(params: SaveSkinParams) -> Result<SkinEntry, String> {
 
 #[tauri::command]
 pub async fn skins_delete(skin_id: String) -> Result<bool, String> {
+    safety::validate_identifier(&skin_id)?;
     skins::delete_skin(&skin_id).await
 }
 
@@ -40,6 +43,9 @@ pub async fn skins_list_capes() -> Result<CapesListResponse, String> {
 
 #[tauri::command]
 pub async fn skins_apply_cape(cape_id: Option<String>) -> Result<ApplyCapeResult, String> {
+    if let Some(value) = cape_id.as_deref() {
+        safety::validate_identifier(value)?;
+    }
     skins::set_active_cape(cape_id).await
 }
 
@@ -50,6 +56,7 @@ pub async fn skins_save_cape(name: String, texture_data: String) -> Result<CapeE
 
 #[tauri::command]
 pub async fn skins_delete_cape(cape_id: String) -> Result<bool, String> {
+    safety::validate_identifier(&cape_id)?;
     skins::delete_custom_cape(&cape_id).await
 }
 

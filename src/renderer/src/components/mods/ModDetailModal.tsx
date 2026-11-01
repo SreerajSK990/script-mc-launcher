@@ -22,6 +22,7 @@ import {
   ChevronRight
 } from 'lucide-react'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import type { InstanceConfiguration } from '@shared/types/instance'
 import type { ModSearchResult, ModDetail, ModVersionFile } from '@shared/types/mods'
 import { Button } from '@renderer/components/common/Button'
@@ -194,7 +195,11 @@ export const ModDetailModal: React.FC<ModDetailModalProps> = ({
   }
 
   const parsedMarkdown = detail?.description
-    ? (marked.parse(detail.description) as string)
+    ? DOMPurify.sanitize(marked.parse(detail.description) as string, {
+        USE_PROFILES: { html: true },
+        FORBID_TAGS: ['style', 'form', 'input', 'button', 'iframe', 'object', 'embed'],
+        FORBID_ATTR: ['style']
+      })
     : ''
 
   const displayDownloads = detail?.downloads ?? mod.downloads

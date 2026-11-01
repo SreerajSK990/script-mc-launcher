@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Script Minecraft Launcher",
-  "version": "0.18.10",
+  "version": "0.18.11",
   "identifier": "com.sreeraj.scriptlauncher",
   "build": {
     "frontendDist": "../out/renderer",
@@ -24,7 +24,9 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: blob: https: http:; media-src 'self' data: blob: https:; connect-src 'self' ipc: http://ipc.localhost data: blob: https:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-src 'none'",
+      "devCsp": null,
+      "freezePrototype": false
     }
   },
   "bundle": {

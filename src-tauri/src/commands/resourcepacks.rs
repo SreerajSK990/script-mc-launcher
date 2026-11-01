@@ -1,3 +1,4 @@
+use crate::core::safety;
 use crate::core::resourcepacks::{
     self, InstallDroppedPacksResult, InstallModPayload, InstalledResourcePackRecord,
 };
@@ -6,6 +7,7 @@ use crate::core::resourcepacks::{
 pub async fn resourcepacks_list_installed(
     instance_id: String,
 ) -> Result<Vec<InstalledResourcePackRecord>, String> {
+    safety::validate_identifier(&instance_id)?;
     resourcepacks::list_installed_resource_packs(&instance_id)
 }
 
@@ -22,6 +24,8 @@ pub async fn resourcepacks_toggle_installed(
     filename: String,
     enable: bool,
 ) -> Result<bool, String> {
+    safety::validate_identifier(&instance_id)?;
+    safety::validate_file_name(&filename)?;
     resourcepacks::toggle_resource_pack_enabled(&instance_id, &filename, enable)
 }
 
@@ -30,6 +34,8 @@ pub async fn resourcepacks_delete_installed(
     instance_id: String,
     filename: String,
 ) -> Result<bool, String> {
+    safety::validate_identifier(&instance_id)?;
+    safety::validate_file_name(&filename)?;
     resourcepacks::delete_installed_resource_pack(&instance_id, &filename)
 }
 
@@ -38,10 +44,12 @@ pub async fn resourcepacks_install_dropped(
     instance_id: String,
     file_paths: Vec<String>,
 ) -> Result<InstallDroppedPacksResult, String> {
+    safety::validate_identifier(&instance_id)?;
     resourcepacks::install_dropped_resource_packs(&instance_id, &file_paths)
 }
 
 #[tauri::command]
 pub async fn resourcepacks_open_folder(instance_id: String) -> Result<(), String> {
+    safety::validate_identifier(&instance_id)?;
     resourcepacks::open_resource_packs_folder(&instance_id)
 }

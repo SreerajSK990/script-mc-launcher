@@ -7,6 +7,7 @@ use crate::core::mods::{
 use crate::core::download::{self, Checksum, DownloadTask};
 use crate::core::fs_util::write_json_atomic;
 use crate::core::paths;
+use crate::core::safety;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -310,7 +311,7 @@ where
                 continue;
             }
 
-            let target_path = minecraft_dir.join(rel_path.replace('/', std::path::MAIN_SEPARATOR_STR));
+            let target_path = safety::safe_join(&minecraft_dir, rel_path)?;
             if entry.is_dir() {
                 let _ = fs::create_dir_all(&target_path);
             } else {
@@ -336,7 +337,7 @@ where
                     continue;
                 };
 
-                let target = minecraft_dir.join(f.path.replace('/', std::path::MAIN_SEPARATOR_STR));
+                let target = safety::safe_join(&minecraft_dir, &f.path)?;
                 let size = f.file_size.unwrap_or(0);
                 let sha512 = f.hashes.as_ref().and_then(|h| h.sha512.clone());
                 let sha1 = f.hashes.as_ref().and_then(|h| h.sha1.clone());
@@ -401,7 +402,7 @@ where
                 if rel_path.trim().is_empty() {
                     continue;
                 }
-                let target_path = minecraft_dir.join(rel_path.replace('/', std::path::MAIN_SEPARATOR_STR));
+                let target_path = safety::safe_join(&minecraft_dir, rel_path)?;
                 if entry.is_dir() {
                     let _ = fs::create_dir_all(&target_path);
                 } else {
@@ -465,7 +466,7 @@ where
 
             for f in fetched_files {
                 if let Some(dl_url) = f.download_url {
-                    let dest = mods_dir.join(&f.file_name);
+                    let dest = mods_dir.join(safety::validate_file_name(&f.file_name)?);
                     let sha1 = f.hashes.as_ref().and_then(|hashes| {
                         hashes.iter().find(|h| h.algo == 1).map(|h| h.value.clone())
                     });
@@ -563,7 +564,11 @@ where
     let temp_dir = paths::get_launcher_root_directory().join("temp").join("modpacks");
     fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
 
-    let filename = format!("{}_{}", Utc::now().timestamp_millis(), payload.version_file.filename);
+    let filename = format!(
+        "{}_{}",
+        Utc::now().timestamp_millis(),
+        safety::validate_file_name(&payload.version_file.filename)?
+    );
     let temp_file_path = temp_dir.join(&filename);
 
     progress(ModpackImportProgressEvent {

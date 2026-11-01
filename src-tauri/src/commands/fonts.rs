@@ -1,3 +1,4 @@
+use crate::core::safety;
 use crate::core::fonts::{self, CustomFontEntry};
 
 #[tauri::command]
@@ -12,5 +13,6 @@ pub async fn fonts_install(file_path: String) -> Result<CustomFontEntry, String>
 
 #[tauri::command]
 pub async fn fonts_delete(file_name: String) -> Result<bool, String> {
+    safety::validate_file_name(&file_name)?;
     fonts::delete_custom_font(&file_name)
 }

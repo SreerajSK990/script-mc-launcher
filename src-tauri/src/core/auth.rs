@@ -1,6 +1,6 @@
 use crate::core::fs_util::write_json_atomic;
 use crate::core::paths;
-use base64::Engine;
+use crate::core::secrets;
 use chrono::Utc;
 use reqwest::header::USER_AGENT;
 use serde::{Deserialize, Serialize};
@@ -127,22 +127,6 @@ fn get_auth_file_path() -> PathBuf {
     paths::get_launcher_root_directory().join("auth.json")
 }
 
-fn encrypt_secret(plaintext: &str) -> String {
-    let b64 = base64::engine::general_purpose::STANDARD.encode(plaintext.as_bytes());
-    format!("plain:{b64}")
-}
-
-fn decrypt_secret(ciphertext: &str) -> String {
-    if let Some(stripped) = ciphertext.strip_prefix("plain:") {
-        if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(stripped) {
-            if let Ok(utf8) = String::from_utf8(decoded) {
-                return utf8;
-            }
-        }
-    }
-    ciphertext.to_string()
-}
-
 pub fn generate_offline_player_uuid(username: &str) -> String {
     let hash = md5::compute(format!("OfflinePlayer:{username}"));
     let mut bytes = hash.0;
@@ -160,7 +144,19 @@ pub fn load_stored_accounts() -> Result<(Option<String>, Vec<StoredAccount>), St
     let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
     let db: EncryptedAuthDatabase = serde_json::from_str(&content).map_err(|e| e.to_string())?;
 
-    let accounts = db
+    let mut needs_resealing = false;
+    let mut all_secrets_opened = true;
+    let mut open_secret = |stored: &str| -> String {
+        if !secrets::is_sealed_with_current_scheme(stored) {
+            needs_resealing = true;
+        }
+        secrets::open(stored).unwrap_or_else(|| {
+            all_secrets_opened = false;
+            String::new()
+        })
+    };
+
+    let accounts: Vec<StoredAccount> = db
         .accounts
         .into_iter()
         .map(|item| StoredAccount {
@@ -168,13 +164,17 @@ pub fn load_stored_accounts() -> Result<(Option<String>, Vec<StoredAccount>), St
             username: item.username,
             uuid: item.uuid,
             account_type: item.account_type,
-            access_token: decrypt_secret(&item.encrypted_access_token),
-            refresh_token: item.encrypted_refresh_token.map(|t| decrypt_secret(&t)),
+            access_token: open_secret(&item.encrypted_access_token),
+            refresh_token: item.encrypted_refresh_token.map(|t| open_secret(&t)),
             expires_at: item.expires_at,
             skin_url: item.skin_url,
             created_at: item.created_at,
         })
         .collect();
+
+    if needs_resealing && all_secrets_opened {
+        let _ = save_stored_accounts(db.active_account_id.clone(), &accounts);
+    }
 
     Ok((db.active_account_id, accounts))
 }
@@ -193,8 +193,8 @@ pub fn save_stored_accounts(
                 username: acc.username.clone(),
                 uuid: acc.uuid.clone(),
                 account_type: acc.account_type.clone(),
-                encrypted_access_token: encrypt_secret(&acc.access_token),
-                encrypted_refresh_token: acc.refresh_token.as_ref().map(|t| encrypt_secret(t)),
+                encrypted_access_token: secrets::seal(&acc.access_token),
+                encrypted_refresh_token: acc.refresh_token.as_ref().map(|t| secrets::seal(t)),
                 expires_at: acc.expires_at,
                 skin_url: acc.skin_url.clone(),
                 created_at: acc.created_at.clone(),

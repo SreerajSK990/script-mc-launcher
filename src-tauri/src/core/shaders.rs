@@ -88,6 +88,7 @@ pub fn list_shaders(instance_id: &str) -> Result<Vec<ShaderPack>, String> {
 }
 
 pub async fn install_shader(payload: InstallModPayload) -> Result<ShaderPack, String> {
+    payload.validate()?;
     let dir = get_shader_directory(&payload.instance_id);
     if !dir.exists() {
         fs::create_dir_all(&dir).map_err(|e| e.to_string())?;

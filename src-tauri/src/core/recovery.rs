@@ -139,7 +139,9 @@ pub fn restore_backup(instance_id: &str, backup_id: &str) -> Result<(), String> 
 
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
-        let entry_path = entry.mangled_name();
+        let Some(entry_path) = entry.enclosed_name() else {
+            return Err(format!("Backup archive contains an unsafe path: {}", entry.name()));
+        };
         let out_path = saves_dir.join(entry_path);
 
         if entry.is_dir() {
@@ -170,6 +172,7 @@ pub fn plan_mods(payloads: Vec<InstallModPayload>) -> Result<DependencyPlan, Str
 
     let instance_id = &payloads[0].instance_id;
     for p in &payloads {
+        p.validate()?;
         if &p.instance_id != instance_id {
             return Err("Select one target instance".to_string());
         }

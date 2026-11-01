@@ -326,6 +326,54 @@ async fn prepare_minecraft_assets(asset_index_info: &AssetIndexInfo) -> Result<(
     Ok(())
 }
 
+async fn prepare_logging_configuration(version_package: &VersionPackage) -> Result<Option<String>, String> {
+    let Some(client_logging) = version_package
+        .logging
+        .as_ref()
+        .and_then(|logging| logging.client.as_ref())
+    else {
+        return Ok(None);
+    };
+    let file_name = crate::core::safety::validate_file_name(&client_logging.file.id)?;
+    let destination = paths::get_assets_directory().join("log_configs").join(file_name);
+    download::ensure_file(&DownloadTask {
+        url: client_logging.file.url.clone(),
+        destination: destination.clone(),
+        checksum: Some(Checksum::Sha1(client_logging.file.sha1.clone())),
+        size: Some(client_logging.file.size),
+    })
+    .await?;
+    let console_friendly = write_console_logging_configuration(&destination)?;
+    Ok(Some(
+        client_logging
+            .argument
+            .replace("${path}", &console_friendly.to_string_lossy()),
+    ))
+}
+
+const CONSOLE_PATTERN_LAYOUT: &str = r#"<PatternLayout pattern="[%d{HH:mm:ss}] [%t/%level]: %msg{nolookups}%n" />"#;
+
+pub fn convert_logging_configuration_for_console(configuration: &str) -> String {
+    configuration
+        .replace("<LegacyXMLLayout />", CONSOLE_PATTERN_LAYOUT)
+        .replace("<XMLLayout />", CONSOLE_PATTERN_LAYOUT)
+}
+
+fn write_console_logging_configuration(official_configuration: &Path) -> Result<PathBuf, String> {
+    let original = fs::read_to_string(official_configuration).map_err(|e| e.to_string())?;
+    let converted = convert_logging_configuration_for_console(&original);
+    let file_stem = official_configuration
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().to_string())
+        .unwrap_or_else(|| "client".to_string());
+    let target = official_configuration.with_file_name(format!("{file_stem}.console.xml"));
+    let up_to_date = fs::read_to_string(&target).map(|existing| existing == converted).unwrap_or(false);
+    if !up_to_date {
+        crate::core::fs_util::write_bytes_atomic(&target, converted.as_bytes())?;
+    }
+    Ok(target)
+}
+
 fn replace_template_variables(
     template: &str,
     vars: &HashMap<&str, String>,
@@ -582,6 +630,15 @@ pub async fn launch_minecraft(
 
     jvm_args.extend(launch_config.extra_jvm_arguments);
 
+    match prepare_logging_configuration(&resolved_package).await {
+        Ok(Some(logging_argument)) => {
+            jvm_args.push(logging_argument);
+            emit_log("Applied Mojang's hardened logging configuration", "info");
+        }
+        Ok(None) => {}
+        Err(error) => emit_log(&format!("Could not apply Mojang's logging configuration: {error}"), "warn"),
+    }
+
     emit_progress("STARTING_JAVA", "Resolving Java runtime for instance...", None, None, None);
     let java_executable = match &instance.java_path {
         Some(p) if !p.is_empty() => p.clone(),
@@ -755,4 +812,99 @@ pub async fn launch_minecraft(
     });
 
     Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn logging_configuration_keeps_lookup_protection_and_plain_console_output() {
+        let official = r#"<Console name="SysOut" target="SYSTEM_OUT"><LegacyXMLLayout /></Console><PatternLayout pattern="[%d{HH:mm:ss}] [%t/%level]: %msg{nolookups}%n" />"#;
+        let converted = convert_logging_configuration_for_console(official);
+        assert!(!converted.contains("XMLLayout"));
+        assert_eq!(converted.matches("%msg{nolookups}").count(), 2);
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn vanilla_launch_smoke_test() {
+        let version = std::env::var("SMOKE_MC_VERSION").unwrap_or_else(|_| "1.21.1".to_string());
+        let instance = instances::create_new_instance(instances::CreateInstancePayload {
+            name: "launch smoke test".to_string(),
+            minecraft_version: Some(version.clone()),
+            loader_type: std::env::var("SMOKE_MC_LOADER").ok(),
+            loader_version: None,
+            ram_allocation_megabytes: Some(2048),
+            java_path: None,
+            jvm_arguments: None,
+            icon: None,
+            group: None,
+            is_favorite: None,
+        })
+        .unwrap();
+        let instance_root = paths::get_instance_path(&instance.id);
+
+        let outcome = async {
+            let base_package = meta::fetch_version_package(&version).await?;
+            let launch_config = loaders::resolve_instance_launch_configuration(&instance, base_package).await?;
+            let package = launch_config.version_package;
+            let natives_dir = instance_root.join("natives");
+            let classpath = prepare_minecraft_libraries(&package, &natives_dir, launch_config.extra_download_tasks).await?;
+            prepare_minecraft_assets(&package.asset_index).await?;
+            let separator = if cfg!(target_os = "windows") { ";" } else { ":" };
+            let classpath_string = classpath
+                .iter()
+                .map(|p| p.to_string_lossy().to_string())
+                .collect::<Vec<_>>()
+                .join(separator);
+            let account = StoredAccount {
+                id: "offline-smoke".into(),
+                username: "SmokeTest".into(),
+                uuid: auth::generate_offline_player_uuid("SmokeTest"),
+                account_type: "offline".into(),
+                access_token: "0".into(),
+                refresh_token: None,
+                expires_at: u64::MAX,
+                skin_url: None,
+                created_at: String::new(),
+            };
+            let (mut jvm_args, game_args, main_class) =
+                build_arguments(&instance, &package, &account, &natives_dir, &classpath_string, None);
+            jvm_args.extend(launch_config.extra_jvm_arguments);
+            if let Some(logging_argument) = prepare_logging_configuration(&package).await? {
+                jvm_args.push(logging_argument);
+            }
+            let java_executable = java::ensure_java_runtime(Some(&package), Some(&version)).await?;
+            let working_dir = paths::get_instance_minecraft_path(&instance.id);
+            let mut command = tokio::process::Command::new(&java_executable);
+            command
+                .current_dir(&working_dir)
+                .args(&jvm_args)
+                .arg(&main_class)
+                .args(&game_args)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .kill_on_drop(true);
+            let mut child = command.spawn().map_err(|e| e.to_string())?;
+            let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
+            let mut collected = Vec::new();
+            let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(120);
+            while let Ok(Ok(Some(line))) = tokio::time::timeout_at(deadline, lines.next_line()).await {
+                let reached_game = line.contains("Setting user: SmokeTest") || line.contains("Backend library");
+                collected.push(line);
+                if reached_game && collected.len() > 3 {
+                    break;
+                }
+            }
+            let _ = child.kill().await;
+            Ok::<Vec<String>, String>(collected)
+        }
+        .await;
+
+        let _ = std::fs::remove_dir_all(&instance_root);
+        let lines = outcome.unwrap();
+        assert!(lines.iter().any(|line| line.contains("SmokeTest") || line.contains("Backend library")), "{lines:#?}");
+        assert!(!lines.iter().any(|line| line.contains("<log4j:Event")), "{lines:#?}");
+    }
 }
