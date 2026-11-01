@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::core::instances::write_json_atomic;
+use crate::core::fs_util::write_json_atomic;
 use crate::core::paths;
 use reqwest::header::USER_AGENT;
 use serde::{Deserialize, Serialize};
@@ -227,10 +227,10 @@ pub async fn fetch_mojang_version_manifest() -> Result<VersionManifest, String> 
         }
     }
 
-    let client = reqwest::Client::new();
+    let client = crate::core::net::http_client().clone();
     let response = client
         .get(MOJANG_MANIFEST_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.5")
+        .header(USER_AGENT, crate::core::net::USER_AGENT)
         .send()
         .await;
 
@@ -273,10 +273,10 @@ pub async fn fetch_version_package(version_id: &str) -> Result<VersionPackage, S
         .find(|v| v.id == version_id)
         .ok_or_else(|| format!("Minecraft version \"{version_id}\" not found in manifest."))?;
 
-    let client = reqwest::Client::new();
+    let client = crate::core::net::http_client().clone();
     let resp = client
         .get(&entry.url)
-        .header(USER_AGENT, "ScriptLauncher/0.18.5")
+        .header(USER_AGENT, crate::core::net::USER_AGENT)
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -329,10 +329,10 @@ pub async fn fetch_prism_component_index(component_uid: &str) -> Result<PrismCom
     }
 
     let url = format!("{PRISM_META_BASE_URL}/{component_uid}/index.json");
-    let client = reqwest::Client::new();
+    let client = crate::core::net::http_client().clone();
     let resp = client
         .get(&url)
-        .header(USER_AGENT, "ScriptLauncher/0.18.5")
+        .header(USER_AGENT, crate::core::net::USER_AGENT)
         .send()
         .await;
 
@@ -373,10 +373,10 @@ pub async fn fetch_prism_component_version(
     }
 
     let url = format!("{PRISM_META_BASE_URL}/{component_uid}/{version}.json");
-    let client = reqwest::Client::new();
+    let client = crate::core::net::http_client().clone();
     let resp = client
         .get(&url)
-        .header(USER_AGENT, "ScriptLauncher/0.18.5")
+        .header(USER_AGENT, crate::core::net::USER_AGENT)
         .send()
         .await
         .map_err(|e| e.to_string())?;

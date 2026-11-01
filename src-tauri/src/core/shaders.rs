@@ -1,4 +1,4 @@
-use crate::core::instances::write_json_atomic;
+use crate::core::fs_util::write_json_atomic;
 use crate::core::mods::{list_installed_mods, InstallModPayload};
 use crate::core::paths;
 use serde::{Deserialize, Serialize};
@@ -102,7 +102,7 @@ pub async fn install_shader(payload: InstallModPayload) -> Result<ShaderPack, St
     let filename = &payload.version_file.filename;
     let target = dir.join(filename);
 
-    let client = reqwest::Client::new();
+    let client = crate::core::net::http_client().clone();
     let resp = client.get(download_url).send().await.map_err(|e| e.to_string())?;
     if !resp.status().is_success() {
         return Err(format!("Download failed: HTTP {}", resp.status()));

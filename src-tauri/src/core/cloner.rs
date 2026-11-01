@@ -1,7 +1,8 @@
 use crate::core::instances::{
-    create_new_instance, write_json_atomic, CreateInstancePayload, InstanceConfiguration,
+    create_new_instance, CreateInstancePayload, InstanceConfiguration,
 };
 use crate::core::mods::{get_mods_metadata_path, InstalledModRecord};
+use crate::core::fs_util::write_json_atomic;
 use crate::core::paths;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};

@@ -1,4 +1,4 @@
-use crate::core::instances::write_json_atomic;
+use crate::core::fs_util::write_json_atomic;
 use crate::core::paths;
 use base64::Engine;
 use chrono::Utc;
@@ -300,7 +300,7 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
 
     let mut ms_resp = client
         .post(TOKEN_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.10")
+        .header(USER_AGENT, crate::core::net::USER_AGENT)
         .form(&token_params)
         .send()
         .await;
@@ -313,7 +313,7 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
     if should_try_common {
         if let Ok(retry) = client
             .post(COMMON_TOKEN_URL)
-            .header(USER_AGENT, "ScriptLauncher/0.18.10")
+            .header(USER_AGENT, crate::core::net::USER_AGENT)
             .form(&token_params)
             .send()
             .await
@@ -349,7 +349,7 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
 
     let xbl_resp = client
         .post(XBOX_AUTH_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.10")
+        .header(USER_AGENT, crate::core::net::USER_AGENT)
         .header(reqwest::header::ACCEPT, "application/json")
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .json(&xbl_payload)
@@ -386,7 +386,7 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
 
     let xsts_resp = client
         .post(XSTS_AUTH_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.10")
+        .header(USER_AGENT, crate::core::net::USER_AGENT)
         .header(reqwest::header::ACCEPT, "application/json")
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .json(&xsts_payload)
@@ -421,7 +421,7 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
 
     let mc_resp = client
         .post(MINECRAFT_LOGIN_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.10")
+        .header(USER_AGENT, crate::core::net::USER_AGENT)
         .header(reqwest::header::ACCEPT, "application/json")
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .json(&mc_payload)
@@ -442,7 +442,7 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
 
     let profile_resp = client
         .get(MINECRAFT_PROFILE_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.10")
+        .header(USER_AGENT, crate::core::net::USER_AGENT)
         .header("Authorization", format!("Bearer {}", mc_data.access_token))
         .send()
         .await
@@ -506,7 +506,7 @@ pub async fn refresh_microsoft_account(account: &StoredAccount) -> Result<Stored
 
     let mut ms_resp = client
         .post(TOKEN_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.10")
+        .header(USER_AGENT, crate::core::net::USER_AGENT)
         .form(&token_params)
         .send()
         .await;
@@ -519,7 +519,7 @@ pub async fn refresh_microsoft_account(account: &StoredAccount) -> Result<Stored
     if should_try_common {
         if let Ok(retry) = client
             .post(COMMON_TOKEN_URL)
-            .header(USER_AGENT, "ScriptLauncher/0.18.10")
+            .header(USER_AGENT, crate::core::net::USER_AGENT)
             .form(&token_params)
             .send()
             .await
@@ -555,7 +555,7 @@ pub async fn refresh_microsoft_account(account: &StoredAccount) -> Result<Stored
 
     let xbl_resp = client
         .post(XBOX_AUTH_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.10")
+        .header(USER_AGENT, crate::core::net::USER_AGENT)
         .header(reqwest::header::ACCEPT, "application/json")
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .json(&xbl_payload)
@@ -592,7 +592,7 @@ pub async fn refresh_microsoft_account(account: &StoredAccount) -> Result<Stored
 
     let xsts_resp = client
         .post(XSTS_AUTH_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.10")
+        .header(USER_AGENT, crate::core::net::USER_AGENT)
         .header(reqwest::header::ACCEPT, "application/json")
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .json(&xsts_payload)
@@ -617,7 +617,7 @@ pub async fn refresh_microsoft_account(account: &StoredAccount) -> Result<Stored
 
     let mc_resp = client
         .post(MINECRAFT_LOGIN_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.10")
+        .header(USER_AGENT, crate::core::net::USER_AGENT)
         .header(reqwest::header::ACCEPT, "application/json")
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .json(&mc_payload)
@@ -638,7 +638,7 @@ pub async fn refresh_microsoft_account(account: &StoredAccount) -> Result<Stored
 
     let profile_resp = client
         .get(MINECRAFT_PROFILE_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.10")
+        .header(USER_AGENT, crate::core::net::USER_AGENT)
         .header("Authorization", format!("Bearer {}", mc_data.access_token))
         .send()
         .await

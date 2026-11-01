@@ -1,5 +1,5 @@
 use crate::core::auth;
-use crate::core::instances::write_json_atomic;
+use crate::core::fs_util::write_json_atomic;
 use crate::core::paths;
 use crate::core::skins_presets;
 use base64::Engine;
@@ -148,7 +148,7 @@ async fn resolve_image_bytes(input: &str) -> Result<Vec<u8>, String> {
             .decode(b64)
             .map_err(|e| e.to_string())
     } else if input.starts_with("http://") || input.starts_with("https://") {
-        let client = reqwest::Client::new();
+        let client = crate::core::net::http_client().clone();
         let resp = client.get(input).send().await.map_err(|e| e.to_string())?;
         if !resp.status().is_success() {
             return Err(format!("HTTP error {}", resp.status()));
@@ -198,7 +198,7 @@ pub async fn set_active_skin(skin_id: &str) -> Result<ApplySkinResult, String> {
                 .text("variant", if target.model == "slim" { "slim" } else { "classic" })
                 .part("file", part);
 
-            let client = reqwest::Client::new();
+            let client = crate::core::net::http_client().clone();
             let resp = client
                 .post("https://api.minecraftservices.com/minecraft/profile/skins")
                 .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", active_acc.access_token))
@@ -306,7 +306,7 @@ pub async fn search_player_skin(username: &str) -> Result<PlayerSkinSearchResult
         return Err("Please enter a valid Minecraft player username.".to_string());
     }
 
-    let client = reqwest::Client::new();
+    let client = crate::core::net::http_client().clone();
     let profile_url = format!("https://api.mojang.com/users/profiles/minecraft/{trimmed}");
     let profile_res = client.get(&profile_url).send().await.map_err(|e| e.to_string())?;
 
@@ -364,7 +364,7 @@ pub async fn list_all_capes() -> Result<CapesListResponse, String> {
     if let Ok(auth_state) = auth::get_auth_state() {
         if let Some(active_acc) = auth_state.active_account {
             if active_acc.account_type == "microsoft" && !active_acc.access_token.is_empty() {
-                let client = reqwest::Client::new();
+                let client = crate::core::net::http_client().clone();
                 if let Ok(resp) = client
                     .get("https://api.minecraftservices.com/minecraft/profile")
                     .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", active_acc.access_token))
@@ -422,7 +422,7 @@ pub async fn set_active_cape(cape_id: Option<String>) -> Result<ApplyCapeResult,
         if let Ok(auth_state) = auth::get_auth_state() {
             if let Some(active_acc) = auth_state.active_account {
                 if active_acc.account_type == "microsoft" && !active_acc.access_token.is_empty() {
-                    let client = reqwest::Client::new();
+                    let client = crate::core::net::http_client().clone();
                     let _ = client
                         .delete("https://api.minecraftservices.com/minecraft/profile/capes/active")
                         .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", active_acc.access_token))
@@ -449,7 +449,7 @@ pub async fn set_active_cape(cape_id: Option<String>) -> Result<ApplyCapeResult,
         if let Ok(auth_state) = auth::get_auth_state() {
             if let Some(active_acc) = auth_state.active_account {
                 if active_acc.account_type == "microsoft" && !active_acc.access_token.is_empty() {
-                    let client = reqwest::Client::new();
+                    let client = crate::core::net::http_client().clone();
                     let payload = serde_json::json!({ "capeId": target.id });
                     let resp = client
                         .put("https://api.minecraftservices.com/minecraft/profile/capes/active")
@@ -556,7 +556,7 @@ pub async fn fetch_optifine_cape(username: &str) -> Result<Option<CapeEntry>, St
     }
 
     let url = format!("http://optifine.net/capes/{trimmed}.png");
-    let client = reqwest::Client::new();
+    let client = crate::core::net::http_client().clone();
     let Ok(resp) = client.get(&url).send().await else {
         return Ok(None);
     };

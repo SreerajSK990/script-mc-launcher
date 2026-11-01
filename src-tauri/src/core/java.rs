@@ -1,16 +1,14 @@
-use crate::core::instances::write_json_atomic;
+use crate::core::download::{self, Checksum, DownloadTask};
+use crate::core::fs_util::write_json_atomic;
+use crate::core::safety;
 use crate::core::meta::VersionPackage;
 use crate::core::paths;
 use reqwest::header::USER_AGENT;
 use serde::{Deserialize, Serialize};
-use sha1::{Digest, Sha1};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use tokio::sync::Semaphore;
-use tokio::task::JoinSet;
 
 const MOJANG_JAVA_ALL_PRODUCTS_URL: &str =
     "https://piston-meta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json";
@@ -164,10 +162,10 @@ pub async fn fetch_mojang_java_products() -> Result<MojangJavaAllProducts, Strin
         }
     }
 
-    let client = reqwest::Client::new();
+    let client = crate::core::net::http_client().clone();
     let resp = client
         .get(MOJANG_JAVA_ALL_PRODUCTS_URL)
-        .header(USER_AGENT, "ScriptLauncher/0.18.5")
+        .header(USER_AGENT, crate::core::net::USER_AGENT)
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -179,14 +177,6 @@ pub async fn fetch_mojang_java_products() -> Result<MojangJavaAllProducts, Strin
     let data = resp.json::<MojangJavaAllProducts>().await.map_err(|e| e.to_string())?;
     let _ = write_json_atomic(&cache_path, &data);
     Ok(data)
-}
-
-struct JavaDownloadTask {
-    url: String,
-    destination: PathBuf,
-    sha1: String,
-    #[allow(dead_code)]
-    is_executable: bool,
 }
 
 pub async fn ensure_java_runtime(
@@ -215,71 +205,39 @@ pub async fn ensure_java_runtime(
         .first()
         .ok_or_else(|| format!("Empty versions list for component: {component}"))?;
 
-    let client = reqwest::Client::new();
-    let manifest_resp = client
-        .get(&chosen_product.manifest.url)
-        .header(USER_AGENT, "ScriptLauncher/0.18.5")
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if !manifest_resp.status().is_success() {
-        return Err(format!(
-            "Failed to download Java files manifest: HTTP {}",
-            manifest_resp.status()
-        ));
-    }
-
-    let files_manifest = manifest_resp
-        .json::<MojangJavaFilesManifest>()
-        .await
-        .map_err(|e| e.to_string())?;
+    let files_manifest: MojangJavaFilesManifest =
+        crate::core::net::get_json(&chosen_product.manifest.url).await?;
 
     let component_dir = get_java_component_directory(&component);
     fs::create_dir_all(&component_dir).map_err(|e| e.to_string())?;
 
-    let mut download_tasks: Vec<JavaDownloadTask> = Vec::new();
+    let mut download_tasks: Vec<DownloadTask> = Vec::new();
+    let mut executable_files: Vec<PathBuf> = Vec::new();
 
     for (rel_path, file_entry) in files_manifest.files {
-        let destination = component_dir.join(rel_path.replace('/', std::path::MAIN_SEPARATOR_STR));
+        let destination = safety::safe_join(&component_dir, &rel_path)?;
         if file_entry.entry_type == "directory" {
             let _ = fs::create_dir_all(&destination);
             continue;
         }
 
         if file_entry.entry_type == "file" {
-            if let Some(downloads) = file_entry.downloads {
-                if let Some(raw) = downloads.raw {
-                    download_tasks.push(JavaDownloadTask {
-                        url: raw.url,
-                        destination,
-                        sha1: raw.sha1,
-                        is_executable: file_entry.executable.unwrap_or(false),
-                    });
+            if let Some(raw) = file_entry.downloads.and_then(|downloads| downloads.raw) {
+                if file_entry.executable.unwrap_or(false) {
+                    executable_files.push(destination.clone());
                 }
+                download_tasks.push(DownloadTask {
+                    url: raw.url,
+                    destination,
+                    checksum: Some(Checksum::Sha1(raw.sha1)),
+                    size: Some(raw.size),
+                });
             }
         }
     }
 
-    let semaphore = Arc::new(Semaphore::new(12));
-    let mut set = JoinSet::new();
-
-    for task in download_tasks {
-        let sem = semaphore.clone();
-        let client_clone = client.clone();
-        set.spawn(async move {
-            let _permit = sem.acquire().await.map_err(|e| e.to_string())?;
-            download_and_verify_file(&client_clone, &task).await
-        });
-    }
-
-    while let Some(res) = set.join_next().await {
-        match res {
-            Ok(Ok(())) => {}
-            Ok(Err(e)) => return Err(e),
-            Err(e) => return Err(e.to_string()),
-        }
-    }
+    download::ensure_files(download_tasks, 12, |_, _| {}).await?;
+    mark_files_executable(&executable_files);
 
     if is_java_runtime_installed(&component) {
         Ok(exe_path.to_string_lossy().to_string())
@@ -288,63 +246,16 @@ pub async fn ensure_java_runtime(
     }
 }
 
-async fn download_and_verify_file(
-    client: &reqwest::Client,
-    task: &JavaDownloadTask,
-) -> Result<(), String> {
-    if task.destination.exists() {
-        if let Ok(bytes) = fs::read(&task.destination) {
-            let mut hasher = Sha1::new();
-            hasher.update(&bytes);
-            let calculated_hash = format!("{:x}", hasher.finalize());
-            if calculated_hash.eq_ignore_ascii_case(&task.sha1) {
-                return Ok(());
-            }
-        }
+#[cfg(unix)]
+fn mark_files_executable(files: &[PathBuf]) {
+    use std::os::unix::fs::PermissionsExt;
+    for file in files {
+        let _ = fs::set_permissions(file, fs::Permissions::from_mode(0o755));
     }
-
-    if let Some(parent) = task.destination.parent() {
-        let _ = fs::create_dir_all(parent);
-    }
-
-    let resp = client
-        .get(&task.url)
-        .header(USER_AGENT, "ScriptLauncher/0.18.5")
-        .send()
-        .await
-        .map_err(|e| format!("Failed to download {}: {e}", task.url))?;
-
-    if !resp.status().is_success() {
-        return Err(format!("Download failed with HTTP {} for {}", resp.status(), task.url));
-    }
-
-    let bytes = resp
-        .bytes()
-        .await
-        .map_err(|e| format!("Failed to read bytes for {}: {e}", task.url))?;
-
-    let mut hasher = Sha1::new();
-    hasher.update(&bytes);
-    let calculated_hash = format!("{:x}", hasher.finalize());
-    if !calculated_hash.eq_ignore_ascii_case(&task.sha1) {
-        return Err(format!(
-            "Checksum mismatch for {}: expected {}, got {}",
-            task.destination.display(),
-            task.sha1,
-            calculated_hash
-        ));
-    }
-
-    fs::write(&task.destination, &bytes).map_err(|e| e.to_string())?;
-
-    #[cfg(unix)]
-    if task.is_executable {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(&task.destination, fs::Permissions::from_mode(0o755));
-    }
-
-    Ok(())
 }
+
+#[cfg(not(unix))]
+fn mark_files_executable(_files: &[PathBuf]) {}
 
 pub fn get_managed_java_runtimes_summary() -> Vec<ManagedJavaRuntimeInfo> {
     let components = [

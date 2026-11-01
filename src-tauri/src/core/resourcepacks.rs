@@ -1,4 +1,4 @@
-use crate::core::instances::write_json_atomic;
+use crate::core::fs_util::write_json_atomic;
 use crate::core::paths;
 use base64::Engine;
 use chrono::Utc;
@@ -236,7 +236,7 @@ pub async fn install_resource_pack_to_instance(
     let filename = &payload.version_file.filename;
     let destination = packs_dir.join(filename);
 
-    let client = reqwest::Client::new();
+    let client = crate::core::net::http_client().clone();
     let resp = client.get(download_url).send().await.map_err(|e| e.to_string())?;
     if !resp.status().is_success() {
         return Err(format!("Download failed: HTTP {}", resp.status()));

@@ -60,10 +60,10 @@ struct GitHubRelease {
 
 pub async fn check_and_download_update(app: AppHandle) -> Result<UpdateCheckResult, String> {
     let current_version = env!("CARGO_PKG_VERSION").to_string();
-    let client = reqwest::Client::new();
+    let client = crate::core::net::http_client().clone();
     let resp = client
         .get("https://api.github.com/repos/SreerajSK990/script-mc-launcher/releases/latest")
-        .header(reqwest::header::USER_AGENT, "ScriptLauncher/0.18.5")
+        .header(reqwest::header::USER_AGENT, crate::core::net::USER_AGENT)
         .send()
         .await;
 
@@ -213,10 +213,10 @@ async fn download_installer_file(
         .await
         .map_err(|e| e.to_string())?;
 
-    let client = reqwest::Client::new();
+    let client = crate::core::net::http_client().clone();
     let mut resp = client
         .get(&url)
-        .header(reqwest::header::USER_AGENT, "ScriptLauncher/0.18.5")
+        .header(reqwest::header::USER_AGENT, crate::core::net::USER_AGENT)
         .send()
         .await
         .map_err(|e| e.to_string())?;

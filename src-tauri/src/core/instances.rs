@@ -1,3 +1,4 @@
+use crate::core::fs_util::write_json_atomic;
 use crate::core::paths;
 use base64::Engine;
 use chrono::Utc;
@@ -82,17 +83,6 @@ pub fn default_jvm_arguments() -> Vec<String> {
         "-XX:+PerfDisableSharedMem".to_string(),
         "-XX:MaxTenuringThreshold=1".to_string(),
     ]
-}
-
-pub fn write_json_atomic<T: Serialize>(path: &Path, data: &T) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    let temp_path = path.with_extension("tmp");
-    let content = serde_json::to_string_pretty(data).map_err(|e| e.to_string())?;
-    fs::write(&temp_path, content).map_err(|e| e.to_string())?;
-    fs::rename(&temp_path, path).map_err(|e| e.to_string())?;
-    Ok(())
 }
 
 pub fn generate_instance_id(name: &str) -> String {

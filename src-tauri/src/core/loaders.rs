@@ -1,16 +1,8 @@
+use crate::core::download::{Checksum, DownloadTask};
 use crate::core::instances::InstanceConfiguration;
 use crate::core::meta::{self, VersionPackage};
 use crate::core::paths;
 use std::path::PathBuf;
-
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub struct DownloadTask {
-    pub url: String,
-    pub destination: PathBuf,
-    pub sha1: Option<String>,
-    pub size: Option<u64>,
-}
 
 #[derive(Debug, Clone)]
 pub struct LoaderLaunchConfiguration {
@@ -189,7 +181,7 @@ async fn prepare_forge_launch_configuration(
                         extra_download_tasks.push(DownloadTask {
                             url: url_str.to_string(),
                             destination: destination.clone(),
-                            sha1,
+                            checksum: sha1.map(Checksum::Sha1),
                             size,
                         });
 
@@ -285,7 +277,7 @@ async fn prepare_neoforge_launch_configuration(
                         extra_download_tasks.push(DownloadTask {
                             url: url_str.to_string(),
                             destination: destination.clone(),
-                            sha1,
+                            checksum: sha1.map(Checksum::Sha1),
                             size,
                         });
 

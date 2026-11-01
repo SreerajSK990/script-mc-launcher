@@ -1,22 +1,20 @@
 use crate::core::auth::{self, StoredAccount};
 use crate::core::instances::{self, InstanceConfiguration};
 use crate::core::java;
-use crate::core::loaders::{self, DownloadTask};
+use crate::core::download::{self, Checksum, DownloadTask};
+use crate::core::loaders;
 use crate::core::meta::{self, AssetIndexInfo, LibraryDownload, LibraryRule, VersionPackage};
 use crate::core::paths;
-use reqwest::header::USER_AGENT;
 use serde::{Deserialize, Serialize};
-use sha1::{Digest, Sha1};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 use std::time::Instant;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::sync::{Mutex, Semaphore};
-use tokio::task::JoinSet;
+use tokio::sync::Mutex;
 
 const ASSETS_RESOURCE_ROOT_URL: &str = "https://resources.download.minecraft.net";
 
@@ -166,83 +164,6 @@ fn extract_native_libraries(jar_path: &Path, natives_dir: &Path) -> Result<(), S
     Ok(())
 }
 
-async fn download_file_with_verify(
-    client: &reqwest::Client,
-    task: &DownloadTask,
-) -> Result<(), String> {
-    if task.destination.exists() {
-        if let Some(expected_sha1) = &task.sha1 {
-            if let Ok(bytes) = fs::read(&task.destination) {
-                let mut hasher = Sha1::new();
-                hasher.update(&bytes);
-                let actual = format!("{:x}", hasher.finalize());
-                if actual.eq_ignore_ascii_case(expected_sha1) {
-                    return Ok(());
-                }
-            }
-        } else {
-            return Ok(());
-        }
-    }
-
-    if let Some(parent) = task.destination.parent() {
-        let _ = fs::create_dir_all(parent);
-    }
-
-    let resp = client
-        .get(&task.url)
-        .header(USER_AGENT, "ScriptLauncher/0.18.5")
-        .send()
-        .await
-        .map_err(|e| format!("Failed to download {}: {e}", task.url))?;
-
-    if !resp.status().is_success() {
-        return Err(format!("Download failed with HTTP {} for {}", resp.status(), task.url));
-    }
-
-    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
-
-    if let Some(expected_sha1) = &task.sha1 {
-        let mut hasher = Sha1::new();
-        hasher.update(&bytes);
-        let actual = format!("{:x}", hasher.finalize());
-        if !actual.eq_ignore_ascii_case(expected_sha1) {
-            return Err(format!(
-                "Checksum mismatch for {}: expected {expected_sha1}, got {actual}",
-                task.destination.display()
-            ));
-        }
-    }
-
-    fs::write(&task.destination, &bytes).map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-async fn download_batch(tasks: Vec<DownloadTask>, concurrency: usize) -> Result<(), String> {
-    let semaphore = Arc::new(Semaphore::new(concurrency));
-    let client = reqwest::Client::new();
-    let mut set = JoinSet::new();
-
-    for task in tasks {
-        let sem = semaphore.clone();
-        let client_clone = client.clone();
-        set.spawn(async move {
-            let _permit = sem.acquire().await.map_err(|e| e.to_string())?;
-            download_file_with_verify(&client_clone, &task).await
-        });
-    }
-
-    while let Some(res) = set.join_next().await {
-        match res {
-            Ok(Ok(())) => {}
-            Ok(Err(e)) => return Err(e),
-            Err(e) => return Err(e.to_string()),
-        }
-    }
-
-    Ok(())
-}
-
 async fn prepare_minecraft_libraries(
     version_package: &VersionPackage,
     natives_dir: &Path,
@@ -271,7 +192,7 @@ async fn prepare_minecraft_libraries(
                 download_tasks.push(DownloadTask {
                     url: artifact.url.clone(),
                     destination: dest.clone(),
-                    sha1: Some(artifact.sha1.clone()),
+                    checksum: Some(Checksum::Sha1(artifact.sha1.clone())),
                     size: Some(artifact.size),
                 });
                 if !classpath_jars.contains(&dest) {
@@ -285,7 +206,7 @@ async fn prepare_minecraft_libraries(
                 download_tasks.push(DownloadTask {
                     url: format!("{base}{rel_path}"),
                     destination: dest.clone(),
-                    sha1: None,
+                    checksum: None,
                     size: None,
                 });
                 if !classpath_jars.contains(&dest) {
@@ -311,7 +232,7 @@ async fn prepare_minecraft_libraries(
                         download_tasks.push(DownloadTask {
                             url: native_art.url.clone(),
                             destination: dest.clone(),
-                            sha1: Some(native_art.sha1.clone()),
+                            checksum: Some(Checksum::Sha1(native_art.sha1.clone())),
                             size: Some(native_art.size),
                         });
                         if !native_jars_to_extract.contains(&dest) {
@@ -336,14 +257,14 @@ async fn prepare_minecraft_libraries(
     download_tasks.push(DownloadTask {
         url: client_download.url.clone(),
         destination: client_jar_path.clone(),
-        sha1: Some(client_download.sha1.clone()),
+        checksum: Some(Checksum::Sha1(client_download.sha1.clone())),
         size: Some(client_download.size),
     });
     if !classpath_jars.contains(&client_jar_path) {
         classpath_jars.push(client_jar_path);
     }
 
-    download_batch(download_tasks, 12).await?;
+    download::ensure_files(download_tasks, 12, |_, _| {}).await?;
 
     for native_jar in native_jars_to_extract {
         let _ = extract_native_libraries(&native_jar, natives_dir);
@@ -372,16 +293,14 @@ async fn prepare_minecraft_assets(asset_index_info: &AssetIndexInfo) -> Result<(
     fs::create_dir_all(&objects_dir).map_err(|e| e.to_string())?;
 
     let index_file_path = indexes_dir.join(format!("{}.json", asset_index_info.id));
-    let client = reqwest::Client::new();
-
     if !index_file_path.exists() {
         let task = DownloadTask {
             url: asset_index_info.url.clone(),
             destination: index_file_path.clone(),
-            sha1: Some(asset_index_info.sha1.clone()),
+            checksum: Some(Checksum::Sha1(asset_index_info.sha1.clone())),
             size: Some(asset_index_info.size),
         };
-        download_file_with_verify(&client, &task).await?;
+        download::ensure_file(&task).await?;
     }
 
     let content = fs::read_to_string(&index_file_path).map_err(|e| e.to_string())?;
@@ -397,13 +316,13 @@ async fn prepare_minecraft_assets(asset_index_info: &AssetIndexInfo) -> Result<(
             download_tasks.push(DownloadTask {
                 url: format!("{ASSETS_RESOURCE_ROOT_URL}/{prefix}/{}", obj.hash),
                 destination: dest,
-                sha1: Some(obj.hash.clone()),
+                checksum: Some(Checksum::Sha1(obj.hash.clone())),
                 size: Some(obj.size),
             });
         }
     }
 
-    download_batch(download_tasks, 16).await?;
+    download::ensure_files(download_tasks, 16, |_, _| {}).await?;
     Ok(())
 }
 
@@ -489,7 +408,7 @@ fn build_arguments(
     if !jvm_args.iter().any(|a| a.starts_with("-Djava.library.path")) {
         jvm_args.push(format!("-Djava.library.path={}", natives_dir.display()));
         jvm_args.push("-Dminecraft.launcher.brand=ScriptLauncher".to_string());
-        jvm_args.push("-Dminecraft.launcher.version=0.18.10".to_string());
+        jvm_args.push(format!("-Dminecraft.launcher.version={}", crate::core::net::LAUNCHER_VERSION));
         jvm_args.push("-cp".to_string());
         jvm_args.push(classpath_string.to_string());
     }

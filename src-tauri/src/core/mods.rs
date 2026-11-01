@@ -1,8 +1,8 @@
-use crate::core::instances::write_json_atomic;
+use crate::core::download::{self, Checksum};
+use crate::core::fs_util::write_json_atomic;
 use crate::core::paths;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use sha1::Digest;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -12,7 +12,7 @@ const MINECRAFT_GAME_ID: u64 = 432;
 const MODS_CLASS_ID: u64 = 6;
 const RESOURCEPACKS_CLASS_ID: u64 = 12;
 const MODPACKS_CLASS_ID: u64 = 4471;
-const USER_AGENT: &str = "ScriptLauncher/0.18.5 (github.com/SreerajSK990/script-mc-launcher)";
+use crate::core::net::USER_AGENT;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -300,7 +300,7 @@ pub async fn search_modrinth(params: &ModSearchParams) -> Result<Vec<ModSearchRe
         query_pairs.push(("query", query_str));
     }
 
-    let client = reqwest::Client::new();
+    let client = crate::core::net::http_client().clone();
     let resp = client
         .get(format!("{MODRINTH_API_BASE}/search"))
         .header(reqwest::header::USER_AGENT, USER_AGENT)
@@ -416,7 +416,7 @@ pub async fn search_curseforge(
         }
     }
 
-    let client = reqwest::Client::new();
+    let client = crate::core::net::http_client().clone();
     let resp = client
         .get(format!("{CURSEFORGE_API_BASE}/mods/search"))
         .header("x-api-key", api_key)
@@ -555,7 +555,7 @@ pub async fn get_modrinth_project_versions(
         query_pairs.push(("game_versions", arr));
     }
 
-    let client = reqwest::Client::new();
+    let client = crate::core::net::http_client().clone();
     let resp = client
         .get(format!("{MODRINTH_API_BASE}/project/{project_id}/version"))
         .header(reqwest::header::USER_AGENT, USER_AGENT)
@@ -657,7 +657,7 @@ pub async fn get_curseforge_mod_versions(
         }
     }
 
-    let client = reqwest::Client::new();
+    let client = crate::core::net::http_client().clone();
     let resp = client
         .get(format!("{CURSEFORGE_API_BASE}/mods/{mod_id}/files"))
         .header("x-api-key", api_key)
@@ -746,7 +746,7 @@ pub async fn get_mod_versions(
 pub async fn get_mod_detail(source: &str, id: &str) -> Result<ModDetail, String> {
     if source == "curseforge" {
         let key = get_curseforge_key().ok_or("CurseForge API key not configured")?;
-        let client = reqwest::Client::new();
+        let client = crate::core::net::http_client().clone();
         let resp = client
             .get(format!("{CURSEFORGE_API_BASE}/mods/{id}"))
             .header("x-api-key", key)
@@ -814,7 +814,7 @@ pub async fn get_mod_detail(source: &str, id: &str) -> Result<ModDetail, String>
         });
     }
 
-    let client = reqwest::Client::new();
+    let client = crate::core::net::http_client().clone();
     let resp = client
         .get(format!("{MODRINTH_API_BASE}/project/{id}"))
         .header(reqwest::header::USER_AGENT, USER_AGENT)
@@ -995,31 +995,11 @@ pub async fn install_mod_to_instance(payload: InstallModPayload) -> Result<Insta
     let filename = &payload.version_file.filename;
     let target_dest = mods_dir.join(filename);
 
-    let client = reqwest::Client::new();
-    let resp = client.get(download_url).send().await.map_err(|e| e.to_string())?;
-    if !resp.status().is_success() {
-        return Err(format!("Download failed: HTTP {}", resp.status()));
-    }
-
-    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
-
-    if let Some(expected_512) = &payload.version_file.sha512 {
-        let mut hasher = sha2::Sha512::new();
-        hasher.update(&bytes);
-        let actual = format!("{:x}", hasher.finalize());
-        if !actual.eq_ignore_ascii_case(expected_512) {
-            return Err("SHA-512 integrity check failed for downloaded mod".to_string());
-        }
-    } else if let Some(expected_1) = &payload.version_file.sha1 {
-        let mut hasher = sha1::Sha1::new();
-        hasher.update(&bytes);
-        let actual = format!("{:x}", hasher.finalize());
-        if !actual.eq_ignore_ascii_case(expected_1) {
-            return Err("SHA-1 integrity check failed for downloaded mod".to_string());
-        }
-    }
-
-    fs::write(&target_dest, &bytes).map_err(|e| e.to_string())?;
+    let checksum = Checksum::from_hashes(
+        payload.version_file.sha512.clone(),
+        payload.version_file.sha1.clone(),
+    );
+    let downloaded_bytes = download::fetch_to_path(download_url, &target_dest, checksum.as_ref(), |_| {}).await?;
 
     if let Some(old_name) = &payload.old_filename {
         if old_name != filename {
@@ -1039,7 +1019,7 @@ pub async fn install_mod_to_instance(payload: InstallModPayload) -> Result<Insta
         icon_url: payload.mod_metadata.icon_url.clone(),
         installed_at: Utc::now().to_rfc3339(),
         enabled: true,
-        file_size_bytes: bytes.len() as u64,
+        file_size_bytes: downloaded_bytes,
         game_version: payload.version_file.game_versions.first().cloned(),
         loader: payload.version_file.loaders.first().cloned(),
     };

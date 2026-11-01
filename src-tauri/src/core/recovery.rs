@@ -1,4 +1,5 @@
-use crate::core::instances::{self, write_json_atomic};
+use crate::core::fs_util::write_json_atomic;
+use crate::core::instances;
 use crate::core::mods::{list_installed_mods, InstallModPayload};
 use crate::core::paths;
 use chrono::Utc;

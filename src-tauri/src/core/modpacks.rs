@@ -1,21 +1,19 @@
 use crate::core::instances::{
-    create_new_instance, write_json_atomic, CreateInstancePayload, InstanceConfiguration,
+    create_new_instance, CreateInstancePayload, InstanceConfiguration,
 };
 use crate::core::mods::{
     get_curseforge_key, get_mods_metadata_path, InstalledModRecord, ModVersionFile,
 };
+use crate::core::download::{self, Checksum, DownloadTask};
+use crate::core::fs_util::write_json_atomic;
 use crate::core::paths;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use sha1::Digest;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::path::Path;
 use std::sync::Arc;
-use tokio::sync::Semaphore;
-use tokio::task::JoinSet;
 
 const CURSEFORGE_API_BASE: &str = "https://api.curseforge.com/v1";
 const USER_AGENT: &str = "ScriptLauncher/0.18.5 (github.com/SreerajSK990/script-mc-launcher)";
@@ -142,15 +140,6 @@ struct CurseForgeApiFilesResponse {
     data: Option<Vec<CurseForgeApiFile>>,
 }
 
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-struct ModpackDownloadTask {
-    url: String,
-    destination: PathBuf,
-    sha512: Option<String>,
-    sha1: Option<String>,
-    size: u64,
-}
 
 pub fn inspect_modpack(archive_path: &str) -> Result<ModpackManifestInfo, String> {
     let path = Path::new(archive_path);
@@ -259,6 +248,7 @@ pub async fn import_modpack<F>(
 where
     F: Fn(ModpackImportProgressEvent) + Send + Sync + 'static,
 {
+    let progress = Arc::new(progress);
     progress(ModpackImportProgressEvent {
         step: "extracting".to_string(),
         message: "Analyzing modpack archive structure...".to_string(),
@@ -300,7 +290,7 @@ where
     let file = fs::File::open(archive_path).map_err(|e| e.to_string())?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
 
-    let mut download_tasks: Vec<ModpackDownloadTask> = Vec::new();
+    let mut download_tasks: Vec<DownloadTask> = Vec::new();
     let mut installed_mods: Vec<InstalledModRecord> = Vec::new();
 
     if manifest.format == "modrinth" {
@@ -351,12 +341,11 @@ where
                 let sha512 = f.hashes.as_ref().and_then(|h| h.sha512.clone());
                 let sha1 = f.hashes.as_ref().and_then(|h| h.sha1.clone());
 
-                download_tasks.push(ModpackDownloadTask {
+                download_tasks.push(DownloadTask {
                     url: download_url,
                     destination: target,
-                    sha512,
-                    sha1: sha1.clone(),
-                    size,
+                    checksum: Checksum::from_hashes(sha512, sha1.clone()),
+                    size: Some(size).filter(|value| *value > 0),
                 });
 
                 if f.path.starts_with("mods/") {
@@ -446,7 +435,7 @@ where
                 percentage: 20,
             });
 
-            let client = reqwest::Client::new();
+            let client = crate::core::net::http_client().clone();
             let mut fetched_files: Vec<CurseForgeApiFile> = Vec::new();
 
             for chunk in file_ids.chunks(50) {
@@ -481,12 +470,11 @@ where
                         hashes.iter().find(|h| h.algo == 1).map(|h| h.value.clone())
                     });
 
-                    download_tasks.push(ModpackDownloadTask {
+                    download_tasks.push(DownloadTask {
                         url: dl_url,
                         destination: dest,
-                        sha512: None,
-                        sha1,
-                        size: f.file_length,
+                        checksum: sha1.map(Checksum::Sha1),
+                        size: Some(f.file_length).filter(|value| *value > 0),
                     });
 
                     let display = f.display_name.unwrap_or_else(|| {
@@ -523,64 +511,18 @@ where
             percentage: 30,
         });
 
-        let client = reqwest::Client::new();
-        let semaphore = Arc::new(Semaphore::new(8));
-        let mut set = JoinSet::new();
-        let completed = Arc::new(AtomicUsize::new(0));
-
-        for task in download_tasks {
-            let sem = semaphore.clone();
-            let c = client.clone();
-            set.spawn(async move {
-                let _permit = sem.acquire().await.map_err(|e| e.to_string())?;
-                if task.destination.exists() {
-                    return Ok(());
-                }
-                if let Some(parent) = task.destination.parent() {
-                    let _ = fs::create_dir_all(parent);
-                }
-                let resp = c.get(&task.url).header(reqwest::header::USER_AGENT, USER_AGENT).send().await.map_err(|e| e.to_string())?;
-                if !resp.status().is_success() {
-                    return Err(format!("Download failed: HTTP {}", resp.status()));
-                }
-                let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
-                if let Some(expected_512) = &task.sha512 {
-                    let mut hasher = sha2::Sha512::new();
-                    hasher.update(&bytes);
-                    let actual = format!("{:x}", hasher.finalize());
-                    if !actual.eq_ignore_ascii_case(expected_512) {
-                        return Err("SHA-512 check failed".to_string());
-                    }
-                } else if let Some(expected_1) = &task.sha1 {
-                    let mut hasher = sha1::Sha1::new();
-                    hasher.update(&bytes);
-                    let actual = format!("{:x}", hasher.finalize());
-                    if !actual.eq_ignore_ascii_case(expected_1) {
-                        return Err("SHA-1 check failed".to_string());
-                    }
-                }
-                fs::write(&task.destination, &bytes).map_err(|e| e.to_string())?;
-                Ok(())
+        let download_progress = progress.clone();
+        download::ensure_files(download_tasks, 8, move |completed, total| {
+            let percentage = 30 + ((completed as f64 / total as f64) * 65.0) as u32;
+            download_progress(ModpackImportProgressEvent {
+                step: "downloading".to_string(),
+                message: format!("Downloaded mod ({completed}/{total})"),
+                current: completed,
+                total,
+                percentage,
             });
-        }
-
-        while let Some(res) = set.join_next().await {
-            match res {
-                Ok(Ok(())) => {
-                    let c = completed.fetch_add(1, Ordering::SeqCst) + 1;
-                    let percentage = 30 + ((c as f64 / total_mods as f64) * 65.0) as u32;
-                    progress(ModpackImportProgressEvent {
-                        step: "downloading".to_string(),
-                        message: format!("Downloaded mod ({c}/{total_mods})"),
-                        current: c,
-                        total: total_mods,
-                        percentage,
-                    });
-                }
-                Ok(Err(e)) => return Err(e),
-                Err(e) => return Err(e.to_string()),
-            }
-        }
+        })
+        .await?;
     }
 
     progress(ModpackImportProgressEvent {
@@ -632,7 +574,7 @@ where
         percentage: 5,
     });
 
-    let client = reqwest::Client::new();
+    let client = crate::core::net::http_client().clone();
     let resp = client
         .get(download_url)
         .header(reqwest::header::USER_AGENT, USER_AGENT)
