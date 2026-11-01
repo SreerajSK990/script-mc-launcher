@@ -162,13 +162,36 @@ fn strip_minecraft_colors(text: &str) -> String {
     result.trim().to_string()
 }
 
+async fn resolve_srv_target(host: &str) -> Option<(String, u16)> {
+    if host.parse::<std::net::IpAddr>().is_ok() || host.eq_ignore_ascii_case("localhost") {
+        return None;
+    }
+    let resolver = hickory_resolver::TokioAsyncResolver::tokio_from_system_conf().ok()?;
+    let lookup = tokio::time::timeout(
+        Duration::from_millis(2000),
+        resolver.srv_lookup(format!("_minecraft._tcp.{host}.")),
+    )
+    .await
+    .ok()?
+    .ok()?;
+    let record = lookup.iter().min_by_key(|record| record.priority())?;
+    let target = record.target().to_utf8();
+    Some((target.trim_end_matches('.').to_string(), record.port()))
+}
+
 pub async fn ping_minecraft_server(host: &str, port: u16) -> ServerPingStatus {
     let timeout_duration = Duration::from_millis(4000);
-    match tokio::time::timeout(timeout_duration, ping_internal(host, port)).await {
+    let (resolved_host, resolved_port) = match (port, resolve_srv_target(host).await) {
+        (25565, Some(target)) => target,
+        _ => (host.to_string(), port),
+    };
+    let connect_target = format!("{resolved_host}:{resolved_port}");
+    let (host, port) = (resolved_host.as_str(), resolved_port);
+    match tokio::time::timeout(timeout_duration, ping_internal(host, port, connect_target.clone())).await {
         Ok(Ok(status)) => status,
         _ => {
             tokio::time::sleep(Duration::from_millis(250)).await;
-            match tokio::time::timeout(timeout_duration, ping_internal(host, port)).await {
+            match tokio::time::timeout(timeout_duration, ping_internal(host, port, connect_target.clone())).await {
                 Ok(Ok(status)) => status,
                 _ => ServerPingStatus {
                     online: false,
@@ -185,9 +208,8 @@ pub async fn ping_minecraft_server(host: &str, port: u16) -> ServerPingStatus {
     }
 }
 
-async fn ping_internal(host: &str, port: u16) -> Result<ServerPingStatus, String> {
+async fn ping_internal(host: &str, port: u16, addr: String) -> Result<ServerPingStatus, String> {
     let start_time = std::time::Instant::now();
-    let addr = format!("{host}:{port}");
     let mut stream = tokio::net::TcpStream::connect(&addr)
         .await
         .map_err(|e| e.to_string())?;
@@ -590,6 +612,16 @@ mod server_list_tests {
         let encoded = fastnbt::to_bytes(&original).unwrap();
         let decoded: fastnbt::Value = fastnbt::from_bytes(&encoded).unwrap();
         assert_eq!(original, decoded);
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn live_srv_and_ping() {
+        let host = std::env::var("SRV_TEST_HOST").unwrap_or_else(|_| "hypixel.net".to_string());
+        println!("srv: {:?}", resolve_srv_target(&host).await);
+        let status = ping_minecraft_server(&host, 25565).await;
+        println!("online: {} latency: {}", status.online, status.latency_ms);
+        assert!(status.online);
     }
 
     #[test]

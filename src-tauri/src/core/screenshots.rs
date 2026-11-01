@@ -1,5 +1,4 @@
 use crate::core::paths;
-use base64::Engine;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -16,6 +15,24 @@ pub struct ScreenshotEntry {
 
 pub fn get_screenshots_directory(instance_id: &str) -> PathBuf {
     paths::get_instance_minecraft_path(instance_id).join("screenshots")
+}
+
+pub fn asset_url_for_path(path: &std::path::Path) -> String {
+    let raw = path.to_string_lossy();
+    let mut encoded = String::with_capacity(raw.len() * 3);
+    for byte in raw.as_bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')' => {
+                encoded.push(*byte as char)
+            }
+            _ => encoded.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    if cfg!(any(target_os = "windows", target_os = "android")) {
+        format!("http://asset.localhost/{encoded}")
+    } else {
+        format!("asset://localhost/{encoded}")
+    }
 }
 
 pub fn list_instance_screenshots(instance_id: &str) -> Result<Vec<ScreenshotEntry>, String> {
@@ -45,33 +62,18 @@ pub fn list_instance_screenshots(instance_id: &str) -> Result<Vec<ScreenshotEntr
         }
 
         if let Ok(metadata) = entry.metadata() {
-            if let Ok(bytes) = fs::read(&path) {
-                let mime = if ext == "png" {
-                    "image/png"
-                } else if ext == "webp" {
-                    "image/webp"
-                } else {
-                    "image/jpeg"
-                };
-                let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-                let data_url = format!("data:{mime};base64,{b64}");
+            let created_at = metadata
+                .modified()
+                .ok()
+                .map(|t| DateTime::<Utc>::from(t).to_rfc3339())
+                .unwrap_or_else(|| Utc::now().to_rfc3339());
 
-                let created_at = metadata
-                    .modified()
-                    .ok()
-                    .and_then(|t| {
-                        let dt: DateTime<Utc> = t.into();
-                        Some(dt.to_rfc3339())
-                    })
-                    .unwrap_or_else(|| Utc::now().to_rfc3339());
-
-                results.push(ScreenshotEntry {
-                    filename: entry.file_name().to_string_lossy().to_string(),
-                    size_bytes: metadata.len(),
-                    created_at,
-                    data_url,
-                });
-            }
+            results.push(ScreenshotEntry {
+                filename: entry.file_name().to_string_lossy().to_string(),
+                size_bytes: metadata.len(),
+                created_at,
+                data_url: asset_url_for_path(&path),
+            });
         }
     }
 
@@ -101,4 +103,17 @@ pub fn open_screenshots_folder(instance_id: &str) -> Result<(), String> {
     }
     open::that(dir).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn asset_urls_match_tauri_convert_file_src() {
+        let url = asset_url_for_path(std::path::Path::new(r"C:\Users\a b\shot.png"));
+        if cfg!(target_os = "windows") {
+            assert_eq!(url, "http://asset.localhost/C%3A%5CUsers%5Ca%20b%5Cshot.png");
+        }
+    }
 }

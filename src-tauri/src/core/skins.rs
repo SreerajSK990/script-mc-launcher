@@ -160,6 +160,21 @@ async fn resolve_image_bytes(input: &str) -> Result<Vec<u8>, String> {
     }
 }
 
+async fn refreshed_auth_state() -> Result<auth::AuthState, String> {
+    let mut state = auth::get_auth_state()?;
+    let needs_refresh = state.active_account.as_ref().is_some_and(|account| {
+        account.account_type == "microsoft"
+            && (account.access_token.is_empty()
+                || chrono::Utc::now().timestamp_millis() as u64 + 5 * 60 * 1000 >= account.expires_at)
+    });
+    if needs_refresh {
+        if let Ok(resolution) = auth::get_valid_active_account().await {
+            state.active_account = Some(resolution.account);
+        }
+    }
+    Ok(state)
+}
+
 pub async fn list_all_skins() -> Result<SkinsListResponse, String> {
     let cfg = load_skins_config();
     let mut all_skins = skins_presets::get_preset_skins();
@@ -182,10 +197,7 @@ pub async fn set_active_skin(skin_id: &str) -> Result<ApplySkinResult, String> {
         "Selected skin not found in library.".to_string()
     })?;
 
-    cfg.active_skin_id = Some(skin_id.to_string());
-    save_skins_config(&cfg)?;
-
-    let auth_state = auth::get_auth_state()?;
+    let auth_state = refreshed_auth_state().await?;
     if let Some(active_acc) = auth_state.active_account {
         if active_acc.account_type == "microsoft" && !active_acc.access_token.is_empty() {
             let image_bytes = resolve_image_bytes(&target.texture_url).await?;
@@ -208,6 +220,8 @@ pub async fn set_active_skin(skin_id: &str) -> Result<ApplySkinResult, String> {
 
             match resp {
                 Ok(r) if r.status().is_success() => {
+                    cfg.active_skin_id = Some(skin_id.to_string());
+                    save_skins_config(&cfg)?;
                     return Ok(ApplySkinResult {
                         success: true,
                         uploaded_to_mojang: true,
@@ -233,6 +247,8 @@ pub async fn set_active_skin(skin_id: &str) -> Result<ApplySkinResult, String> {
         }
     }
 
+    cfg.active_skin_id = Some(skin_id.to_string());
+    save_skins_config(&cfg)?;
     Ok(ApplySkinResult {
         success: true,
         uploaded_to_mojang: false,
@@ -361,7 +377,7 @@ pub async fn list_all_capes() -> Result<CapesListResponse, String> {
     let mut cfg = load_capes_config();
     let mut mojang_capes = Vec::new();
 
-    if let Ok(auth_state) = auth::get_auth_state() {
+    if let Ok(auth_state) = refreshed_auth_state().await {
         if let Some(active_acc) = auth_state.active_account {
             if active_acc.account_type == "microsoft" && !active_acc.access_token.is_empty() {
                 let client = crate::core::net::http_client().clone();
@@ -419,7 +435,7 @@ pub async fn set_active_cape(cape_id: Option<String>) -> Result<ApplyCapeResult,
         cfg.active_cape_id = None;
         save_capes_config(&cfg)?;
 
-        if let Ok(auth_state) = auth::get_auth_state() {
+        if let Ok(auth_state) = refreshed_auth_state().await {
             if let Some(active_acc) = auth_state.active_account {
                 if active_acc.account_type == "microsoft" && !active_acc.access_token.is_empty() {
                     let client = crate::core::net::http_client().clone();
@@ -446,7 +462,7 @@ pub async fn set_active_cape(cape_id: Option<String>) -> Result<ApplyCapeResult,
     save_capes_config(&cfg)?;
 
     if target.source == "mojang" {
-        if let Ok(auth_state) = auth::get_auth_state() {
+        if let Ok(auth_state) = refreshed_auth_state().await {
             if let Some(active_acc) = auth_state.active_account {
                 if active_acc.account_type == "microsoft" && !active_acc.access_token.is_empty() {
                     let client = crate::core::net::http_client().clone();

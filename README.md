@@ -2,7 +2,7 @@
 
 A fast, sleek, and modular Minecraft launcher built with **Electron**, **React**, **TypeScript**, and **Tailwind CSS**.
 
-**Latest release: [v0.19.0](https://github.com/SreerajSK990/script-mc-launcher/releases/tag/v0.19.0)** — automatic mod dependency installs, checksum-based update checks for every mod, real names for manually added mods, and more reliable CurseForge modpack imports. Read the [release notes](release-notes/v0.19.0.md) for details.
+**Latest release: [v0.19.1](https://github.com/SreerajSK990/script-mc-launcher/releases/tag/v0.19.1)** — mod rollback snapshots, cancellable downloads, a working Discord Rich Presence connection, SRV-aware server status, session-refreshing skin uploads, and a faster screenshot gallery. Read the [release notes](release-notes/v0.19.1.md) for details.
 
 Most Minecraft launchers out there either look like they're stuck in 2010 with clunky Java Swing windows, or they're bloated with electron bloatware and ads. Script Launcher is built to be fast, clean, and completely isolated so your mod setups and game versions never conflict with each other.
 
