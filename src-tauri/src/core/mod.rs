@@ -3,6 +3,7 @@ pub mod cloner;
 pub mod dependencies;
 pub mod discord;
 pub mod download;
+pub mod export;
 pub mod fonts;
 pub mod fs_util;
 pub mod game_settings;

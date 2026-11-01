@@ -113,3 +113,12 @@ pub async fn instances_clone(
     .await
     .map_err(|e| e.to_string())?
 }
+
+#[tauri::command]
+pub async fn instances_export_mrpack(
+    instance_id: String,
+    output_path: String,
+) -> Result<crate::core::export::ModpackExportResult, String> {
+    safety::validate_identifier(&instance_id)?;
+    crate::core::export::export_instance_as_mrpack(&instance_id, &output_path).await
+}

@@ -72,6 +72,7 @@ pub fn run() {
             instances_repair,
             instances_backup_saves,
             instances_clone,
+            instances_export_mrpack,
             meta_get_versions,
             meta_get_loader_versions,
             java_get_runtimes,

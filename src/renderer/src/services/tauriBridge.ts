@@ -1,5 +1,5 @@
 import { invoke as tauriInvoke, type InvokeArgs } from '@tauri-apps/api/core'
-import { open as openDialog } from '@tauri-apps/plugin-dialog'
+import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { listen } from '@tauri-apps/api/event'
 import type { LauncherAPI } from '@shared/types/ipc'
 import type { LaunchProgressEvent, LaunchLogEvent } from '@shared/types/launch'
@@ -96,7 +96,16 @@ export function createTauriBridge(): LauncherAPI {
       backupSaves: (instanceId: string) =>
         invoke('instances_backup_saves', { instanceId }),
       clone: (instanceId: string, customName?: string) =>
-        invoke('instances_clone', { instanceId, customName })
+        invoke('instances_clone', { instanceId, customName }),
+      exportModpack: async (instanceId: string, suggestedName: string) => {
+        const outputPath = await saveDialog({
+          title: 'Export instance as Modrinth modpack',
+          defaultPath: `${suggestedName.replace(/[\/:*?"<>|]/g, '_')}.mrpack`,
+          filters: [{ name: 'Modrinth modpack', extensions: ['mrpack'] }]
+        })
+        if (!outputPath) return null
+        return invoke('instances_export_mrpack', { instanceId, outputPath })
+      }
     },
     auth: {
       getState: () => invoke('auth_get_state'),

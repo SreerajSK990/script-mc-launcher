@@ -61,7 +61,8 @@ const launcherAPI: LauncherAPI = {
     backupSaves: (instanceId: string) =>
       invokeResult(IPC_CHANNELS.INSTANCES_BACKUP_SAVES, instanceId),
     clone: (instanceId: string, customName?: string) =>
-      invokeResult(IPC_CHANNELS.INSTANCES_CLONE, instanceId, customName)
+      invokeResult(IPC_CHANNELS.INSTANCES_CLONE, instanceId, customName),
+    exportModpack: async () => null
   },
 
 

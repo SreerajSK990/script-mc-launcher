@@ -68,6 +68,10 @@ export interface InstanceActions {
   repair: (instanceId: string) => Promise<{ success: boolean; message: string }>
   backupSaves: (instanceId: string) => Promise<{ success: boolean; backupPath: string }>
   clone: (instanceId: string, customName?: string) => Promise<InstanceConfiguration>
+  exportModpack: (
+    instanceId: string,
+    suggestedName: string
+  ) => Promise<{ outputPath: string; linkedFiles: number; bundledFiles: number } | null>
 }
 
 

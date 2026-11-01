@@ -9,6 +9,7 @@ import {
   ArrowLeft,
   Play,
   FolderOpen,
+  PackageOpen,
   SlidersHorizontal,
   Sliders,
   Package,
@@ -154,6 +155,7 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
   const [updatingModId, setUpdatingModId] = useState<string | null>(null)
   const [updateProgress, setUpdateProgress] = useState<{ message: string; current: number; total: number } | null>(null)
   const [isDraggingMods, setIsDraggingMods] = useState(false)
+  const [isExportingModpack, setIsExportingModpack] = useState(false)
 
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean
@@ -518,6 +520,31 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
             title="Open Instance Folder"
           >
             Open Folder
+          </Button>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={PackageOpen}
+            disabled={isExportingModpack}
+            onClick={async () => {
+              setIsExportingModpack(true)
+              try {
+                const result = await window.launcherAPI.instances.exportModpack(instance.id, instance.name)
+                if (result) {
+                  onNotification?.(
+                    `Exported "${instance.name}" with ${result.linkedFiles} linked and ${result.bundledFiles} bundled files.`
+                  )
+                }
+              } catch (error) {
+                onNotification?.(error instanceof Error ? error.message : 'Modpack export failed.')
+              } finally {
+                setIsExportingModpack(false)
+              }
+            }}
+            title="Export as Modrinth modpack (.mrpack)"
+          >
+            {isExportingModpack ? 'Exporting...' : 'Export'}
           </Button>
 
           <Button
