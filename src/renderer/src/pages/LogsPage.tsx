@@ -1,6 +1,7 @@
 import { diagnoseCrash } from '@shared/crashDiagnosis'
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import {
+  FolderOpen,
   Terminal,
   Search,
   Copy,
@@ -20,6 +21,7 @@ import { Button } from '@renderer/components/common/Button'
 type LogFilterLevel = 'all' | 'info' | 'warn' | 'error'
 
 interface LogsPageProps {
+  instanceId?: string
   instanceName?: string
   progress: LaunchProgressEvent | null
   logs: LaunchLogEvent[]
@@ -29,6 +31,7 @@ interface LogsPageProps {
 }
 
 export const LogsPage: React.FC<LogsPageProps> = ({
+  instanceId,
   instanceName,
   progress,
   logs,
@@ -129,6 +132,16 @@ export const LogsPage: React.FC<LogsPageProps> = ({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {instanceId && (
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={FolderOpen}
+              onClick={() => void window.launcherAPI.instances.openFolder(instanceId)}
+            >
+              Log Folder
+            </Button>
+          )}
           {isGameRunning && (
             <Button
               variant="danger"

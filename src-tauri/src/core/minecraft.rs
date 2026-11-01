@@ -134,14 +134,136 @@ fn send_launch_progress(
     );
 }
 
+const KEPT_SESSION_LOGS: usize = 10;
+const CRASH_REPORT_EXCERPT_LINES: usize = 80;
+
+type SessionLogWriter = std::sync::Arc<std::sync::Mutex<std::io::BufWriter<fs::File>>>;
+
+static SESSION_LOGS: OnceLock<std::sync::Mutex<HashMap<String, SessionLogWriter>>> = OnceLock::new();
+
+fn session_logs() -> &'static std::sync::Mutex<HashMap<String, SessionLogWriter>> {
+    SESSION_LOGS.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
+}
+
+pub fn get_session_logs_directory(instance_id: &str) -> PathBuf {
+    paths::get_instance_path(instance_id).join("launcher-logs")
+}
+
+fn prune_session_logs(directory: &Path) {
+    let Ok(entries) = fs::read_dir(directory) else {
+        return;
+    };
+    let mut logs: Vec<PathBuf> = entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "log"))
+        .collect();
+    logs.sort();
+    while logs.len() > KEPT_SESSION_LOGS {
+        let oldest = logs.remove(0);
+        let _ = fs::remove_file(oldest);
+    }
+}
+
+fn start_session_log(instance_id: &str) {
+    let directory = get_session_logs_directory(instance_id);
+    if fs::create_dir_all(&directory).is_err() {
+        return;
+    }
+    let file_name = format!("{}.log", chrono::Local::now().format("%Y-%m-%d_%H-%M-%S"));
+    if let Ok(file) = fs::File::create(directory.join(file_name)) {
+        if let Ok(mut logs) = session_logs().lock() {
+            logs.insert(
+                instance_id.to_string(),
+                std::sync::Arc::new(std::sync::Mutex::new(std::io::BufWriter::new(file))),
+            );
+        }
+    }
+    prune_session_logs(&directory);
+}
+
+fn finish_session_log(instance_id: &str) {
+    let writer = session_logs().lock().ok().and_then(|mut logs| logs.remove(instance_id));
+    if let Some(writer) = writer {
+        if let Ok(mut file) = writer.lock() {
+            use std::io::Write;
+            let _ = file.flush();
+        }
+    }
+}
+
+fn append_session_log(instance_id: &str, timestamp: &str, level: &str, text: &str) {
+    let writer = session_logs().lock().ok().and_then(|logs| logs.get(instance_id).cloned());
+    if let Some(writer) = writer {
+        if let Ok(mut file) = writer.lock() {
+            use std::io::Write;
+            let _ = writeln!(file, "[{timestamp}] [{}] {text}", level.to_uppercase());
+        }
+    }
+}
+
+pub fn find_crash_artifacts(minecraft_dir: &Path, since: std::time::SystemTime) -> Vec<PathBuf> {
+    let modified_after = |path: &Path| {
+        fs::metadata(path)
+            .and_then(|meta| meta.modified())
+            .map(|modified| modified >= since)
+            .unwrap_or(false)
+    };
+    let mut artifacts = Vec::new();
+    if let Ok(entries) = fs::read_dir(minecraft_dir.join("crash-reports")) {
+        let mut reports: Vec<PathBuf> = entries
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| path.extension().is_some_and(|ext| ext == "txt") && modified_after(path))
+            .collect();
+        reports.sort();
+        if let Some(latest) = reports.pop() {
+            artifacts.push(latest);
+        }
+    }
+    if let Ok(entries) = fs::read_dir(minecraft_dir) {
+        let mut jvm_reports: Vec<PathBuf> = entries
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with("hs_err_pid") && name.ends_with(".log"))
+                    && modified_after(path)
+            })
+            .collect();
+        jvm_reports.sort();
+        if let Some(latest) = jvm_reports.pop() {
+            artifacts.push(latest);
+        }
+    }
+    artifacts
+}
+
+fn report_crash_artifacts(app: &AppHandle, instance_id: &str, since: std::time::SystemTime) {
+    let minecraft_dir = paths::get_instance_minecraft_path(instance_id);
+    for artifact in find_crash_artifacts(&minecraft_dir, since) {
+        send_launch_log(app, instance_id, &format!("Crash report found: {}", artifact.display()), "error");
+        let Ok(bytes) = fs::read(&artifact) else {
+            continue;
+        };
+        let text = String::from_utf8_lossy(&bytes);
+        for line in text.lines().filter(|line| !line.trim().is_empty()).take(CRASH_REPORT_EXCERPT_LINES) {
+            send_launch_log(app, instance_id, &format!("[crash-report] {line}"), "error");
+        }
+    }
+}
+
 fn send_launch_log(app: &AppHandle, instance_id: &str, text: &str, level: &str) {
+    let timestamp = timestamp_now();
+    append_session_log(instance_id, &timestamp, level, text);
     let _ = app.emit(
         "launch:log",
         LaunchLogEvent {
             instance_id: instance_id.to_string(),
             text: text.to_string(),
             level: level.to_string(),
-            timestamp: timestamp_now(),
+            timestamp,
         },
     );
 }
@@ -741,6 +863,7 @@ pub async fn launch_minecraft(
         return Err("This instance is already running.".to_string());
     }
 
+    start_session_log(&instance_id);
     let emit_progress = |step: &str, status: &str| send_launch_status(&app, &instance_id, step, status);
     let emit_log = |text: &str, level: &str| send_launch_log(&app, &instance_id, text, level);
 
@@ -913,6 +1036,7 @@ pub async fn launch_minecraft(
     let exit_app = app.clone();
     let exit_instance_id = instance_id.clone();
     let start_time = Instant::now();
+    let launched_at = std::time::SystemTime::now();
 
     tokio::spawn(async move {
         let _operation_guard = operation_guard;
@@ -954,6 +1078,8 @@ pub async fn launch_minecraft(
                 &format!("Minecraft process exited with code {code_text}"),
                 "error",
             );
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            report_crash_artifacts(&exit_app, &exit_instance_id, launched_at);
             send_launch_status(
                 &exit_app,
                 &exit_instance_id,
@@ -963,6 +1089,7 @@ pub async fn launch_minecraft(
         }
 
         let _ = instances::record_play_session(&exit_instance_id, duration_secs);
+        finish_session_log(&exit_instance_id);
 
         if exit_code == Some(0) && !stop_requested {
             let backup_after_play = crate::core::recovery::get_recovery_settings(&exit_instance_id)
@@ -1053,6 +1180,22 @@ mod tests {
                 "org.lwjgl:lwjgl:3.3.3",
             ]
         );
+    }
+
+    #[test]
+    fn crash_artifacts_are_found_after_launch_time() {
+        let root = std::env::temp_dir().join(format!("script-launcher-crash-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("crash-reports")).unwrap();
+        let since = std::time::SystemTime::now() - std::time::Duration::from_secs(5);
+        fs::write(root.join("crash-reports").join("crash-2026-01-01_00.00.00-client.txt"), "---- Minecraft Crash Report ----").unwrap();
+        fs::write(root.join("hs_err_pid1234.log"), "# A fatal error").unwrap();
+        fs::write(root.join("unrelated.log"), "x").unwrap();
+        let found = find_crash_artifacts(&root, since);
+        assert_eq!(found.len(), 2);
+        let future = std::time::SystemTime::now() + std::time::Duration::from_secs(60);
+        assert!(find_crash_artifacts(&root, future).is_empty());
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

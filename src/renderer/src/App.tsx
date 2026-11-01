@@ -487,6 +487,7 @@ export const App: React.FC = () => {
 
             {activeTab === 'logs' && (
               <LogsPage
+                instanceId={activeLaunchingInstance?.id}
                 instanceName={activeLaunchingInstance?.name}
                 progress={launchProgress}
                 logs={launchLogs}
