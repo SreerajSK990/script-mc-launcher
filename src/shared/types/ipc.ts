@@ -84,6 +84,7 @@ export interface LaunchActions {
   start: (instanceId: string) => Promise<void>
   quickPlay: (instanceId: string, options: QuickPlayLaunchOptions) => Promise<boolean>
   stop: (instanceId: string) => Promise<void>
+  listRunning: () => Promise<string[]>
   onProgress: (callback: (event: LaunchProgressEvent) => void) => () => void
   onStatus: (callback: (event: LaunchProgressEvent) => void) => () => void
   onLog: (callback: (event: LaunchLogEvent) => void) => () => void

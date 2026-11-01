@@ -100,6 +100,104 @@ pub async fn stop_running_instance(instance_id: &str) -> bool {
     true
 }
 
+const RUNNING_MARKER_FILE: &str = ".running.json";
+const PROCESS_START_TOLERANCE_SECONDS: u64 = 15;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RunningMarker {
+    pid: u32,
+    started_at_unix: u64,
+}
+
+fn running_marker_path(instance_id: &str) -> PathBuf {
+    paths::get_instance_path(instance_id).join(RUNNING_MARKER_FILE)
+}
+
+fn write_running_marker(instance_id: &str, pid: u32) {
+    let marker = RunningMarker {
+        pid,
+        started_at_unix: chrono::Utc::now().timestamp().max(0) as u64,
+    };
+    let _ = crate::core::fs_util::write_json_atomic(&running_marker_path(instance_id), &marker);
+}
+
+fn clear_running_marker(instance_id: &str) {
+    let _ = fs::remove_file(running_marker_path(instance_id));
+}
+
+fn is_marker_process_alive(marker: &RunningMarker) -> bool {
+    use sysinfo::{Pid, ProcessesToUpdate, System};
+    let pid = Pid::from_u32(marker.pid);
+    let mut system = System::new();
+    system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
+    let Some(process) = system.process(pid) else {
+        return false;
+    };
+    let name = process.name().to_string_lossy().to_lowercase();
+    name.starts_with("java") && process.start_time().abs_diff(marker.started_at_unix) <= PROCESS_START_TOLERANCE_SECONDS
+}
+
+static REATTACH_ONCE: tokio::sync::OnceCell<()> = tokio::sync::OnceCell::const_new();
+
+async fn reattach_running_instances(app: &AppHandle) {
+    let Ok(entries) = fs::read_dir(paths::get_instances_directory()) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let instance_id = entry.file_name().to_string_lossy().to_string();
+        let marker_path = entry.path().join(RUNNING_MARKER_FILE);
+        let Ok(raw) = fs::read_to_string(&marker_path) else {
+            continue;
+        };
+        let Ok(marker) = serde_json::from_str::<RunningMarker>(&raw) else {
+            let _ = fs::remove_file(&marker_path);
+            continue;
+        };
+        if !is_marker_process_alive(&marker) {
+            let _ = fs::remove_file(&marker_path);
+            continue;
+        }
+        let Ok(guard) = operations::reserve_instance(&instance_id, "Minecraft is launching or running") else {
+            continue;
+        };
+        {
+            let mut map = get_process_manager().children.lock().await;
+            map.insert(
+                instance_id.clone(),
+                RunningProcess {
+                    pid: marker.pid,
+                    stop_requested: false,
+                },
+            );
+        }
+        let watcher_app = app.clone();
+        tokio::spawn(async move {
+            let _guard = guard;
+            while is_marker_process_alive(&marker) {
+                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+            }
+            let stop_requested = {
+                let mut map = get_process_manager().children.lock().await;
+                map.remove(&instance_id).map(|process| process.stop_requested).unwrap_or(false)
+            };
+            clear_running_marker(&instance_id);
+            let elapsed = chrono::Utc::now().timestamp().max(0) as u64 - marker.started_at_unix.min(chrono::Utc::now().timestamp().max(0) as u64);
+            let _ = instances::record_play_session(&instance_id, elapsed);
+            if stop_requested {
+                send_launch_status(&watcher_app, &instance_id, "CANCELLED", "Game stopped");
+            } else {
+                send_launch_status(&watcher_app, &instance_id, "COMPLETED", "Game closed");
+            }
+        });
+    }
+}
+
+pub async fn list_running_instances(app: &AppHandle) -> Vec<String> {
+    REATTACH_ONCE.get_or_init(|| reattach_running_instances(app)).await;
+    get_process_manager().children.lock().await.keys().cloned().collect()
+}
+
 fn timestamp_now() -> String {
     chrono::Local::now().format("%H:%M:%S").to_string()
 }
@@ -1023,6 +1121,7 @@ pub async fn launch_minecraft(
         let mut map = mgr.children.lock().await;
         map.insert(instance_id.clone(), RunningProcess { pid, stop_requested: false });
     }
+    write_running_marker(&instance_id, pid);
 
     emit_progress("RUNNING", "Minecraft is running");
 
@@ -1090,6 +1189,7 @@ pub async fn launch_minecraft(
 
         let _ = instances::record_play_session(&exit_instance_id, duration_secs);
         finish_session_log(&exit_instance_id);
+        clear_running_marker(&exit_instance_id);
 
         if exit_code == Some(0) && !stop_requested {
             let backup_after_play = crate::core::recovery::get_recovery_settings(&exit_instance_id)
@@ -1180,6 +1280,27 @@ mod tests {
                 "org.lwjgl:lwjgl:3.3.3",
             ]
         );
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn running_marker_tracks_real_java_process() {
+        let java = crate::core::java::get_java_executable_path("java-runtime-delta");
+        let source = std::env::temp_dir().join(format!("SleepProbe{}.java", std::process::id()));
+        fs::write(&source, "class SleepProbe { public static void main(String[] a) throws Exception { Thread.sleep(30000); } }").unwrap();
+        let mut child = std::process::Command::new(java).arg(&source).spawn().unwrap();
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let marker = RunningMarker {
+            pid: child.id(),
+            started_at_unix: chrono::Utc::now().timestamp() as u64,
+        };
+        assert!(is_marker_process_alive(&marker));
+        let stale = RunningMarker { started_at_unix: marker.started_at_unix - 3600, ..marker.clone() };
+        assert!(!is_marker_process_alive(&stale));
+        child.kill().unwrap();
+        let _ = child.wait();
+        assert!(!is_marker_process_alive(&marker));
+        let _ = fs::remove_file(source);
     }
 
     #[test]

@@ -77,6 +77,7 @@ const launcherAPI: LauncherAPI = {
     quickPlay: (instanceId: string, options) =>
       ipcRenderer.invoke(IPC_CHANNELS.LAUNCH_QUICK_PLAY, instanceId, options),
     stop: (instanceId: string) => ipcRenderer.invoke(IPC_CHANNELS.LAUNCH_STOP, instanceId),
+    listRunning: async () => [],
     onProgress: (callback) => {
       const handler = (_event: Electron.IpcRendererEvent, data: any) => callback(data)
       ipcRenderer.on(IPC_CHANNELS.LAUNCH_STATUS_EVENT, handler)

@@ -110,6 +110,7 @@ export function createTauriBridge(): LauncherAPI {
       quickPlay: (instanceId: string, options) =>
         invoke('launch_quick_play', { instanceId, options }),
       stop: (instanceId: string) => invoke('launch_stop', { instanceId }),
+      listRunning: () => invoke('launch_list_running'),
       onProgress: (callback) => createSafeListener<LaunchProgressEvent>('launch:status', callback),
       onStatus: (callback) => createSafeListener<LaunchProgressEvent>('launch:status', callback),
       onLog: (callback) => createSafeListener<LaunchLogEvent>('launch:log', callback)

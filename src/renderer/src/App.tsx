@@ -199,6 +199,30 @@ export const App: React.FC = () => {
   }, [fetchInstances])
 
   useEffect(() => {
+    if (!window.launcherAPI?.launch?.listRunning) return
+    let cancelled = false
+    window.launcherAPI.launch
+      .listRunning()
+      .then(async (runningIds) => {
+        const runningId = runningIds[0]
+        if (cancelled || !runningId) return
+        const instance = await window.launcherAPI.instances.get(runningId)
+        if (cancelled || !instance) return
+        setActiveLaunchingInstance(instance)
+        setGameStartTime((prev) => prev || Date.now())
+        setLaunchProgress({
+          instanceId: runningId,
+          step: 'RUNNING',
+          statusText: 'Minecraft is running'
+        })
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
     if (!window.launcherAPI?.updater) return
     const timer = setTimeout(() => {
       window.launcherAPI?.updater?.checkForUpdates().catch(() => {})

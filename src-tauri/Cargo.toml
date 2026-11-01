@@ -38,6 +38,7 @@ aes-gcm = "0.10"
 tauri-plugin-dialog = "2"
 tauri-plugin-single-instance = "2"
 hickory-resolver = { version = "0.24", features = ["tokio-runtime", "system-config"] }
+tauri-plugin-window-state = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }

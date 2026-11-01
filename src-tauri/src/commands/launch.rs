@@ -29,3 +29,8 @@ pub async fn launch_is_running(instance_id: String) -> Result<bool, String> {
     safety::validate_identifier(&instance_id)?;
     Ok(minecraft::is_instance_running(&instance_id).await)
 }
+
+#[tauri::command]
+pub async fn launch_list_running(app: AppHandle) -> Result<Vec<String>, String> {
+    Ok(minecraft::list_running_instances(&app).await)
+}

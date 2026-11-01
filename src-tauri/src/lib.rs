@@ -37,6 +37,7 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {
             core::transfers::initialize(app.handle().clone());
             if cfg!(debug_assertions) {
@@ -122,6 +123,7 @@ pub fn run() {
             launch_quick_play,
             launch_stop,
             launch_is_running,
+            launch_list_running,
             auth_get_state,
             auth_login_offline,
             auth_login_microsoft,
