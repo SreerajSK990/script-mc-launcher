@@ -2,7 +2,7 @@ use crate::core::instances::{
     create_new_instance, CreateInstancePayload, InstanceConfiguration,
 };
 use crate::core::mods::{get_mods_metadata_path, InstalledModRecord};
-use crate::core::fs_util::write_json_atomic;
+use crate::core::fs_util::{copy_dir_recursive, write_json_atomic};
 use crate::core::paths;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -133,21 +133,6 @@ fn count_files_and_check_saves(game_dir: &Path) -> (usize, bool, usize) {
     }
 
     (mod_count, has_saves, saves_count)
-}
-
-fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
-    fs::create_dir_all(dst)?;
-    for entry in fs::read_dir(src)? {
-        let entry = entry?;
-        let ty = entry.file_type()?;
-        let dest_child = dst.join(entry.file_name());
-        if ty.is_dir() {
-            copy_dir_all(&entry.path(), &dest_child)?;
-        } else {
-            fs::copy(entry.path(), dest_child)?;
-        }
-    }
-    Ok(())
 }
 
 pub fn parse_prism_instance(instance_dir: &Path) -> Option<DiscoveredExternalInstance> {
@@ -671,6 +656,18 @@ pub fn scan_custom_directory(target_path: &str) -> Result<Vec<DiscoveredExternal
     Ok(Vec::new())
 }
 
+struct CloneCleanup {
+    instance_id: Option<String>,
+}
+
+impl Drop for CloneCleanup {
+    fn drop(&mut self) {
+        if let Some(instance_id) = self.instance_id.take() {
+            let _ = fs::remove_dir_all(paths::get_instance_path(&instance_id));
+        }
+    }
+}
+
 pub fn clone_external_instance<F>(
     payload: CloneInstancePayload,
     progress: F,
@@ -719,6 +716,10 @@ where
         percentage: 15,
     });
 
+    let mut cleanup = CloneCleanup {
+        instance_id: Some(new_instance.id.clone()),
+    };
+
     let config_dirs = [
         "config",
         "defaultconfigs",
@@ -726,16 +727,22 @@ where
         "shaderpacks",
         "datapacks",
         "kubejs",
+        "scripts",
         "fancymenu_data",
         "schematics",
         "openloader",
+        "global_packs",
+        "journeymap",
+        "XaeroWorldMap",
+        "XaeroWaypoints",
+        "screenshots",
     ];
 
     for dir_name in config_dirs {
         let src = source_game_dir.join(dir_name);
         if src.is_dir() {
             let dst = target_minecraft_dir.join(dir_name);
-            let _ = copy_dir_all(&src, &dst);
+            copy_dir_recursive(&src, &dst, &[])?;
         }
     }
 
@@ -752,7 +759,7 @@ where
         let src = source_game_dir.join(file_name);
         if src.is_file() {
             let dst = target_minecraft_dir.join(file_name);
-            let _ = fs::copy(&src, &dst);
+            fs::copy(&src, &dst).map_err(|e| format!("Failed to copy {file_name}: {e}"))?;
         }
     }
 
@@ -769,7 +776,7 @@ where
     let mut installed_mods = Vec::new();
 
     if src_mods.is_dir() {
-        let _ = copy_dir_all(&src_mods, &target_mods);
+        copy_dir_recursive(&src_mods, &target_mods, &[])?;
 
         if let Ok(entries) = fs::read_dir(&target_mods) {
             for entry in entries.flatten() {
@@ -821,7 +828,7 @@ where
         let src_saves = source_game_dir.join("saves");
         let target_saves = target_minecraft_dir.join("saves");
         if src_saves.is_dir() {
-            let _ = copy_dir_all(&src_saves, &target_saves);
+            copy_dir_recursive(&src_saves, &target_saves, &[])?;
         }
     }
 
@@ -834,7 +841,8 @@ where
     });
 
     let mods_meta_path = get_mods_metadata_path(&new_instance.id);
-    let _ = write_json_atomic(&mods_meta_path, &installed_mods);
+    write_json_atomic(&mods_meta_path, &installed_mods)?;
+    cleanup.instance_id = None;
 
     progress(CloneProgressEvent {
         step: "completed".to_string(),

@@ -345,27 +345,6 @@ pub fn toggle_favorite(instance_id: &str) -> Result<InstanceConfiguration, Strin
     Ok(instance)
 }
 
-fn copy_dir_all(src: &Path, dst: &Path, skip_names: &[&str]) -> Result<(), String> {
-    if !dst.exists() {
-        fs::create_dir_all(dst).map_err(|e| e.to_string())?;
-    }
-    for entry in fs::read_dir(src).map_err(|e| e.to_string())?.flatten() {
-        let file_name = entry.file_name();
-        let name_str = file_name.to_string_lossy();
-        if skip_names.contains(&name_str.as_ref()) {
-            continue;
-        }
-        let src_path = entry.path();
-        let dst_path = dst.join(&file_name);
-        if entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
-            copy_dir_all(&src_path, &dst_path, skip_names)?;
-        } else {
-            fs::copy(&src_path, &dst_path).map_err(|e| e.to_string())?;
-        }
-    }
-    Ok(())
-}
-
 fn add_dir_to_zip<W: Write + std::io::Seek>(
     zip: &mut ZipWriter<W>,
     base_dir: &Path,
@@ -545,7 +524,10 @@ pub fn clone_instance(instance_id: &str, custom_name: Option<String>) -> Result<
     let src_mc_dir = paths::get_instance_minecraft_path(instance_id);
     let dst_mc_dir = paths::get_instance_minecraft_path(&new_instance.id);
     if src_mc_dir.exists() {
-        copy_dir_all(&src_mc_dir, &dst_mc_dir, &["crash-reports", "logs", ".fabric", ".quilt"])?;
+        if let Err(error) = crate::core::fs_util::copy_dir_recursive(&src_mc_dir, &dst_mc_dir, &["crash-reports", "logs", ".fabric", ".quilt"]) {
+            let _ = fs::remove_dir_all(paths::get_instance_path(&new_instance.id));
+            return Err(error);
+        }
     }
 
     for meta_name in &["mods.json", "resourcepacks.json", "shaders.json"] {
