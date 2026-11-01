@@ -138,7 +138,8 @@ export function createTauriBridge(): LauncherAPI {
         invoke('mods_update_all', { instanceId, updates }),
       installDropped: (instanceId, filePaths) =>
         invoke('mods_install_dropped', { instanceId, filePaths }),
-      onUpdateProgress: () => () => {}
+      onUpdateProgress: (callback) =>
+        createSafeListener<{ message: string; current: number; total: number }>('mods:update-progress', callback)
     },
     modpacks: {
       selectFile: () =>

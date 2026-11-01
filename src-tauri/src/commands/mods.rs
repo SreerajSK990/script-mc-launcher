@@ -86,12 +86,20 @@ pub async fn mods_check_updates(
 
 #[tauri::command]
 pub async fn mods_update_all(
+    app: tauri::AppHandle,
     instance_id: String,
     updates: Vec<ModUpdateInfo>,
 ) -> Result<ModUpdateResult, String> {
     safety::validate_identifier(&instance_id)?;
     let _operation_guard = crate::core::operations::reserve_instance(&instance_id, "Mods are being updated")?;
-    mods::update_all_mods(&instance_id, &updates).await
+    use tauri::Emitter;
+    mods::update_all_mods(&instance_id, &updates, |message, current, total| {
+        let _ = app.emit(
+            "mods:update-progress",
+            serde_json::json!({ "message": message, "current": current, "total": total }),
+        );
+    })
+    .await
 }
 
 #[tauri::command]

@@ -5,6 +5,7 @@ use crate::core::safety;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 const MODRINTH_API_BASE: &str = "https://api.modrinth.com/v2";
@@ -1264,46 +1265,121 @@ pub fn install_dropped_mod_files(
     })
 }
 
+fn prefer_release(versions: Vec<ModVersionFile>) -> Option<ModVersionFile> {
+    versions
+        .iter()
+        .find(|version| version.release_type == "release")
+        .cloned()
+        .or_else(|| versions.into_iter().next())
+}
+
+fn update_from(record: &InstalledModRecord, latest: ModVersionFile, source: &str) -> Option<ModUpdateInfo> {
+    let unchanged = record.version_id.as_deref() == Some(latest.id.as_str()) || latest.filename == record.filename;
+    if unchanged {
+        return None;
+    }
+    Some(ModUpdateInfo {
+        mod_id: latest.project_id.clone(),
+        name: record.name.clone(),
+        current_version: record.version.clone(),
+        current_filename: record.filename.clone(),
+        latest_version: latest.version_number.clone(),
+        source: source.to_string(),
+        release_type: latest.release_type.clone(),
+        version_file: latest,
+    })
+}
+
 pub async fn check_mod_updates(instance_id: &str) -> Result<Vec<ModUpdateInfo>, String> {
-    let installed = list_installed_mods(instance_id)?;
+    let instance = crate::core::instances::get_instance_by_id(instance_id)?.ok_or("Instance not found")?;
+    let loader = (instance.loader_type != "vanilla").then(|| instance.loader_type.clone());
+    let installed: Vec<InstalledModRecord> = list_installed_mods(instance_id)?
+        .into_iter()
+        .filter(|record| record.enabled)
+        .collect();
+    let mods_dir = get_mods_directory(instance_id);
+
+    let hashing_targets: Vec<(InstalledModRecord, PathBuf)> = installed
+        .iter()
+        .filter(|record| record.source != "curseforge")
+        .map(|record| (record.clone(), mods_dir.join(&record.filename)))
+        .collect();
+    let hashed: Vec<(String, InstalledModRecord)> = tokio::task::spawn_blocking(move || {
+        hashing_targets
+            .into_iter()
+            .filter_map(|(record, path)| {
+                download::hash_file(&path, &Checksum::Sha512(String::new()))
+                    .ok()
+                    .map(|hash| (hash, record))
+            })
+            .collect()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
     let mut updates = Vec::new();
-
-    for m in installed {
-        if m.id.starts_with("manual-") {
-            continue;
+    if !hashed.is_empty() {
+        let body = serde_json::json!({
+            "hashes": hashed.iter().map(|(hash, _)| hash.clone()).collect::<Vec<_>>(),
+            "algorithm": "sha512",
+            "loaders": loader.iter().map(|value| value.to_lowercase()).collect::<Vec<_>>(),
+            "game_versions": [instance.minecraft_version.clone()],
+        });
+        let response = crate::core::net::send_with_retry(|| {
+            crate::core::net::http_client()
+                .post(format!("{MODRINTH_API_BASE}/version_files/update"))
+                .json(&body)
+        })
+        .await?;
+        if !response.status().is_success() {
+            return Err(format!("Modrinth update check failed: HTTP {}", response.status()));
         }
-
-        if let Ok(versions) = get_mod_versions(&m.id, &m.source, m.game_version.as_deref(), m.loader.as_deref()).await {
-            if let Some(latest) = versions.first() {
-                if latest.version_number != m.version && latest.filename != m.filename {
-                    updates.push(ModUpdateInfo {
-                        mod_id: m.id.clone(),
-                        name: m.name.clone(),
-                        current_version: m.version.clone(),
-                        current_filename: m.filename.clone(),
-                        latest_version: latest.version_number.clone(),
-                        source: m.source.clone(),
-                        version_file: latest.clone(),
-                        release_type: latest.release_type.clone(),
-                    });
-                }
+        let results: HashMap<String, serde_json::Value> = response.json().await.map_err(|e| e.to_string())?;
+        for (hash, record) in &hashed {
+            let Some(latest) = results.get(hash).and_then(|value| parse_modrinth_version(value, &record.id)) else {
+                continue;
+            };
+            if let Some(update) = update_from(record, latest, "modrinth") {
+                updates.push(update);
             }
+        }
+    }
+
+    for record in installed.iter().filter(|record| record.source == "curseforge" && !record.id.starts_with("manual-")) {
+        let Ok(versions) = get_mod_versions(
+            &record.id,
+            "curseforge",
+            Some(&instance.minecraft_version),
+            loader.as_deref(),
+        )
+        .await
+        else {
+            continue;
+        };
+        if let Some(update) = prefer_release(versions).and_then(|latest| update_from(record, latest, "curseforge")) {
+            updates.push(update);
         }
     }
 
     Ok(updates)
 }
 
-pub async fn update_all_mods(
+pub async fn update_all_mods<F>(
     instance_id: &str,
     updates: &[ModUpdateInfo],
-) -> Result<ModUpdateResult, String> {
+    on_progress: F,
+) -> Result<ModUpdateResult, String>
+where
+    F: Fn(String, usize, usize),
+{
     let mut updated_count = 0;
     let mut failed_count = 0;
     let mut errors = Vec::new();
     let mut failures = Vec::new();
 
-    for u in updates {
+    let total = updates.len();
+    for (index, u) in updates.iter().enumerate() {
+        on_progress(format!("Updating {}", u.name), index, total);
         let payload = InstallModPayload {
             instance_id: instance_id.to_string(),
             version_file: u.version_file.clone(),
@@ -1333,6 +1409,7 @@ pub async fn update_all_mods(
         }
     }
 
+    on_progress("Updates finished".to_string(), total, total);
     Ok(ModUpdateResult {
         success: failed_count == 0,
         updated_count,
@@ -1345,6 +1422,17 @@ pub async fn update_all_mods(
 #[cfg(test)]
 mod version_parsing_tests {
     use super::*;
+
+    #[tokio::test]
+    #[ignore]
+    async fn live_update_check_for_existing_instance() {
+        let instance_id = std::env::var("UPDATE_CHECK_INSTANCE").unwrap();
+        let updates = check_mod_updates(&instance_id).await.unwrap();
+        for update in &updates {
+            println!("{} {} -> {}", update.name, update.current_version, update.latest_version);
+        }
+        println!("{} updates found", updates.len());
+    }
 
     #[test]
     fn curseforge_tags_split_into_versions_loaders_and_dependencies() {
