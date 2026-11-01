@@ -11,6 +11,7 @@ pub mod java;
 pub mod loaders;
 pub mod meta;
 pub mod minecraft;
+pub mod mod_metadata;
 pub mod mods;
 pub mod net;
 pub mod operations;

@@ -1036,12 +1036,21 @@ pub fn list_installed_mods(instance_id: &str) -> Result<Vec<InstalledModRecord>,
     for (filename, info) in &disk_map {
         if !recognized.contains(filename) {
             let clean_name = filename.strip_suffix(".jar").unwrap_or(filename);
+            let on_disk = if info.enabled {
+                mods_dir.join(filename)
+            } else {
+                mods_dir.join(format!("{filename}.disabled"))
+            };
+            let embedded = crate::core::mod_metadata::read_embedded_metadata(&on_disk);
             synced.push(InstalledModRecord {
                 version_id: None,
                 dependencies: None,
-                id: format!("manual-{}", clean_name.to_lowercase()),
-                name: clean_name.to_string(),
-                version: "custom".to_string(),
+                id: format!(
+                    "manual-{}",
+                    embedded.as_ref().map(|meta| meta.id.clone()).unwrap_or_else(|| clean_name.to_lowercase())
+                ),
+                name: embedded.as_ref().map(|meta| meta.name.clone()).unwrap_or_else(|| clean_name.to_string()),
+                version: embedded.as_ref().map(|meta| meta.version.clone()).unwrap_or_else(|| "custom".to_string()),
                 filename: filename.clone(),
                 source: "modrinth".to_string(),
                 icon_url: None,
@@ -1222,13 +1231,17 @@ pub fn install_dropped_mod_files(
 
         let size = target.metadata().map(|m| m.len()).unwrap_or(0);
         let clean_name = name.strip_suffix(".jar").unwrap_or(name);
+        let embedded = crate::core::mod_metadata::read_embedded_metadata(&target);
 
         let record = InstalledModRecord {
             version_id: None,
             dependencies: None,
-            id: format!("manual-{}", clean_name.to_lowercase()),
-            name: clean_name.to_string(),
-            version: "custom".to_string(),
+            id: format!(
+                "manual-{}",
+                embedded.as_ref().map(|meta| meta.id.clone()).unwrap_or_else(|| clean_name.to_lowercase())
+            ),
+            name: embedded.as_ref().map(|meta| meta.name.clone()).unwrap_or_else(|| clean_name.to_string()),
+            version: embedded.as_ref().map(|meta| meta.version.clone()).unwrap_or_else(|| "custom".to_string()),
             filename: name.to_string(),
             source: "modrinth".to_string(),
             icon_url: None,
