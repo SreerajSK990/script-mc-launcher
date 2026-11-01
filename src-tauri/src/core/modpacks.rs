@@ -241,6 +241,62 @@ pub fn inspect_modpack(archive_path: &str) -> Result<ModpackManifestInfo, String
     Err("Unsupported modpack archive format. Missing modrinth.index.json or manifest.json.".to_string())
 }
 
+struct PartialInstanceCleanup {
+    instance_id: Option<String>,
+}
+
+impl PartialInstanceCleanup {
+    fn disarm(&mut self) {
+        self.instance_id = None;
+    }
+}
+
+impl Drop for PartialInstanceCleanup {
+    fn drop(&mut self) {
+        if let Some(instance_id) = self.instance_id.take() {
+            let _ = fs::remove_dir_all(paths::get_instance_path(&instance_id));
+        }
+    }
+}
+
+const CURSEFORGE_RESOURCE_PACK_CLASS: u64 = 12;
+const CURSEFORGE_SHADER_PACK_CLASS: u64 = 6552;
+
+fn curseforge_target_folder(class_id: Option<u64>) -> &'static str {
+    match class_id {
+        Some(CURSEFORGE_RESOURCE_PACK_CLASS) => "resourcepacks",
+        Some(CURSEFORGE_SHADER_PACK_CLASS) => "shaderpacks",
+        _ => "mods",
+    }
+}
+
+async fn fetch_curseforge_class_ids(mod_ids: &[u64], api_key: &str) -> Result<HashMap<u64, u64>, String> {
+    let mut class_ids = HashMap::new();
+    for chunk in mod_ids.chunks(50) {
+        let body = serde_json::json!({ "modIds": chunk });
+        let response = crate::core::net::send_with_retry(|| {
+            crate::core::net::http_client()
+                .post(format!("{CURSEFORGE_API_BASE}/mods"))
+                .header("x-api-key", api_key)
+                .json(&body)
+        })
+        .await?;
+        if !response.status().is_success() {
+            return Err(format!("CurseForge project lookup failed: HTTP {}", response.status()));
+        }
+        let payload: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+        for project in payload.get("data").and_then(|d| d.as_array()).cloned().unwrap_or_default() {
+            if let (Some(id), Some(class_id)) = (
+                project.get("id").and_then(|v| v.as_u64()),
+                project.get("classId").and_then(|v| v.as_u64()),
+            ) {
+                class_ids.insert(id, class_id);
+            }
+        }
+    }
+    Ok(class_ids)
+}
+
 pub async fn import_modpack<F>(
     archive_path: &str,
     custom_name: Option<String>,
@@ -277,6 +333,10 @@ where
         is_favorite: None,
     })?;
 
+    let mut cleanup = PartialInstanceCleanup {
+        instance_id: Some(instance.id.clone()),
+    };
+    let mut skipped_files: Vec<String> = Vec::new();
     let minecraft_dir = paths::get_instance_minecraft_path(&instance.id);
     fs::create_dir_all(&minecraft_dir).map_err(|e| e.to_string())?;
 
@@ -295,15 +355,12 @@ where
     let mut installed_mods: Vec<InstalledModRecord> = Vec::new();
 
     if manifest.format == "modrinth" {
+        for override_prefix in ["overrides/", "client-overrides/"] {
         for i in 0..archive.len() {
             let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
             let entry_name = entry.name().replace('\\', "/");
 
-            let rel_path = if let Some(p) = entry_name.strip_prefix("overrides/") {
-                p
-            } else if let Some(p) = entry_name.strip_prefix("client-overrides/") {
-                p
-            } else {
+            let Some(rel_path) = entry_name.strip_prefix(override_prefix) else {
                 continue;
             };
 
@@ -321,6 +378,7 @@ where
                 let mut out_file = fs::File::create(&target_path).map_err(|e| e.to_string())?;
                 std::io::copy(&mut entry, &mut out_file).map_err(|e| e.to_string())?;
             }
+        }
         }
 
         if let Ok(mut index_entry) = archive.by_name("modrinth.index.json") {
@@ -450,23 +508,30 @@ where
                     .send()
                     .await;
 
-                if let Ok(res) = resp {
-                    if res.status().is_success() {
-                        if let Ok(json_data) = res.json::<CurseForgeApiFilesResponse>().await {
-                            if let Some(data) = json_data.data {
-                                fetched_files.extend(data);
-                            }
-                        }
-                    }
+                let res = resp.map_err(|e| format!("CurseForge file lookup failed: {e}"))?;
+                if !res.status().is_success() {
+                    return Err(format!("CurseForge file lookup failed: HTTP {}", res.status()));
                 }
+                let json_data = res
+                    .json::<CurseForgeApiFilesResponse>()
+                    .await
+                    .map_err(|e| format!("CurseForge file lookup returned invalid data: {e}"))?;
+                fetched_files.extend(json_data.data.unwrap_or_default());
             }
 
-            let mods_dir = minecraft_dir.join("mods");
-            fs::create_dir_all(&mods_dir).map_err(|e| e.to_string())?;
+            let project_ids: Vec<u64> = fetched_files.iter().filter_map(|file| file.mod_id).collect();
+            let class_ids = fetch_curseforge_class_ids(&project_ids, &api_key).await?;
 
             for f in fetched_files {
-                if let Some(dl_url) = f.download_url {
-                    let dest = mods_dir.join(safety::validate_file_name(&f.file_name)?);
+                let Some(dl_url) = f.download_url.clone() else {
+                    skipped_files.push(f.display_name.clone().unwrap_or_else(|| f.file_name.clone()));
+                    continue;
+                };
+                let target_folder = curseforge_target_folder(f.mod_id.and_then(|id| class_ids.get(&id).copied()));
+                {
+                    let target_dir = minecraft_dir.join(target_folder);
+                    fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
+                    let dest = target_dir.join(safety::validate_file_name(&f.file_name)?);
                     let sha1 = f.hashes.as_ref().and_then(|hashes| {
                         hashes.iter().find(|h| h.algo == 1).map(|h| h.value.clone())
                     });
@@ -482,8 +547,11 @@ where
                         f.file_name.strip_suffix(".jar").unwrap_or(&f.file_name).to_string()
                     });
 
+                    if target_folder != "mods" {
+                        continue;
+                    }
                     installed_mods.push(InstalledModRecord {
-                        version_id: None,
+                        version_id: Some(f.id.to_string()),
                         dependencies: None,
                         id: f.mod_id.unwrap_or(f.id).to_string(),
                         name: display,
@@ -537,9 +605,20 @@ where
     let mods_meta_path = get_mods_metadata_path(&instance.id);
     let _ = write_json_atomic(&mods_meta_path, &installed_mods);
 
+    cleanup.disarm();
+    let completion_message = if skipped_files.is_empty() {
+        format!("Successfully installed {}!", instance.name)
+    } else {
+        format!(
+            "Installed {}, but {} file(s) must be downloaded manually from CurseForge: {}",
+            instance.name,
+            skipped_files.len(),
+            skipped_files.join(", ")
+        )
+    };
     progress(ModpackImportProgressEvent {
         step: "completed".to_string(),
-        message: format!("Successfully installed {}!", instance.name),
+        message: completion_message,
         current: 100,
         total: 100,
         percentage: 100,
@@ -599,4 +678,38 @@ where
 
     let _ = fs::remove_file(temp_file_path);
     res
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    #[ignore]
+    async fn live_modrinth_modpack_import() {
+        let versions = crate::core::mods::get_modrinth_project_versions("fabulously-optimized", None, None)
+            .await
+            .unwrap();
+        let pack = &versions[0];
+        let archive = std::env::temp_dir().join(format!("script-launcher-pack-{}.mrpack", std::process::id()));
+        crate::core::download::fetch_to_path(
+            pack.download_url.as_deref().unwrap(),
+            &archive,
+            Checksum::from_hashes(pack.sha512.clone(), pack.sha1.clone()).as_ref(),
+            |_| {},
+        )
+        .await
+        .unwrap();
+        let instance = import_modpack(&archive.to_string_lossy(), Some("pack import test".into()), |_| {})
+            .await
+            .unwrap();
+        let mods_dir = paths::get_instance_minecraft_path(&instance.id).join("mods");
+        let jar_count = fs::read_dir(&mods_dir).unwrap().count();
+        let config_exists = paths::get_instance_minecraft_path(&instance.id).join("config").is_dir();
+        let _ = fs::remove_dir_all(paths::get_instance_path(&instance.id));
+        let _ = fs::remove_file(&archive);
+        println!("{} mods, config folder: {config_exists}", jar_count);
+        assert!(jar_count > 5);
+        assert!(config_exists);
+    }
 }
