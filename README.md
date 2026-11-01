@@ -2,7 +2,7 @@
 
 A fast, sleek, and modular Minecraft launcher with a native **Rust** backend on **Tauri 2** and a **React**, **TypeScript** and **Tailwind CSS** interface.
 
-**Latest release: [v0.22.0](https://github.com/SreerajSK990/script-mc-launcher/releases/tag/v0.22.0)** — per-instance window size, fullscreen and pre-launch/post-exit commands, plus duplicate and conflicting mod warnings before launch. Read the [release notes](release-notes/v0.22.0.md) for details.
+**Latest release: [v0.23.0](https://github.com/SreerajSK990/script-mc-launcher/releases/tag/v0.23.0)** — sign in with a code at microsoft.com/link, per-world datapacks from Modrinth, guided manual downloads for restricted CurseForge files, and Modrinth App imports with real metadata. Read the [release notes](release-notes/v0.23.0.md) for details.
 
 Most Minecraft launchers out there either look like they're stuck in 2010 with clunky Java Swing windows, or they're bloated with electron bloatware and ads. Script Launcher is built to be fast, clean, and completely isolated so your mod setups and game versions never conflict with each other.
 
@@ -252,6 +252,7 @@ npm run test:shaders:live
 - [x] **Resource Pack (Texture Pack) Browser & Manager:** Modrinth & CurseForge search, resolution filters, in-app management, drag-and-drop installer, and pack metadata extraction
 - [x] **Batch Mod Update Engine:** SHA-512 batch hash lookup, per-mod update badges, one-click individual update, and batch "Update All" with live progress
 - [x] **Enhanced Version Listing & Web Download Engine:** External browser download for restricted CurseForge files, channel filters (Release/Beta/Alpha), loader badges, changelog accordions, and modpack project ID self-healing
+- [x] **Code Sign-in, Datapacks & Import Polish:** Device-code Microsoft sign-in, per-world datapacks, CurseForge manual-download flow, and Modrinth App database import
 - [x] **Launch Options & Conflict Warnings:** Per-instance window size, fullscreen and launch commands, with duplicate and incompatible mod warnings
 - [x] **Modpack Export & World Manager:** Export instances as `.mrpack` files and manage singleplayer worlds per instance
 - [x] **Crash Reports & Session Logs:** Crash report excerpts in the console, saved per-session logs, and reattaching to running games
