@@ -141,6 +141,11 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
   const [javaPath, setJavaPath] = useState(instance.javaPath || '')
   const [icon, setIcon] = useState(instance.icon || 'minecraft_grass')
   const [group, setGroup] = useState(instance.group || '')
+  const [windowWidth, setWindowWidth] = useState(instance.launchOptions?.windowWidth?.toString() || '')
+  const [windowHeight, setWindowHeight] = useState(instance.launchOptions?.windowHeight?.toString() || '')
+  const [fullscreen, setFullscreen] = useState(Boolean(instance.launchOptions?.fullscreen))
+  const [preLaunchCommand, setPreLaunchCommand] = useState(instance.launchOptions?.preLaunchCommand || '')
+  const [postExitCommand, setPostExitCommand] = useState(instance.launchOptions?.postExitCommand || '')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -262,7 +267,14 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
         jvmArguments: parsedJvmArgs,
         javaPath: javaPath.trim() || null,
         icon: icon,
-        group: group.trim() || null
+        group: group.trim() || null,
+        launchOptions: {
+          windowWidth: parseInt(windowWidth, 10) > 0 ? parseInt(windowWidth, 10) : null,
+          windowHeight: parseInt(windowHeight, 10) > 0 ? parseInt(windowHeight, 10) : null,
+          fullscreen,
+          preLaunchCommand: preLaunchCommand.trim() || null,
+          postExitCommand: postExitCommand.trim() || null
+        }
       })
 
 
@@ -927,6 +939,61 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
               placeholder="-XX:+UseG1GC -XX:+ParallelRefProcEnabled ..."
               className="w-full bg-background-surface border border-border-subtle focus:border-primary/60 rounded-xl p-3.5 text-xs text-slate-200 font-mono focus:outline-none transition-colors"
             />
+          </div>
+
+          <div className="bg-background-card border border-border-subtle rounded-2xl p-5 space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold text-white">Launch Options</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Window size and commands for this instance. Commands run in the instance folder; a failing pre-launch command cancels the launch.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <label className="text-xs text-slate-400 space-y-1.5">
+                <span>Window width</span>
+                <input
+                  type="number"
+                  min={320}
+                  value={windowWidth}
+                  onChange={(e) => setWindowWidth(e.target.value)}
+                  placeholder="Default"
+                  className="w-full bg-background-surface border border-border-subtle focus:border-primary/60 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                />
+              </label>
+              <label className="text-xs text-slate-400 space-y-1.5">
+                <span>Window height</span>
+                <input
+                  type="number"
+                  min={240}
+                  value={windowHeight}
+                  onChange={(e) => setWindowHeight(e.target.value)}
+                  placeholder="Default"
+                  className="w-full bg-background-surface border border-border-subtle focus:border-primary/60 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm text-slate-300 md:pt-6">
+                <input type="checkbox" checked={fullscreen} onChange={(e) => setFullscreen(e.target.checked)} />
+                <span>Start in fullscreen</span>
+              </label>
+            </div>
+            <label className="block text-xs text-slate-400 space-y-1.5">
+              <span>Pre-launch command</span>
+              <input
+                value={preLaunchCommand}
+                onChange={(e) => setPreLaunchCommand(e.target.value)}
+                placeholder="Runs before Minecraft starts"
+                className="w-full bg-background-surface border border-border-subtle focus:border-primary/60 rounded-xl px-3 py-2 text-xs text-slate-200 font-mono focus:outline-none"
+              />
+            </label>
+            <label className="block text-xs text-slate-400 space-y-1.5">
+              <span>Post-exit command</span>
+              <input
+                value={postExitCommand}
+                onChange={(e) => setPostExitCommand(e.target.value)}
+                placeholder="Runs after Minecraft closes"
+                className="w-full bg-background-surface border border-border-subtle focus:border-primary/60 rounded-xl px-3 py-2 text-xs text-slate-200 font-mono focus:outline-none"
+              />
+            </label>
           </div>
 
           <div className="flex items-center justify-between bg-background-card border border-border-subtle rounded-2xl p-5">

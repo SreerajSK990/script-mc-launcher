@@ -366,6 +366,29 @@ fn send_launch_log(app: &AppHandle, instance_id: &str, text: &str, level: &str) 
     );
 }
 
+fn shell_command(command_line: &str, working_dir: &Path, instance: &InstanceConfiguration) -> tokio::process::Command {
+    let mut command = if cfg!(target_os = "windows") {
+        let mut cmd = tokio::process::Command::new("cmd");
+        cmd.arg("/C").arg(command_line);
+        cmd
+    } else {
+        let mut cmd = tokio::process::Command::new("sh");
+        cmd.arg("-c").arg(command_line);
+        cmd
+    };
+    #[cfg(target_os = "windows")]
+    command.creation_flags(0x08000000);
+    command
+        .current_dir(working_dir)
+        .env("INSTANCE_ID", &instance.id)
+        .env("INSTANCE_NAME", &instance.name)
+        .env("INSTANCE_DIR", working_dir)
+        .env("MINECRAFT_VERSION", &instance.minecraft_version)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    command
+}
+
 pub fn decode_log_line(raw: &[u8]) -> String {
     let trimmed = raw.strip_suffix(b"\n").unwrap_or(raw);
     let trimmed = trimmed.strip_suffix(b"\r").unwrap_or(trimmed);
@@ -1052,7 +1075,7 @@ pub async fn launch_minecraft(
         .collect::<Vec<String>>()
         .join(path_sep);
 
-    let (mut jvm_args, game_args, main_class) = build_arguments(
+    let (mut jvm_args, mut game_args, main_class) = build_arguments(
         &instance,
         &resolved_package,
         &account,
@@ -1061,6 +1084,14 @@ pub async fn launch_minecraft(
         &game_assets_dir,
         quick_play.as_ref(),
     );
+    if let Some(options) = &instance.launch_options {
+        if let (Some(width), Some(height)) = (options.window_width, options.window_height) {
+            game_args.extend(["--width".to_string(), width.to_string(), "--height".to_string(), height.to_string()]);
+        }
+        if options.fullscreen {
+            game_args.push("--fullscreen".to_string());
+        }
+    }
 
     jvm_args.extend(launch_config.extra_jvm_arguments);
 
@@ -1107,6 +1138,24 @@ pub async fn launch_minecraft(
         },
     };
 
+    let launch_options = instance.launch_options.clone().unwrap_or_default();
+    if let Some(pre_launch) = launch_options.pre_launch_command.as_deref() {
+        emit_log(&format!("Running pre-launch command: {pre_launch}"), "info");
+        let output = shell_command(pre_launch, &working_dir, &instance)
+            .output()
+            .await
+            .map_err(|e| format!("Pre-launch command could not start: {e}"))?;
+        for line in String::from_utf8_lossy(&output.stdout).lines().chain(String::from_utf8_lossy(&output.stderr).lines()) {
+            emit_log(&format!("[pre-launch] {line}"), "info");
+        }
+        if !output.status.success() {
+            return Err(format!(
+                "Pre-launch command failed with code {}. Launch cancelled.",
+                output.status.code().map(|code| code.to_string()).unwrap_or_else(|| "unknown".to_string())
+            ));
+        }
+    }
+
     emit_progress("STARTING_JAVA", "Spawning Java Virtual Machine...");
     emit_log(&format!("Executing Java: {java_executable}"), "info");
     emit_log(&format!("Main class: {main_class}"), "info");
@@ -1143,6 +1192,9 @@ pub async fn launch_minecraft(
 
     let exit_app = app.clone();
     let exit_instance_id = instance_id.clone();
+    let post_exit_command = launch_options.post_exit_command.clone();
+    let post_exit_dir = working_dir.clone();
+    let post_exit_instance = instance.clone();
     let start_time = Instant::now();
     let launched_at = std::time::SystemTime::now();
 
@@ -1197,6 +1249,17 @@ pub async fn launch_minecraft(
         }
 
         let _ = instances::record_play_session(&exit_instance_id, duration_secs);
+        if let Some(post_exit) = post_exit_command.as_deref() {
+            send_launch_log(&exit_app, &exit_instance_id, &format!("Running post-exit command: {post_exit}"), "info");
+            match shell_command(post_exit, &post_exit_dir, &post_exit_instance).output().await {
+                Ok(output) => {
+                    for line in String::from_utf8_lossy(&output.stdout).lines().chain(String::from_utf8_lossy(&output.stderr).lines()) {
+                        send_launch_log(&exit_app, &exit_instance_id, &format!("[post-exit] {line}"), "info");
+                    }
+                }
+                Err(error) => send_launch_log(&exit_app, &exit_instance_id, &format!("Post-exit command could not start: {error}"), "warn"),
+            }
+        }
         finish_session_log(&exit_instance_id);
         clear_running_marker(&exit_instance_id);
 
@@ -1310,6 +1373,20 @@ mod tests {
         let _ = child.wait();
         assert!(!is_marker_process_alive(&marker));
         let _ = fs::remove_file(source);
+    }
+
+    #[tokio::test]
+    async fn launch_commands_receive_instance_environment() {
+        let instance: InstanceConfiguration = serde_json::from_value(serde_json::json!({
+            "id": "env-test",
+            "name": "Env Test",
+            "minecraftVersion": "1.21.1"
+        }))
+        .unwrap();
+        let command_line = if cfg!(target_os = "windows") { "echo %INSTANCE_ID%" } else { "echo $INSTANCE_ID" };
+        let output = shell_command(command_line, &std::env::temp_dir(), &instance).output().await.unwrap();
+        assert!(output.status.success());
+        assert!(String::from_utf8_lossy(&output.stdout).contains("env-test"));
     }
 
     #[test]

@@ -52,8 +52,20 @@ pub struct InstanceConfiguration {
     pub last_played_at: Option<String>,
     #[serde(default)]
     pub total_play_time_minutes: u64,
+    #[serde(default)]
+    pub launch_options: Option<LaunchOptions>,
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LaunchOptions {
+    pub window_width: Option<u32>,
+    pub window_height: Option<u32>,
+    pub fullscreen: bool,
+    pub pre_launch_command: Option<String>,
+    pub post_exit_command: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,6 +111,8 @@ pub struct UpdateInstancePayload {
     pub last_played_at: Option<Option<String>>,
     #[serde(default)]
     pub total_play_time_minutes: Option<u64>,
+    #[serde(default)]
+    pub launch_options: Option<LaunchOptions>,
 }
 
 impl UpdateInstancePayload {
@@ -117,6 +131,7 @@ impl UpdateInstancePayload {
             is_favorite: None,
             last_played_at: None,
             total_play_time_minutes: None,
+            launch_options: None,
         }
     }
 }
@@ -229,6 +244,7 @@ pub fn create_new_instance(payload: CreateInstancePayload) -> Result<InstanceCon
         created_at: now,
         last_played_at: None,
         total_play_time_minutes: 0,
+        launch_options: None,
         extra: serde_json::Map::new(),
     };
 
@@ -288,6 +304,11 @@ pub fn update_instance(payload: UpdateInstancePayload) -> Result<InstanceConfigu
     }
     if let Some(playtime) = payload.total_play_time_minutes {
         instance.total_play_time_minutes = playtime;
+    }
+    if let Some(mut options) = payload.launch_options {
+        options.pre_launch_command = clean_optional_text(options.pre_launch_command);
+        options.post_exit_command = clean_optional_text(options.post_exit_command);
+        instance.launch_options = (options != LaunchOptions::default()).then_some(options);
     }
 
     let config_path = paths::get_instance_config_path(&instance.id);

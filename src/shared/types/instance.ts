@@ -1,5 +1,13 @@
 export type ModLoaderType = 'vanilla' | 'fabric' | 'quilt' | 'forge' | 'neoforge'
 
+export interface LaunchOptions {
+  windowWidth?: number | null
+  windowHeight?: number | null
+  fullscreen?: boolean
+  preLaunchCommand?: string | null
+  postExitCommand?: string | null
+}
+
 export interface InstanceConfiguration {
   id: string
   name: string
@@ -17,6 +25,7 @@ export interface InstanceConfiguration {
   createdAt: string
   lastPlayedAt: string | null
   totalPlayTimeMinutes: number
+  launchOptions?: LaunchOptions | null
 }
 
 export interface CreateInstancePayload {
@@ -46,6 +55,7 @@ export interface UpdateInstancePayload {
   isFavorite?: boolean
   lastPlayedAt?: string | null
   totalPlayTimeMinutes?: number
+  launchOptions?: LaunchOptions
 }
 
 
