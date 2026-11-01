@@ -1,6 +1,6 @@
 use crate::core::fs_util::write_json_atomic;
 use crate::core::instances;
-use crate::core::mods::{list_installed_mods, InstallModPayload};
+use crate::core::mods::InstallModPayload;
 use crate::core::paths;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -183,64 +183,6 @@ pub fn restore_backup(instance_id: &str, backup_id: &str) -> Result<(), String> 
     }
 
     Ok(())
-}
-
-pub fn plan_mods(payloads: Vec<InstallModPayload>) -> Result<DependencyPlan, String> {
-    if payloads.is_empty() {
-        return Ok(DependencyPlan {
-            items: Vec::new(),
-            reused: Vec::new(),
-            reused_items: Vec::new(),
-            warnings: Vec::new(),
-        });
-    }
-
-    let instance_id = &payloads[0].instance_id;
-    for p in &payloads {
-        p.validate()?;
-        if &p.instance_id != instance_id {
-            return Err("Select one target instance".to_string());
-        }
-    }
-
-    let installed = list_installed_mods(instance_id)?;
-    let mut items = Vec::new();
-    let mut reused = Vec::new();
-    let mut reused_items = Vec::new();
-    let mut warnings = Vec::new();
-
-    for payload in payloads {
-        let is_already_installed = installed.iter().any(|m| {
-            m.source == payload.mod_metadata.source
-                && (m.id == payload.mod_metadata.id || m.filename == payload.version_file.filename)
-        });
-
-        if is_already_installed {
-            reused.push(format!("{}:{}", payload.mod_metadata.source, payload.mod_metadata.id));
-            reused_items.push(payload);
-        } else {
-            if let Some(deps) = &payload.version_file.dependencies {
-                for dep in deps {
-                    if dep.r#type == "optional" {
-                        let dep_name = dep
-                            .project_id
-                            .as_deref()
-                            .or(dep.version_id.as_deref())
-                            .unwrap_or("unknown");
-                        warnings.push(format!("Optional dependency {dep_name} is not installed automatically"));
-                    }
-                }
-            }
-            items.push(payload);
-        }
-    }
-
-    Ok(DependencyPlan {
-        items,
-        reused,
-        reused_items,
-        warnings,
-    })
 }
 
 #[cfg(test)]

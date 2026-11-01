@@ -748,6 +748,12 @@ pub async fn launch_minecraft(
     let instance = instances::get_instance_by_id(&instance_id)?
         .ok_or_else(|| format!("Instance {instance_id} not found"))?;
 
+    if let Ok(installed_mods) = crate::core::mods::list_installed_mods(&instance_id) {
+        for issue in crate::core::dependencies::find_managed_dependency_issues(&installed_mods) {
+            emit_log(&format!("Mod requirement warning: {issue}"), "warn");
+        }
+    }
+
     let resolution = auth::get_valid_active_account().await?;
     if let Some(warning) = &resolution.warning {
         emit_log(warning, "warn");

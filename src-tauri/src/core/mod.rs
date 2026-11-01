@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod cloner;
+pub mod dependencies;
 pub mod discord;
 pub mod download;
 pub mod fonts;

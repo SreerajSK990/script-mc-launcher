@@ -121,9 +121,5 @@ pub async fn content_save_recovery_settings(
 
 #[tauri::command]
 pub async fn content_plan_mods(payloads: Vec<InstallModPayload>) -> Result<DependencyPlan, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        recovery::plan_mods(payloads)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    crate::core::dependencies::plan_mod_installation(payloads).await
 }

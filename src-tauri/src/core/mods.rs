@@ -581,76 +581,189 @@ pub async fn get_modrinth_project_versions(
     }
 
     let data: Vec<serde_json::Value> = resp.json().await.map_err(|e| e.to_string())?;
-    let mut files = Vec::new();
+    Ok(data
+        .iter()
+        .filter_map(|version| parse_modrinth_version(version, project_id))
+        .collect())
+}
 
-    for v in data {
-        let version_id = v.get("id").and_then(|x| x.as_str()).unwrap_or("").to_string();
-        let proj_id = v.get("project_id").and_then(|x| x.as_str()).unwrap_or(project_id).to_string();
-        let name = v.get("name").and_then(|x| x.as_str()).unwrap_or("").to_string();
-        let version_number = v.get("version_number").and_then(|x| x.as_str()).unwrap_or("").to_string();
-        let release_type = v.get("version_type").and_then(|x| x.as_str()).unwrap_or("release").to_string();
-        let date_published = v.get("date_published").and_then(|x| x.as_str()).unwrap_or("").to_string();
-        let changelog = v.get("changelog").and_then(|x| x.as_str()).map(|s| s.to_string());
+fn string_list(value: Option<&serde_json::Value>) -> Vec<String> {
+    value
+        .and_then(|list| list.as_array())
+        .map(|list| list.iter().filter_map(|item| item.as_str().map(str::to_string)).collect())
+        .unwrap_or_default()
+}
 
-        let game_versions: Vec<String> = v
-            .get("game_versions")
-            .and_then(|gv| gv.as_array())
-            .map(|arr| arr.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect())
-            .unwrap_or_default();
+pub fn parse_modrinth_version(v: &serde_json::Value, fallback_project_id: &str) -> Option<ModVersionFile> {
+    let file_entries = v.get("files").and_then(|f| f.as_array())?;
+    let primary = file_entries
+        .iter()
+        .find(|f| f.get("primary").and_then(|p| p.as_bool()).unwrap_or(false))
+        .or_else(|| file_entries.first())?;
 
-        let loaders: Vec<String> = v
-            .get("loaders")
-            .and_then(|l| l.as_array())
-            .map(|arr| arr.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect())
-            .unwrap_or_default();
+    let dependencies: Vec<ModDependency> = v
+        .get("dependencies")
+        .and_then(|d| d.as_array())
+        .map(|arr| {
+            arr.iter()
+                .map(|dep| ModDependency {
+                    project_id: dep.get("project_id").and_then(|x| x.as_str()).map(str::to_string),
+                    version_id: dep.get("version_id").and_then(|x| x.as_str()).map(str::to_string),
+                    r#type: dep.get("dependency_type").and_then(|x| x.as_str()).unwrap_or("optional").to_string(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
 
-        let dependencies: Vec<ModDependency> = v
-            .get("dependencies")
-            .and_then(|d| d.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .map(|dep| ModDependency {
-                        project_id: dep.get("project_id").and_then(|x| x.as_str()).map(|s| s.to_string()),
-                        version_id: dep.get("version_id").and_then(|x| x.as_str()).map(|s| s.to_string()),
-                        r#type: dep.get("dependency_type").and_then(|x| x.as_str()).unwrap_or("optional").to_string(),
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
+    let project_id = v
+        .get("project_id")
+        .and_then(|x| x.as_str())
+        .unwrap_or(fallback_project_id)
+        .to_string();
+    let version_id = v.get("id").and_then(|x| x.as_str()).unwrap_or("").to_string();
 
-        if let Some(file_entries) = v.get("files").and_then(|f| f.as_array()) {
-            let primary = file_entries.iter().find(|f| f.get("primary").and_then(|p| p.as_bool()).unwrap_or(false)).or_else(|| file_entries.first());
-            if let Some(pf) = primary {
-                let filename = pf.get("filename").and_then(|x| x.as_str()).unwrap_or("").to_string();
-                let download_url = pf.get("url").and_then(|x| x.as_str()).map(|s| s.to_string());
-                let size_bytes = pf.get("size").and_then(|x| x.as_u64()).unwrap_or(0);
-                let sha512 = pf.get("hashes").and_then(|h| h.get("sha512")).and_then(|s| s.as_str()).map(|s| s.to_string());
-                let sha1 = pf.get("hashes").and_then(|h| h.get("sha1")).and_then(|s| s.as_str()).map(|s| s.to_string());
+    Some(ModVersionFile {
+        dependencies: Some(dependencies),
+        shader_loaders: None,
+        website_url: Some(format!("https://modrinth.com/project/{project_id}/version/{version_id}")),
+        id: version_id,
+        project_id,
+        name: v.get("name").and_then(|x| x.as_str()).unwrap_or("").to_string(),
+        version_number: v.get("version_number").and_then(|x| x.as_str()).unwrap_or("").to_string(),
+        game_versions: string_list(v.get("game_versions")),
+        loaders: string_list(v.get("loaders")),
+        download_url: primary.get("url").and_then(|x| x.as_str()).map(str::to_string),
+        filename: primary.get("filename").and_then(|x| x.as_str()).unwrap_or("").to_string(),
+        size_bytes: primary.get("size").and_then(|x| x.as_u64()).unwrap_or(0),
+        sha512: primary.get("hashes").and_then(|h| h.get("sha512")).and_then(|s| s.as_str()).map(str::to_string),
+        sha1: primary.get("hashes").and_then(|h| h.get("sha1")).and_then(|s| s.as_str()).map(str::to_string),
+        release_type: v.get("version_type").and_then(|x| x.as_str()).unwrap_or("release").to_string(),
+        date_published: v.get("date_published").and_then(|x| x.as_str()).unwrap_or("").to_string(),
+        changelog: v.get("changelog").and_then(|x| x.as_str()).map(str::to_string),
+    })
+}
 
-                files.push(ModVersionFile {
-                    dependencies: Some(dependencies),
-                    shader_loaders: None,
-                    id: version_id,
-                    project_id: proj_id,
-                    name,
-                    version_number,
-                    game_versions,
-                    loaders,
-                    download_url,
-                    website_url: None,
-                    filename,
-                    size_bytes,
-                    sha512,
-                    sha1,
-                    release_type,
-                    date_published,
-                    changelog,
-                });
+pub async fn get_modrinth_version(version_id: &str) -> Result<ModVersionFile, String> {
+    let version: serde_json::Value =
+        crate::core::net::get_json(&format!("{MODRINTH_API_BASE}/version/{version_id}")).await?;
+    parse_modrinth_version(&version, "").ok_or_else(|| format!("Modrinth version {version_id} has no files"))
+}
+
+const CURSEFORGE_LOADER_NAMES: [(&str, &str); 4] = [
+    ("forge", "forge"),
+    ("fabric", "fabric"),
+    ("quilt", "quilt"),
+    ("neoforge", "neoforge"),
+];
+
+const CURSEFORGE_NON_VERSION_TAGS: [&str; 4] = ["client", "server", "java 8", "java 17"];
+
+pub fn parse_curseforge_file(f: &serde_json::Value, fallback_project_id: &str, requested_loader: Option<&str>) -> ModVersionFile {
+    let file_id = f.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
+    let project_id = f
+        .get("modId")
+        .and_then(|v| v.as_u64())
+        .map(|id| id.to_string())
+        .unwrap_or_else(|| fallback_project_id.to_string());
+    let release_type = match f.get("releaseType").and_then(|v| v.as_u64()).unwrap_or(1) {
+        2 => "beta",
+        3 => "alpha",
+        _ => "release",
+    }
+    .to_string();
+
+    let mut game_versions = Vec::new();
+    let mut loaders = Vec::new();
+    for tag in string_list(f.get("gameVersions")) {
+        let lowered = tag.to_lowercase();
+        if let Some((_, loader)) = CURSEFORGE_LOADER_NAMES.iter().find(|(name, _)| *name == lowered) {
+            if !loaders.iter().any(|existing: &String| existing == loader) {
+                loaders.push(loader.to_string());
             }
+        } else if !CURSEFORGE_NON_VERSION_TAGS.contains(&lowered.as_str()) && !lowered.starts_with("java ") {
+            game_versions.push(tag);
+        }
+    }
+    if loaders.is_empty() {
+        if let Some(loader) = requested_loader {
+            loaders.push(loader.to_lowercase());
         }
     }
 
-    Ok(files)
+    let sha1 = f
+        .get("hashes")
+        .and_then(|h| h.as_array())
+        .and_then(|hashes| hashes.iter().find(|h| h.get("algo").and_then(|a| a.as_u64()) == Some(1)))
+        .and_then(|h| h.get("value"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+
+    let dependencies = f
+        .get("dependencies")
+        .and_then(|d| d.as_array())
+        .map(|list| {
+            list.iter()
+                .filter_map(|dependency| {
+                    let relation = match dependency.get("relationType").and_then(|r| r.as_u64())? {
+                        2 => "optional",
+                        3 => "required",
+                        5 => "incompatible",
+                        _ => return None,
+                    };
+                    Some(ModDependency {
+                        project_id: dependency.get("modId").and_then(|id| id.as_u64()).map(|id| id.to_string()),
+                        version_id: None,
+                        r#type: relation.to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let display_name = f.get("displayName").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    ModVersionFile {
+        dependencies: Some(dependencies),
+        shader_loaders: None,
+        id: file_id.to_string(),
+        website_url: Some(format!("https://www.curseforge.com/projects/{project_id}/files/{file_id}")),
+        project_id,
+        version_number: if display_name.is_empty() { file_id.to_string() } else { display_name.clone() },
+        name: display_name,
+        game_versions,
+        loaders,
+        download_url: f.get("downloadUrl").and_then(|v| v.as_str()).map(str::to_string),
+        filename: f.get("fileName").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        size_bytes: f.get("fileLength").and_then(|v| v.as_u64()).unwrap_or(0),
+        sha512: None,
+        sha1,
+        release_type,
+        date_published: f.get("fileDate").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        changelog: None,
+    }
+}
+
+pub async fn get_curseforge_version(project_id: &str, file_id: &str) -> Result<ModVersionFile, String> {
+    let key = get_curseforge_key().ok_or("A CurseForge API key is required in Settings")?;
+    let response = crate::core::net::send_with_retry(|| {
+        crate::core::net::http_client()
+            .get(format!("{CURSEFORGE_API_BASE}/mods/{project_id}/files/{file_id}"))
+            .header("x-api-key", &key)
+    })
+    .await?;
+    if !response.status().is_success() {
+        return Err(format!("CurseForge file {file_id} could not be loaded: HTTP {}", response.status()));
+    }
+    let body: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+    let file = body.get("data").ok_or("CurseForge returned no file data")?;
+    Ok(parse_curseforge_file(file, project_id, None))
+}
+
+pub async fn get_mod_version(source: &str, project_id: &str, version_id: &str) -> Result<ModVersionFile, String> {
+    if source == "curseforge" {
+        get_curseforge_version(project_id, version_id).await
+    } else {
+        get_modrinth_version(version_id).await
+    }
 }
 
 pub async fn get_curseforge_mod_versions(
@@ -685,58 +798,10 @@ pub async fn get_curseforge_mod_versions(
     let data: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
     let files_arr = data.get("data").and_then(|d| d.as_array()).cloned().unwrap_or_default();
 
-    let mut result = Vec::new();
-    for f in files_arr {
-        let file_id = f.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
-        let name = f.get("displayName").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let filename = f.get("fileName").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let size_bytes = f.get("fileLength").and_then(|v| v.as_u64()).unwrap_or(0);
-        let date_published = f.get("fileDate").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let download_url = f.get("downloadUrl").and_then(|v| v.as_str()).map(|s| s.to_string());
-        let release_type_num = f.get("releaseType").and_then(|v| v.as_u64()).unwrap_or(1);
-        let release_type = match release_type_num {
-            2 => "beta",
-            3 => "alpha",
-            _ => "release",
-        }.to_string();
-
-        let game_versions: Vec<String> = f
-            .get("gameVersions")
-            .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect())
-            .unwrap_or_default();
-
-        let mut sha1 = None;
-        if let Some(hashes) = f.get("hashes").and_then(|h| h.as_array()) {
-            for h in hashes {
-                if h.get("algo").and_then(|a| a.as_u64()) == Some(1) {
-                    sha1 = h.get("value").and_then(|v| v.as_str()).map(|s| s.to_string());
-                }
-            }
-        }
-
-        result.push(ModVersionFile {
-            dependencies: None,
-            shader_loaders: None,
-            id: file_id.to_string(),
-            project_id: mod_id.to_string(),
-            name,
-            version_number: file_id.to_string(),
-            game_versions,
-            loaders: loader.map(|l| vec![l.to_string()]).unwrap_or_default(),
-            download_url,
-            website_url: None,
-            filename,
-            size_bytes,
-            sha512: None,
-            sha1,
-            release_type,
-            date_published,
-            changelog: None,
-        });
-    }
-
-    Ok(result)
+    Ok(files_arr
+        .iter()
+        .map(|file| parse_curseforge_file(file, mod_id, loader))
+        .collect())
 }
 
 pub async fn get_mod_versions(
@@ -1059,6 +1124,15 @@ pub async fn install_mod_to_instance(payload: InstallModPayload) -> Result<Insta
     Ok(new_record)
 }
 
+pub fn update_installed_records<F>(instance_id: &str, update: F) -> Result<(), String>
+where
+    F: FnOnce(&mut Vec<InstalledModRecord>),
+{
+    let mut records = list_installed_mods(instance_id)?;
+    update(&mut records);
+    write_json_atomic(&get_mods_metadata_path(instance_id), &records)
+}
+
 pub fn toggle_mod_enabled(instance_id: &str, filename: &str, enable: bool) -> Result<bool, String> {
     let mods_dir = get_mods_directory(instance_id);
     let active = mods_dir.join(filename);
@@ -1266,4 +1340,33 @@ pub async fn update_all_mods(
         errors,
         failures,
     })
+}
+
+#[cfg(test)]
+mod version_parsing_tests {
+    use super::*;
+
+    #[test]
+    fn curseforge_tags_split_into_versions_loaders_and_dependencies() {
+        let file = serde_json::json!({
+            "id": 5123456,
+            "modId": 306612,
+            "displayName": "Fabric API 0.102.0",
+            "fileName": "fabric-api-0.102.0.jar",
+            "gameVersions": ["1.21.1", "Fabric", "Client", "Java 21"],
+            "dependencies": [{"modId": 1, "relationType": 3}, {"modId": 2, "relationType": 2}, {"modId": 3, "relationType": 1}],
+            "hashes": [{"algo": 1, "value": "abc"}],
+            "downloadUrl": null
+        });
+        let parsed = parse_curseforge_file(&file, "0", None);
+        assert_eq!(parsed.project_id, "306612");
+        assert_eq!(parsed.game_versions, vec!["1.21.1"]);
+        assert_eq!(parsed.loaders, vec!["fabric"]);
+        let dependencies = parsed.dependencies.unwrap();
+        assert_eq!(dependencies.len(), 2);
+        assert_eq!(dependencies[0].r#type, "required");
+        assert_eq!(parsed.sha1.as_deref(), Some("abc"));
+        assert!(parsed.download_url.is_none());
+        assert!(parsed.website_url.unwrap().contains("306612/files/5123456"));
+    }
 }

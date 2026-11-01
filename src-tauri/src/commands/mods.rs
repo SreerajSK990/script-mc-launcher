@@ -33,7 +33,7 @@ pub async fn mods_get_versions(
 #[tauri::command]
 pub async fn mods_install(payload: InstallModPayload) -> Result<InstalledModRecord, String> {
     let _operation_guard = crate::core::operations::reserve_instance(&payload.instance_id, "Mods are being installed")?;
-    mods::install_mod_to_instance(payload).await
+    crate::core::dependencies::install_mod_with_dependencies(payload).await
 }
 
 #[tauri::command]
