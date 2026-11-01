@@ -16,6 +16,11 @@ const XBOX_AUTH_URL: &str = "https://user.auth.xboxlive.com/user/authenticate";
 const XSTS_AUTH_URL: &str = "https://xsts.auth.xboxlive.com/xsts/authorize";
 const MINECRAFT_LOGIN_URL: &str = "https://api.minecraftservices.com/authentication/login_with_xbox";
 const MINECRAFT_PROFILE_URL: &str = "https://api.minecraftservices.com/minecraft/profile";
+const LIVE_DEVICE_CODE_URL: &str = "https://login.live.com/oauth20_connect.srf";
+const LIVE_TOKEN_URL: &str = "https://login.live.com/oauth20_token.srf";
+const LIVE_SCOPE: &str = "service::user.auth.xboxlive.com::MBI_SSL";
+const DEVICE_CODE_GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
+pub const AUTH_FLOW_DEVICE_CODE: &str = "device-code";
 
 fn create_auth_http_client() -> reqwest::Client {
     reqwest::Client::builder()
@@ -47,6 +52,22 @@ pub struct StoredAccount {
     pub expires_at: u64,
     pub skin_url: Option<String>,
     pub created_at: String,
+    #[serde(default)]
+    pub auth_flow: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceCodeInfo {
+    #[serde(alias = "user_code")]
+    pub user_code: String,
+    #[serde(alias = "device_code")]
+    pub device_code: String,
+    #[serde(alias = "verification_uri")]
+    pub verification_uri: String,
+    pub interval: u64,
+    #[serde(alias = "expires_in")]
+    pub expires_in: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,6 +91,7 @@ struct SerializedAccountData {
     pub expires_at: u64,
     pub skin_url: Option<String>,
     pub created_at: String,
+    pub auth_flow: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -204,6 +226,7 @@ pub fn load_stored_accounts() -> Result<(Option<String>, Vec<StoredAccount>), St
             expires_at: item.expires_at,
             skin_url: item.skin_url,
             created_at: item.created_at,
+            auth_flow: item.auth_flow,
         })
         .collect();
 
@@ -233,6 +256,7 @@ pub fn save_stored_accounts(
                 expires_at: acc.expires_at,
                 skin_url: acc.skin_url.clone(),
                 created_at: acc.created_at.clone(),
+                auth_flow: acc.auth_flow.clone(),
             })
             .collect(),
     };
@@ -273,6 +297,7 @@ pub fn login_offline(username: &str) -> Result<StoredAccount, String> {
         expires_at: u64::MAX,
         skin_url: None,
         created_at: Utc::now().to_rfc3339(),
+        auth_flow: None,
     };
 
     let (_, mut accounts) = load_stored_accounts()?;
@@ -322,402 +347,285 @@ pub fn logout_account(account_id: &str) -> Result<AuthState, String> {
     })
 }
 
+struct MinecraftSession {
+    access_token: String,
+    expires_in: u64,
+    profile: MinecraftProfile,
+}
+
+async fn post_token_request(client: &reqwest::Client, endpoints: &[&str], params: &[(&str, &str)]) -> Result<MicrosoftTokenResponse, String> {
+    let mut last_error = String::from("No token endpoint was tried");
+    for endpoint in endpoints {
+        let response = match client
+            .post(*endpoint)
+            .header(USER_AGENT, crate::core::net::USER_AGENT)
+            .form(params)
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(error) => {
+                last_error = format_reqwest_error("Token request failed", &error);
+                continue;
+            }
+        };
+        let status = response.status();
+        if status.is_success() {
+            return response
+                .json::<MicrosoftTokenResponse>()
+                .await
+                .map_err(|e| format_reqwest_error("Failed to parse Microsoft token response", &e));
+        }
+        last_error = format!("Microsoft token request HTTP {status}: {}", response.text().await.unwrap_or_default());
+    }
+    Err(last_error)
+}
+
+async fn post_json(client: &reqwest::Client, url: &str, payload: &serde_json::Value) -> Result<reqwest::Response, String> {
+    client
+        .post(url)
+        .header(USER_AGENT, crate::core::net::USER_AGENT)
+        .header(reqwest::header::ACCEPT, "application/json")
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .json(payload)
+        .send()
+        .await
+        .map_err(|e| format_reqwest_error(&format!("Request to {url} failed"), &e))
+}
+
+async fn authenticate_xbox_live(client: &reqwest::Client, microsoft_access_token: &str, auth_flow: Option<&str>) -> Result<XboxLiveAuthResponse, String> {
+    let tickets: Vec<String> = if auth_flow == Some(AUTH_FLOW_DEVICE_CODE) {
+        vec![microsoft_access_token.to_string(), format!("t={microsoft_access_token}")]
+    } else {
+        vec![format!("d={microsoft_access_token}")]
+    };
+    let mut last_error = String::from("Xbox Live authentication was not attempted");
+    for ticket in tickets {
+        let payload = serde_json::json!({
+            "Properties": {
+                "AuthMethod": "RPS",
+                "SiteName": "user.auth.xboxlive.com",
+                "RpsTicket": ticket
+            },
+            "RelyingParty": "http://auth.xboxlive.com",
+            "TokenType": "JWT"
+        });
+        let response = post_json(client, XBOX_AUTH_URL, &payload).await?;
+        let status = response.status();
+        if status.is_success() {
+            return response
+                .json::<XboxLiveAuthResponse>()
+                .await
+                .map_err(|e| format_reqwest_error("Failed to parse Xbox Live response", &e));
+        }
+        last_error = format!("Xbox Live auth HTTP {status}: {}", response.text().await.unwrap_or_default());
+    }
+    Err(last_error)
+}
+
+async fn sign_in_to_minecraft(microsoft_access_token: &str, auth_flow: Option<&str>) -> Result<MinecraftSession, String> {
+    let client = create_auth_http_client();
+    let xbl_data = authenticate_xbox_live(&client, microsoft_access_token, auth_flow).await?;
+    let user_hash = xbl_data
+        .display_claims
+        .xui
+        .first()
+        .map(|x| x.uhs.clone())
+        .ok_or_else(|| "No user hash in Xbox response".to_string())?;
+
+    let xsts_payload = serde_json::json!({
+        "Properties": {
+            "SandboxId": "RETAIL",
+            "UserTokens": [xbl_data.token]
+        },
+        "RelyingParty": "rp://api.minecraftservices.com/",
+        "TokenType": "JWT"
+    });
+    let xsts_resp = post_json(&client, XSTS_AUTH_URL, &xsts_payload).await?;
+    let xsts_status = xsts_resp.status();
+    if !xsts_status.is_success() {
+        let err_body = xsts_resp.text().await.unwrap_or_default();
+        if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&err_body) {
+            match error_json.get("XErr").and_then(|v| v.as_i64()) {
+                Some(2148916233) => {
+                    return Err("This Microsoft account does not have an active Xbox account. Please create one on xbox.com.".to_string())
+                }
+                Some(2148916238) => {
+                    return Err("This account is a child account and requires adult verification in Microsoft Family Safety.".to_string())
+                }
+                _ => {}
+            }
+        }
+        return Err(format!("XSTS authorization HTTP {xsts_status}: {err_body}"));
+    }
+    let xsts_data = xsts_resp
+        .json::<XboxLiveAuthResponse>()
+        .await
+        .map_err(|e| format_reqwest_error("Failed to parse XSTS response", &e))?;
+
+    let mc_payload = serde_json::json!({
+        "identityToken": format!("XBL3.0 x={};{}", user_hash, xsts_data.token)
+    });
+    let mc_resp = post_json(&client, MINECRAFT_LOGIN_URL, &mc_payload).await?;
+    let mc_status = mc_resp.status();
+    if !mc_status.is_success() {
+        return Err(format!("Minecraft login HTTP {mc_status}: {}", mc_resp.text().await.unwrap_or_default()));
+    }
+    let mc_data = mc_resp
+        .json::<MinecraftAuthResponse>()
+        .await
+        .map_err(|e| format_reqwest_error("Failed to parse Minecraft auth response", &e))?;
+
+    let profile_resp = client
+        .get(MINECRAFT_PROFILE_URL)
+        .header(USER_AGENT, crate::core::net::USER_AGENT)
+        .header("Authorization", format!("Bearer {}", mc_data.access_token))
+        .send()
+        .await
+        .map_err(|e| format_reqwest_error("Profile request failed", &e))?;
+    let profile_status = profile_resp.status();
+    if !profile_status.is_success() {
+        if profile_status.as_u16() == 404 {
+            return Err("This Microsoft account does not own Minecraft Java Edition.".to_string());
+        }
+        return Err(format!("Profile request HTTP {profile_status}: {}", profile_resp.text().await.unwrap_or_default()));
+    }
+    let profile = profile_resp
+        .json::<MinecraftProfile>()
+        .await
+        .map_err(|e| format_reqwest_error("Failed to parse Minecraft profile", &e))?;
+
+    Ok(MinecraftSession {
+        access_token: mc_data.access_token,
+        expires_in: mc_data.expires_in,
+        profile,
+    })
+}
+
+fn store_microsoft_account(
+    session: MinecraftSession,
+    refresh_token: Option<String>,
+    auth_flow: Option<String>,
+    previous: Option<&StoredAccount>,
+    make_active: bool,
+) -> Result<StoredAccount, String> {
+    let skin_url = session
+        .profile
+        .skins
+        .as_ref()
+        .and_then(|skins| skins.iter().find(|s| s.state == "ACTIVE").map(|s| s.url.clone()));
+    let account = StoredAccount {
+        id: previous.map(|p| p.id.clone()).unwrap_or_else(|| session.profile.id.clone()),
+        username: session.profile.name,
+        uuid: session.profile.id,
+        account_type: "microsoft".to_string(),
+        access_token: session.access_token,
+        refresh_token: refresh_token.or_else(|| previous.and_then(|p| p.refresh_token.clone())),
+        expires_at: Utc::now().timestamp_millis() as u64 + session.expires_in * 1000,
+        skin_url,
+        created_at: previous.map(|p| p.created_at.clone()).unwrap_or_else(|| Utc::now().to_rfc3339()),
+        auth_flow,
+    };
+
+    let (active_id, mut accounts) = load_stored_accounts()?;
+    match accounts.iter_mut().find(|existing| existing.id == account.id) {
+        Some(existing) if !make_active => *existing = account.clone(),
+        _ => {
+            accounts.retain(|existing| existing.id != account.id);
+            accounts.insert(0, account.clone());
+        }
+    }
+    let next_active = if make_active { Some(account.id.clone()) } else { active_id };
+    save_stored_accounts(next_active, &accounts)?;
+    Ok(account)
+}
+
 pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAccount, String> {
     let client = create_auth_http_client();
-
-    let token_params = [
+    let params = [
         ("client_id", CLIENT_ID),
         ("code", code),
         ("grant_type", "authorization_code"),
         ("redirect_uri", REDIRECT_URI),
         ("scope", SCOPE),
     ];
-
-    let mut ms_resp = client
-        .post(TOKEN_URL)
-        .header(USER_AGENT, crate::core::net::USER_AGENT)
-        .form(&token_params)
-        .send()
-        .await;
-
-    let should_try_common = match &ms_resp {
-        Ok(resp) => !resp.status().is_success(),
-        Err(_) => true,
-    };
-
-    if should_try_common {
-        if let Ok(retry) = client
-            .post(COMMON_TOKEN_URL)
-            .header(USER_AGENT, crate::core::net::USER_AGENT)
-            .form(&token_params)
-            .send()
-            .await
-        {
-            if retry.status().is_success() || ms_resp.is_err() {
-                ms_resp = Ok(retry);
-            }
-        }
-    }
-
-    let ms_resp = ms_resp.map_err(|e| format_reqwest_error("Token request failed", &e))?;
-
-    let ms_status = ms_resp.status();
-    if !ms_status.is_success() {
-        let err_body = ms_resp.text().await.unwrap_or_default();
-        return Err(format!("Microsoft token exchange HTTP {ms_status}: {err_body}"));
-    }
-
-    let ms_tokens = ms_resp
-        .json::<MicrosoftTokenResponse>()
-        .await
-        .map_err(|e| format_reqwest_error("Failed to parse Microsoft token response", &e))?;
-
-    let xbl_payload = serde_json::json!({
-        "Properties": {
-            "AuthMethod": "RPS",
-            "SiteName": "user.auth.xboxlive.com",
-            "RpsTicket": format!("d={}", ms_tokens.access_token)
-        },
-        "RelyingParty": "http://auth.xboxlive.com",
-        "TokenType": "JWT"
-    });
-
-    let xbl_resp = client
-        .post(XBOX_AUTH_URL)
-        .header(USER_AGENT, crate::core::net::USER_AGENT)
-        .header(reqwest::header::ACCEPT, "application/json")
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .json(&xbl_payload)
-        .send()
-        .await
-        .map_err(|e| format_reqwest_error("Xbox Live auth failed", &e))?;
-
-    let xbl_status = xbl_resp.status();
-    if !xbl_status.is_success() {
-        let err_body = xbl_resp.text().await.unwrap_or_default();
-        return Err(format!("Xbox Live auth HTTP {xbl_status}: {err_body}"));
-    }
-
-    let xbl_data = xbl_resp
-        .json::<XboxLiveAuthResponse>()
-        .await
-        .map_err(|e| format_reqwest_error("Failed to parse Xbox Live response", &e))?;
-
-    let user_hash = xbl_data
-        .display_claims
-        .xui
-        .first()
-        .map(|x| x.uhs.clone())
-        .ok_or_else(|| "No user hash in Xbox response".to_string())?;
-
-    let xsts_payload = serde_json::json!({
-        "Properties": {
-            "SandboxId": "RETAIL",
-            "UserTokens": [xbl_data.token]
-        },
-        "RelyingParty": "rp://api.minecraftservices.com/",
-        "TokenType": "JWT"
-    });
-
-    let xsts_resp = client
-        .post(XSTS_AUTH_URL)
-        .header(USER_AGENT, crate::core::net::USER_AGENT)
-        .header(reqwest::header::ACCEPT, "application/json")
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .json(&xsts_payload)
-        .send()
-        .await
-        .map_err(|e| format_reqwest_error("XSTS auth failed", &e))?;
-
-    let xsts_status = xsts_resp.status();
-    if !xsts_status.is_success() {
-        let err_body = xsts_resp.text().await.unwrap_or_default();
-        if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&err_body) {
-            if let Some(err_code) = error_json.get("XErr").and_then(|v| v.as_i64()) {
-                if err_code == 2148916233 {
-                    return Err("This Microsoft account does not have an active Xbox account. Please create one on xbox.com.".to_string());
-                }
-                if err_code == 2148916238 {
-                    return Err("This account is a child account and requires adult verification in Microsoft Family Safety.".to_string());
-                }
-            }
-        }
-        return Err(format!("XSTS authorization HTTP {xsts_status}: {err_body}"));
-    }
-
-    let xsts_data = xsts_resp
-        .json::<XboxLiveAuthResponse>()
-        .await
-        .map_err(|e| format_reqwest_error("Failed to parse XSTS response", &e))?;
-
-    let mc_payload = serde_json::json!({
-        "identityToken": format!("XBL3.0 x={};{}", user_hash, xsts_data.token)
-    });
-
-    let mc_resp = client
-        .post(MINECRAFT_LOGIN_URL)
-        .header(USER_AGENT, crate::core::net::USER_AGENT)
-        .header(reqwest::header::ACCEPT, "application/json")
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .json(&mc_payload)
-        .send()
-        .await
-        .map_err(|e| format_reqwest_error("Minecraft login failed", &e))?;
-
-    let mc_status = mc_resp.status();
-    if !mc_status.is_success() {
-        let err_body = mc_resp.text().await.unwrap_or_default();
-        return Err(format!("Minecraft login HTTP {mc_status}: {err_body}"));
-    }
-
-    let mc_data = mc_resp
-        .json::<MinecraftAuthResponse>()
-        .await
-        .map_err(|e| format_reqwest_error("Failed to parse Minecraft auth response", &e))?;
-
-    let profile_resp = client
-        .get(MINECRAFT_PROFILE_URL)
-        .header(USER_AGENT, crate::core::net::USER_AGENT)
-        .header("Authorization", format!("Bearer {}", mc_data.access_token))
-        .send()
-        .await
-        .map_err(|e| format_reqwest_error("Profile request failed", &e))?;
-
-    let profile_status = profile_resp.status();
-    if !profile_status.is_success() {
-        let err_body = profile_resp.text().await.unwrap_or_default();
-        if profile_status.as_u16() == 404 {
-            return Err("This Microsoft account does not own Minecraft Java Edition.".to_string());
-        }
-        return Err(format!("Profile request HTTP {profile_status}: {err_body}"));
-    }
-
-    let profile = profile_resp
-        .json::<MinecraftProfile>()
-        .await
-        .map_err(|e| format_reqwest_error("Failed to parse Minecraft profile", &e))?;
-
-    let skin_url = profile.skins.as_ref().and_then(|skins| {
-        skins.iter().find(|s| s.state == "ACTIVE").map(|s| s.url.clone())
-    });
-
-    let now_ms = Utc::now().timestamp_millis() as u64;
-    let expires_at = now_ms + mc_data.expires_in * 1000;
-
-    let new_account = StoredAccount {
-        id: profile.id.clone(),
-        username: profile.name,
-        uuid: profile.id,
-        account_type: "microsoft".to_string(),
-        access_token: mc_data.access_token,
-        refresh_token: ms_tokens.refresh_token,
-        expires_at,
-        skin_url,
-        created_at: Utc::now().to_rfc3339(),
-    };
-
-    let (_, mut accounts) = load_stored_accounts()?;
-    accounts.retain(|a| a.id != new_account.id);
-    accounts.insert(0, new_account.clone());
-
-    save_stored_accounts(Some(new_account.id.clone()), &accounts)?;
-    Ok(new_account)
+    let tokens = post_token_request(&client, &[TOKEN_URL, COMMON_TOKEN_URL], &params).await?;
+    let session = sign_in_to_minecraft(&tokens.access_token, None).await?;
+    store_microsoft_account(session, tokens.refresh_token, None, None, true)
 }
 
 pub async fn refresh_microsoft_account(account: &StoredAccount) -> Result<StoredAccount, String> {
     let refresh_token = account
         .refresh_token
         .as_deref()
+        .filter(|token| !token.is_empty())
         .ok_or_else(|| "No refresh token available".to_string())?;
-
     let client = create_auth_http_client();
-    let token_params = [
-        ("client_id", CLIENT_ID),
-        ("refresh_token", refresh_token),
-        ("grant_type", "refresh_token"),
-        ("redirect_uri", REDIRECT_URI),
-        ("scope", SCOPE),
-    ];
-
-    let mut ms_resp = client
-        .post(TOKEN_URL)
-        .header(USER_AGENT, crate::core::net::USER_AGENT)
-        .form(&token_params)
-        .send()
-        .await;
-
-    let should_try_common = match &ms_resp {
-        Ok(resp) => !resp.status().is_success(),
-        Err(_) => true,
+    let auth_flow = account.auth_flow.as_deref();
+    let tokens = if auth_flow == Some(AUTH_FLOW_DEVICE_CODE) {
+        let params = [
+            ("client_id", CLIENT_ID),
+            ("refresh_token", refresh_token),
+            ("grant_type", "refresh_token"),
+            ("scope", LIVE_SCOPE),
+        ];
+        post_token_request(&client, &[LIVE_TOKEN_URL], &params).await?
+    } else {
+        let params = [
+            ("client_id", CLIENT_ID),
+            ("refresh_token", refresh_token),
+            ("grant_type", "refresh_token"),
+            ("redirect_uri", REDIRECT_URI),
+            ("scope", SCOPE),
+        ];
+        post_token_request(&client, &[TOKEN_URL, COMMON_TOKEN_URL], &params).await?
     };
+    let session = sign_in_to_minecraft(&tokens.access_token, auth_flow).await?;
+    store_microsoft_account(session, tokens.refresh_token, account.auth_flow.clone(), Some(account), false)
+}
 
-    if should_try_common {
-        if let Ok(retry) = client
-            .post(COMMON_TOKEN_URL)
-            .header(USER_AGENT, crate::core::net::USER_AGENT)
-            .form(&token_params)
-            .send()
-            .await
-        {
-            if retry.status().is_success() || ms_resp.is_err() {
-                ms_resp = Ok(retry);
-            }
-        }
-    }
-
-    let ms_resp = ms_resp.map_err(|e| format_reqwest_error("Token refresh request failed", &e))?;
-
-    let ms_status = ms_resp.status();
-    if !ms_status.is_success() {
-        let err_body = ms_resp.text().await.unwrap_or_default();
-        return Err(format!("Microsoft token refresh HTTP {ms_status}: {err_body}"));
-    }
-
-    let ms_tokens = ms_resp
-        .json::<MicrosoftTokenResponse>()
-        .await
-        .map_err(|e| format_reqwest_error("Failed to parse Microsoft token refresh response", &e))?;
-
-    let xbl_payload = serde_json::json!({
-        "Properties": {
-            "AuthMethod": "RPS",
-            "SiteName": "user.auth.xboxlive.com",
-            "RpsTicket": format!("d={}", ms_tokens.access_token)
-        },
-        "RelyingParty": "http://auth.xboxlive.com",
-        "TokenType": "JWT"
-    });
-
-    let xbl_resp = client
-        .post(XBOX_AUTH_URL)
+pub async fn start_device_code_login() -> Result<DeviceCodeInfo, String> {
+    let response = create_auth_http_client()
+        .post(LIVE_DEVICE_CODE_URL)
         .header(USER_AGENT, crate::core::net::USER_AGENT)
-        .header(reqwest::header::ACCEPT, "application/json")
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .json(&xbl_payload)
+        .form(&[("client_id", CLIENT_ID), ("scope", LIVE_SCOPE), ("response_type", "device_code")])
         .send()
         .await
-        .map_err(|e| format_reqwest_error("Xbox Live auth failed", &e))?;
-
-    let xbl_status = xbl_resp.status();
-    if !xbl_status.is_success() {
-        let err_body = xbl_resp.text().await.unwrap_or_default();
-        return Err(format!("Xbox Live auth HTTP {xbl_status}: {err_body}"));
+        .map_err(|e| format_reqwest_error("Could not request a sign-in code", &e))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!("Microsoft refused to issue a sign-in code: HTTP {status}"));
     }
-
-    let xbl_data = xbl_resp
-        .json::<XboxLiveAuthResponse>()
+    response
+        .json::<DeviceCodeInfo>()
         .await
-        .map_err(|e| format_reqwest_error("Failed to parse Xbox Live response", &e))?;
+        .map_err(|e| format_reqwest_error("Failed to read the sign-in code", &e))
+}
 
-    let user_hash = xbl_data
-        .display_claims
-        .xui
-        .first()
-        .map(|x| x.uhs.clone())
-        .ok_or_else(|| "No user hash in Xbox response".to_string())?;
-
-    let xsts_payload = serde_json::json!({
-        "Properties": {
-            "SandboxId": "RETAIL",
-            "UserTokens": [xbl_data.token]
-        },
-        "RelyingParty": "rp://api.minecraftservices.com/",
-        "TokenType": "JWT"
-    });
-
-    let xsts_resp = client
-        .post(XSTS_AUTH_URL)
+pub async fn poll_device_code_login(device_code: &str) -> Result<Option<StoredAccount>, String> {
+    let response = create_auth_http_client()
+        .post(LIVE_TOKEN_URL)
         .header(USER_AGENT, crate::core::net::USER_AGENT)
-        .header(reqwest::header::ACCEPT, "application/json")
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .json(&xsts_payload)
+        .form(&[("client_id", CLIENT_ID), ("grant_type", DEVICE_CODE_GRANT), ("device_code", device_code)])
         .send()
         .await
-        .map_err(|e| format_reqwest_error("XSTS auth failed", &e))?;
-
-    let xsts_status = xsts_resp.status();
-    if !xsts_status.is_success() {
-        let err_body = xsts_resp.text().await.unwrap_or_default();
-        return Err(format!("XSTS authorization HTTP {xsts_status}: {err_body}"));
+        .map_err(|e| format_reqwest_error("Could not check the sign-in status", &e))?;
+    let status = response.status();
+    let body: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+    if !status.is_success() {
+        return match body.get("error").and_then(|e| e.as_str()) {
+            Some("authorization_pending") | Some("slow_down") => Ok(None),
+            Some("expired_token") => Err("The sign-in code expired. Request a new one and try again.".to_string()),
+            Some("access_denied") | Some("authorization_declined") => Err("Sign-in was declined.".to_string()),
+            _ => Err(format!(
+                "Microsoft sign-in failed: {}",
+                body.get("error_description").and_then(|d| d.as_str()).unwrap_or("unknown error")
+            )),
+        };
     }
-
-    let xsts_data = xsts_resp
-        .json::<XboxLiveAuthResponse>()
-        .await
-        .map_err(|e| format_reqwest_error("Failed to parse XSTS response", &e))?;
-
-    let mc_payload = serde_json::json!({
-        "identityToken": format!("XBL3.0 x={};{}", user_hash, xsts_data.token)
-    });
-
-    let mc_resp = client
-        .post(MINECRAFT_LOGIN_URL)
-        .header(USER_AGENT, crate::core::net::USER_AGENT)
-        .header(reqwest::header::ACCEPT, "application/json")
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .json(&mc_payload)
-        .send()
-        .await
-        .map_err(|e| format_reqwest_error("Minecraft login failed", &e))?;
-
-    let mc_status = mc_resp.status();
-    if !mc_status.is_success() {
-        let err_body = mc_resp.text().await.unwrap_or_default();
-        return Err(format!("Minecraft login HTTP {mc_status}: {err_body}"));
-    }
-
-    let mc_data = mc_resp
-        .json::<MinecraftAuthResponse>()
-        .await
-        .map_err(|e| format_reqwest_error("Failed to parse Minecraft auth response", &e))?;
-
-    let profile_resp = client
-        .get(MINECRAFT_PROFILE_URL)
-        .header(USER_AGENT, crate::core::net::USER_AGENT)
-        .header("Authorization", format!("Bearer {}", mc_data.access_token))
-        .send()
-        .await
-        .map_err(|e| format_reqwest_error("Profile request failed", &e))?;
-
-    let profile_status = profile_resp.status();
-    if !profile_status.is_success() {
-        let err_body = profile_resp.text().await.unwrap_or_default();
-        return Err(format!("Profile request HTTP {profile_status}: {err_body}"));
-    }
-
-    let profile = profile_resp
-        .json::<MinecraftProfile>()
-        .await
-        .map_err(|e| format_reqwest_error("Failed to parse Minecraft profile", &e))?;
-
-    let skin_url = profile.skins.as_ref().and_then(|skins| {
-        skins.iter().find(|s| s.state == "ACTIVE").map(|s| s.url.clone())
-    });
-
-    let now_ms = Utc::now().timestamp_millis() as u64;
-    let expires_at = now_ms + mc_data.expires_in * 1000;
-
-    let updated_account = StoredAccount {
-        id: account.id.clone(),
-        username: profile.name,
-        uuid: profile.id,
-        account_type: "microsoft".to_string(),
-        access_token: mc_data.access_token,
-        refresh_token: ms_tokens.refresh_token.or_else(|| account.refresh_token.clone()),
-        expires_at,
-        skin_url,
-        created_at: account.created_at.clone(),
-    };
-
-    let (_, mut accounts) = load_stored_accounts()?;
-    for acc in &mut accounts {
-        if acc.id == updated_account.id {
-            *acc = updated_account.clone();
-        }
-    }
-
-    save_stored_accounts(Some(updated_account.id.clone()), &accounts)?;
-    Ok(updated_account)
+    let tokens: MicrosoftTokenResponse = serde_json::from_value(body).map_err(|e| e.to_string())?;
+    let session = sign_in_to_minecraft(&tokens.access_token, Some(AUTH_FLOW_DEVICE_CODE)).await?;
+    store_microsoft_account(session, tokens.refresh_token, Some(AUTH_FLOW_DEVICE_CODE.to_string()), None, true).map(Some)
 }
 
 pub async fn get_valid_active_account() -> Result<ActiveAccountResolution, String> {
@@ -753,5 +661,36 @@ pub async fn get_valid_active_account() -> Result<ActiveAccountResolution, Strin
             )),
             account,
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    #[ignore]
+    async fn live_device_code_is_issued() {
+        let info = start_device_code_login().await.unwrap();
+        assert_eq!(info.user_code.len(), 8);
+        assert!(info.verification_uri.contains("microsoft.com"));
+        assert!(poll_device_code_login(&info.device_code).await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn live_refresh_of_active_microsoft_account() {
+        let state = get_auth_state().unwrap();
+        let account = state
+            .accounts
+            .iter()
+            .find(|account| account.account_type == "microsoft")
+            .cloned()
+            .expect("no Microsoft account saved");
+        let refreshed = refresh_microsoft_account(&account).await.unwrap();
+        assert_eq!(refreshed.id, account.id);
+        assert!(refreshed.expires_at > account.expires_at.min(u64::MAX - 1));
+        assert_eq!(get_auth_state().unwrap().active_account_id, state.active_account_id);
+        println!("refreshed {} until {}", refreshed.username, refreshed.expires_at);
     }
 }

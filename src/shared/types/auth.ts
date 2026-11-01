@@ -32,6 +32,14 @@ export interface StoredAccount {
   createdAt: string
 }
 
+export interface DeviceCodeInfo {
+  userCode: string
+  deviceCode: string
+  verificationUri: string
+  interval: number
+  expiresIn: number
+}
+
 export interface AuthState {
   activeAccount: StoredAccount | null
   accounts: StoredAccount[]

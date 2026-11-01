@@ -69,6 +69,10 @@ const launcherAPI: LauncherAPI = {
   auth: {
     getState: () => ipcRenderer.invoke(IPC_CHANNELS.AUTH_GET_STATE),
     loginMicrosoft: () => ipcRenderer.invoke(IPC_CHANNELS.AUTH_LOGIN_MICROSOFT),
+    startDeviceCode: async () => {
+      throw new Error('Code sign-in requires the native launcher')
+    },
+    pollDeviceCode: async () => null,
     loginOffline: (username: string) => ipcRenderer.invoke(IPC_CHANNELS.AUTH_LOGIN_OFFLINE, username),
     logout: (accountId: string) => ipcRenderer.invoke(IPC_CHANNELS.AUTH_LOGOUT, accountId),
     switchAccount: (accountId: string) => ipcRenderer.invoke(IPC_CHANNELS.AUTH_SWITCH_ACCOUNT, accountId)

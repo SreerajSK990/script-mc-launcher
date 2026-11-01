@@ -1454,6 +1454,7 @@ mod tests {
                 expires_at: u64::MAX,
                 skin_url: None,
                 created_at: String::new(),
+                auth_flow: None,
             };
             let (mut jvm_args, game_args, main_class) =
                 build_arguments(&instance, &package, &account, &natives_dir, &classpath_string, &game_assets_dir, None);

@@ -110,6 +110,8 @@ export function createTauriBridge(): LauncherAPI {
     auth: {
       getState: () => invoke('auth_get_state'),
       loginMicrosoft: () => invoke('auth_login_microsoft'),
+      startDeviceCode: () => invoke('auth_device_code_start'),
+      pollDeviceCode: (deviceCode: string) => invoke('auth_device_code_poll', { deviceCode }),
       loginOffline: (username: string) => invoke('auth_login_offline', { username }),
       logout: (accountId: string) => invoke('auth_logout', { accountId }),
       switchAccount: (accountId: string) => invoke('auth_switch_account', { accountId })

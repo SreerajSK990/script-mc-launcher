@@ -1,7 +1,7 @@
 import type { OperationResult, DependencyPlan, ModUpdateResult, BackupEntry, RecoverySettings, ShaderPack, ShaderEnvironment, TransferProgress } from './operations'
 import type { InstanceConfiguration, CreateInstancePayload, UpdateInstancePayload, ModLoaderType } from './instance'
 import type { SystemEnvironment } from './system'
-import type { AuthState, StoredAccount } from './auth'
+import type { AuthState, StoredAccount, DeviceCodeInfo } from './auth'
 import type { LaunchProgressEvent, LaunchLogEvent } from './launch'
 import type {
   ModSearchResult,
@@ -80,6 +80,8 @@ export interface InstanceActions {
 export interface AuthActions {
   getState: () => Promise<AuthState>
   loginMicrosoft: () => Promise<StoredAccount>
+  startDeviceCode: () => Promise<DeviceCodeInfo>
+  pollDeviceCode: (deviceCode: string) => Promise<StoredAccount | null>
   loginOffline: (username: string) => Promise<StoredAccount>
   logout: (accountId: string) => Promise<AuthState>
   switchAccount: (accountId: string) => Promise<AuthState>

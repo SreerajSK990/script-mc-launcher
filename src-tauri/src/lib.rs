@@ -133,6 +133,8 @@ pub fn run() {
             auth_get_state,
             auth_login_offline,
             auth_login_microsoft,
+            auth_device_code_start,
+            auth_device_code_poll,
             auth_switch_account,
             auth_logout,
             content_list_shaders,

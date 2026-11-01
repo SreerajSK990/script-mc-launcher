@@ -563,6 +563,10 @@ export const App: React.FC = () => {
         onLoginOffline={handleLoginOffline}
         onSwitchAccount={handleSwitchAccount}
         onLogout={handleLogout}
+        onAccountsChanged={async () => {
+          await fetchAuthState()
+          showNotification('Signed in with Microsoft')
+        }}
       />
 
       <ConfirmModal

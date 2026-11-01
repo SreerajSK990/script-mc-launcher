@@ -93,3 +93,13 @@ pub async fn auth_login_microsoft(app: AppHandle) -> Result<StoredAccount, Strin
     let _ = win.close();
     result
 }
+
+#[tauri::command]
+pub async fn auth_device_code_start() -> Result<auth::DeviceCodeInfo, String> {
+    auth::start_device_code_login().await
+}
+
+#[tauri::command]
+pub async fn auth_device_code_poll(device_code: String) -> Result<Option<StoredAccount>, String> {
+    auth::poll_device_code_login(&device_code).await
+}
