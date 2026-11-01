@@ -13,7 +13,7 @@ export interface ModSearchResult {
   source: ModSource
   categories: string[]
   loaders: ModLoaderType[]
-  projectType?: 'mod' | 'modpack' | 'resourcepack' | 'shader'
+  projectType?: 'mod' | 'modpack' | 'resourcepack' | 'shader' | 'datapack'
   latestVersion?: string
   clientSide?: 'required' | 'optional' | 'unsupported'
   serverSide?: 'required' | 'optional' | 'unsupported'
@@ -79,7 +79,7 @@ export interface ModSearchParams {
   query?: string
   minecraftVersion?: string
   loader?: ModLoaderType
-  projectType?: 'mod' | 'modpack' | 'resourcepack' | 'shader'
+  projectType?: 'mod' | 'modpack' | 'resourcepack' | 'shader' | 'datapack'
   source?: 'all' | 'modrinth' | 'curseforge'
   category?: string
   limit?: number

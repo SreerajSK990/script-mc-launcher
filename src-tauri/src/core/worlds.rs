@@ -146,6 +146,86 @@ pub fn open_world_folder(instance_id: &str, folder_name: &str) -> Result<(), Str
     open::that(world_directory(instance_id, folder_name)?).map_err(|e| e.to_string())
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatapackEntry {
+    pub file_name: String,
+    pub size_bytes: u64,
+    pub is_directory: bool,
+}
+
+fn datapacks_directory(instance_id: &str, folder_name: &str) -> Result<PathBuf, String> {
+    Ok(world_directory(instance_id, folder_name)?.join("datapacks"))
+}
+
+pub fn list_datapacks(instance_id: &str, folder_name: &str) -> Result<Vec<DatapackEntry>, String> {
+    let directory = datapacks_directory(instance_id, folder_name)?;
+    let Ok(entries) = fs::read_dir(&directory) else {
+        return Ok(Vec::new());
+    };
+    let mut packs: Vec<DatapackEntry> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let file_name = entry.file_name().to_string_lossy().to_string();
+            let metadata = entry.metadata().ok()?;
+            if metadata.is_dir() {
+                return entry.path().join("pack.mcmeta").is_file().then(|| DatapackEntry {
+                    size_bytes: directory_size(&entry.path()),
+                    file_name,
+                    is_directory: true,
+                });
+            }
+            file_name.to_lowercase().ends_with(".zip").then(|| DatapackEntry {
+                file_name,
+                size_bytes: metadata.len(),
+                is_directory: false,
+            })
+        })
+        .collect();
+    packs.sort_by(|a, b| a.file_name.to_lowercase().cmp(&b.file_name.to_lowercase()));
+    Ok(packs)
+}
+
+pub async fn install_datapack(
+    instance_id: &str,
+    folder_name: &str,
+    version_file: &crate::core::mods::ModVersionFile,
+) -> Result<DatapackEntry, String> {
+    let file_name = safety::validate_file_name(&version_file.filename)?.to_string();
+    if !file_name.to_lowercase().ends_with(".zip") {
+        return Err("Datapacks must be .zip files".to_string());
+    }
+    let url = version_file
+        .download_url
+        .as_deref()
+        .ok_or("This datapack version has no direct download")?;
+    let directory = datapacks_directory(instance_id, folder_name)?;
+    fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
+    let checksum = crate::core::download::Checksum::from_hashes(version_file.sha512.clone(), version_file.sha1.clone());
+    let size = crate::core::transfers::download_for_instance(
+        instance_id,
+        url,
+        &directory.join(&file_name),
+        checksum.as_ref(),
+        Some(version_file.size_bytes),
+    )
+    .await?;
+    Ok(DatapackEntry {
+        file_name,
+        size_bytes: size,
+        is_directory: false,
+    })
+}
+
+pub fn delete_datapack(instance_id: &str, folder_name: &str, file_name: &str) -> Result<(), String> {
+    let target = datapacks_directory(instance_id, folder_name)?.join(safety::validate_file_name(file_name)?);
+    if target.is_dir() {
+        fs::remove_dir_all(&target).map_err(|e| e.to_string())
+    } else {
+        fs::remove_file(&target).map_err(|e| e.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -170,6 +250,31 @@ mod tests {
         let Some(fastnbt::Value::Compound(data)) = root.get("Data") else { panic!() };
         assert_eq!(data.get("LevelName"), Some(&fastnbt::Value::String("New Name".into())));
         assert_eq!(data.get("GameType"), Some(&fastnbt::Value::Int(1)));
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn live_datapack_install_list_and_delete() {
+        let root = std::env::temp_dir().join(format!("script-launcher-datapacks-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        unsafe {
+            std::env::set_var("LAUNCHER_DATA_DIR", &root);
+        }
+        let world = saves_directory("pack-test").join("World");
+        fs::create_dir_all(&world).unwrap();
+        let versions = crate::core::mods::get_modrinth_project_versions("terralith", Some("1.21.1"), Some("datapack"))
+            .await
+            .unwrap();
+        let installed = install_datapack("pack-test", "World", &versions[0]).await.unwrap();
+        let listed = list_datapacks("pack-test", "World").unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].file_name, installed.file_name);
+        delete_datapack("pack-test", "World", &installed.file_name).unwrap();
+        assert!(list_datapacks("pack-test", "World").unwrap().is_empty());
+        unsafe {
+            std::env::remove_var("LAUNCHER_DATA_DIR");
+        }
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

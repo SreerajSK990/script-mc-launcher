@@ -69,3 +69,25 @@ pub async fn worlds_open_folder(instance_id: String, folder_name: String) -> Res
     safety::validate_identifier(&instance_id)?;
     crate::core::worlds::open_world_folder(&instance_id, &folder_name)
 }
+
+#[tauri::command]
+pub async fn datapacks_list(instance_id: String, folder_name: String) -> Result<Vec<crate::core::worlds::DatapackEntry>, String> {
+    safety::validate_identifier(&instance_id)?;
+    crate::core::worlds::list_datapacks(&instance_id, &folder_name)
+}
+
+#[tauri::command]
+pub async fn datapacks_install(
+    instance_id: String,
+    folder_name: String,
+    version_file: crate::core::mods::ModVersionFile,
+) -> Result<crate::core::worlds::DatapackEntry, String> {
+    safety::validate_identifier(&instance_id)?;
+    crate::core::worlds::install_datapack(&instance_id, &folder_name, &version_file).await
+}
+
+#[tauri::command]
+pub async fn datapacks_delete(instance_id: String, folder_name: String, file_name: String) -> Result<(), String> {
+    safety::validate_identifier(&instance_id)?;
+    crate::core::worlds::delete_datapack(&instance_id, &folder_name, &file_name)
+}

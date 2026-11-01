@@ -217,7 +217,12 @@ const launcherAPI: LauncherAPI = {
     remove: async () => {
       throw new Error('World management requires the native launcher')
     },
-    openFolder: async () => {}
+    openFolder: async () => {},
+    listDatapacks: async () => [],
+    installDatapack: async () => {
+      throw new Error('Datapack management requires the native launcher')
+    },
+    deleteDatapack: async () => {}
   },
   skins: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.SKINS_LIST),

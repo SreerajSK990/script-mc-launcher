@@ -230,7 +230,13 @@ export function createTauriBridge(): LauncherAPI {
       backup: (instanceId: string, folderName: string) => invoke('worlds_backup', { instanceId, folderName }),
       remove: (instanceId: string, folderName: string) => invoke('worlds_delete', { instanceId, folderName }),
       openFolder: (instanceId: string, folderName: string) =>
-        invoke('worlds_open_folder', { instanceId, folderName })
+        invoke('worlds_open_folder', { instanceId, folderName }),
+      listDatapacks: (instanceId: string, folderName: string) =>
+        invoke('datapacks_list', { instanceId, folderName }),
+      installDatapack: (instanceId, folderName, versionFile) =>
+        invoke('datapacks_install', { instanceId, folderName, versionFile }),
+      deleteDatapack: (instanceId: string, folderName: string, fileName: string) =>
+        invoke('datapacks_delete', { instanceId, folderName, fileName })
     },
     skins: {
       list: () => invoke('skins_list'),

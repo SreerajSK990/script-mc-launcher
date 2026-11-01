@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { Archive, FolderOpen, Globe, Pencil, Play, RefreshCw, Trash2 } from 'lucide-react'
+import { Archive, Download, FolderOpen, Globe, Layers, Pencil, Play, RefreshCw, Search, Trash2 } from 'lucide-react'
 import type { InstanceConfiguration } from '@shared/types/instance'
-import type { ManagedWorldEntry, QuickPlayTarget } from '@shared/types/servers'
+import type { DatapackEntry, ManagedWorldEntry, QuickPlayTarget } from '@shared/types/servers'
+import type { ModSearchResult } from '@shared/types/mods'
 import { Button } from '@renderer/components/common/Button'
 import { ConfirmModal } from '@renderer/components/common/ConfirmModal'
 
@@ -22,12 +23,142 @@ function formatLastPlayed(timestamp: number): string {
   return new Date(timestamp).toLocaleString()
 }
 
+const DatapackSection: React.FC<{
+  instance: InstanceConfiguration
+  world: ManagedWorldEntry
+  onNotification?: (message: string) => void
+}> = ({ instance, world, onNotification }) => {
+  const [packs, setPacks] = useState<DatapackEntry[]>([])
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<ModSearchResult[]>([])
+  const [busy, setBusy] = useState<string | null>(null)
+
+  const loadPacks = useCallback(async () => {
+    try {
+      setPacks(await window.launcherAPI.worlds.listDatapacks(instance.id, world.folderName))
+    } catch (error) {
+      onNotification?.(error instanceof Error ? error.message : 'Could not load datapacks.')
+    }
+  }, [instance.id, world.folderName, onNotification])
+
+  useEffect(() => {
+    void loadPacks()
+  }, [loadPacks])
+
+  const search = async (event: React.FormEvent) => {
+    event.preventDefault()
+    setBusy('search')
+    try {
+      setResults(
+        await window.launcherAPI.mods.search({
+          query: query.trim(),
+          projectType: 'datapack',
+          source: 'modrinth',
+          minecraftVersion: instance.minecraftVersion,
+          limit: 8
+        })
+      )
+    } catch (error) {
+      onNotification?.(error instanceof Error ? error.message : 'Datapack search failed.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const install = async (project: ModSearchResult) => {
+    setBusy(project.id)
+    try {
+      const versions = await window.launcherAPI.mods.getVersions(
+        project.id,
+        'modrinth',
+        instance.minecraftVersion,
+        'datapack' as never
+      )
+      const chosen = versions.find((version) => version.releaseType === 'release') ?? versions[0]
+      if (!chosen) {
+        onNotification?.(`${project.name} has no datapack build for Minecraft ${instance.minecraftVersion}.`)
+        return
+      }
+      await window.launcherAPI.worlds.installDatapack(instance.id, world.folderName, chosen)
+      onNotification?.(`Installed ${project.name} into "${world.name}".`)
+      await loadPacks()
+    } catch (error) {
+      onNotification?.(error instanceof Error ? error.message : 'Datapack install failed.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div className="mt-3 space-y-3 rounded-lg border border-border-subtle bg-background-surface/40 p-3">
+      {packs.length === 0 ? (
+        <p className="text-xs text-slate-400">No datapacks in this world yet.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {packs.map((pack) => (
+            <li key={pack.fileName} className="flex items-center justify-between gap-2 text-xs text-slate-300">
+              <span className="truncate font-mono">{pack.fileName}</span>
+              <span className="flex items-center gap-2 shrink-0 text-slate-500">
+                {formatSize(pack.sizeBytes)}
+                <button
+                  className="text-rose-400 hover:text-rose-300"
+                  title="Remove datapack"
+                  onClick={async () => {
+                    await window.launcherAPI.worlds.deleteDatapack(instance.id, world.folderName, pack.fileName)
+                    await loadPacks()
+                  }}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form onSubmit={search} className="flex gap-2">
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={`Search Modrinth datapacks for ${instance.minecraftVersion}`}
+          className="flex-1 rounded-lg bg-background-surface border border-border-subtle px-3 py-1.5 text-xs text-white outline-none focus:border-primary"
+        />
+        <Button type="submit" variant="secondary" size="sm" icon={Search} disabled={busy === 'search'}>
+          Search
+        </Button>
+      </form>
+      {results.length > 0 && (
+        <ul className="space-y-1.5">
+          {results.map((project) => (
+            <li key={project.id} className="flex items-center justify-between gap-2 text-xs">
+              <span className="min-w-0">
+                <span className="text-slate-200">{project.name}</span>
+                <span className="block truncate text-slate-500">{project.description}</span>
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={Download}
+                disabled={busy === project.id}
+                onClick={() => void install(project)}
+              >
+                {busy === project.id ? 'Installing...' : 'Install'}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="text-[11px] text-slate-500">Datapacks load the next time the world is opened.</p>
+    </div>
+  )
+}
+
 export const WorldsPanel: React.FC<WorldsPanelProps> = ({ instance, onQuickPlay, onNotification }) => {
   const [worlds, setWorlds] = useState<ManagedWorldEntry[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [busyFolder, setBusyFolder] = useState<string | null>(null)
   const [renaming, setRenaming] = useState<{ folderName: string; value: string } | null>(null)
   const [pendingDelete, setPendingDelete] = useState<ManagedWorldEntry | null>(null)
+  const [expandedDatapacks, setExpandedDatapacks] = useState<string | null>(null)
 
   const loadWorlds = useCallback(async () => {
     setIsLoading(true)
@@ -129,6 +260,9 @@ export const WorldsPanel: React.FC<WorldsPanelProps> = ({ instance, onQuickPlay,
                   {world.gameMode} · {formatSize(world.sizeBytes)} · {formatLastPlayed(world.lastPlayed)}
                 </p>
                 <p className="text-[11px] text-slate-500 font-mono truncate">saves/{world.folderName}</p>
+                {expandedDatapacks === world.folderName && (
+                  <DatapackSection instance={instance} world={world} onNotification={onNotification} />
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -160,6 +294,16 @@ export const WorldsPanel: React.FC<WorldsPanelProps> = ({ instance, onQuickPlay,
                   }
                 >
                   {isBusy ? 'Working...' : 'Back Up'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={Layers}
+                  onClick={() =>
+                    setExpandedDatapacks((current) => (current === world.folderName ? null : world.folderName))
+                  }
+                >
+                  Datapacks
                 </Button>
                 <Button
                   variant="secondary"

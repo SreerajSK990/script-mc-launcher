@@ -34,7 +34,8 @@ import type {
   MinecraftServerEntry,
   AddServerPayload,
   RemoveServerPayload,
-  ManagedWorldEntry
+  ManagedWorldEntry,
+  DatapackEntry
 } from './servers'
 import type {
   SkinEntry,
@@ -210,6 +211,9 @@ export interface WorldActions {
   backup: (instanceId: string, folderName: string) => Promise<string>
   remove: (instanceId: string, folderName: string) => Promise<string>
   openFolder: (instanceId: string, folderName: string) => Promise<void>
+  listDatapacks: (instanceId: string, folderName: string) => Promise<DatapackEntry[]>
+  installDatapack: (instanceId: string, folderName: string, versionFile: ModVersionFile) => Promise<DatapackEntry>
+  deleteDatapack: (instanceId: string, folderName: string, fileName: string) => Promise<void>
 }
 
 export interface SkinActions {

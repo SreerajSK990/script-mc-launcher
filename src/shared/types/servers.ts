@@ -31,6 +31,12 @@ export interface ManagedWorldEntry extends SingleplayerWorldEntry {
   sizeBytes: number
 }
 
+export interface DatapackEntry {
+  fileName: string
+  sizeBytes: number
+  isDirectory: boolean
+}
+
 export interface ServerPingStatus {
   online: boolean
   latencyMs: number
