@@ -202,6 +202,19 @@ const launcherAPI: LauncherAPI = {
     remove: (payload: any) => ipcRenderer.invoke(IPC_CHANNELS.SERVERS_REMOVE, payload),
     ping: (host: string, port?: number) => ipcRenderer.invoke(IPC_CHANNELS.SERVERS_PING, host, port)
   },
+  worlds: {
+    list: async () => [],
+    rename: async () => {
+      throw new Error('World management requires the native launcher')
+    },
+    backup: async () => {
+      throw new Error('World management requires the native launcher')
+    },
+    remove: async () => {
+      throw new Error('World management requires the native launcher')
+    },
+    openFolder: async () => {}
+  },
   skins: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.SKINS_LIST),
     getActive: () => ipcRenderer.invoke(IPC_CHANNELS.SKINS_GET_ACTIVE),

@@ -2,6 +2,7 @@ import type { ModUpdateResult } from '@shared/types/operations'
 import { UpdateReport } from '@renderer/components/mods/UpdateReport'
 import { ShadersPanel } from '@renderer/components/mods/ShadersPanel'
 import { RecoveryPanel } from '@renderer/components/instances/RecoveryPanel'
+import { WorldsPanel } from '@renderer/components/instances/WorldsPanel'
 import { useNativeFileDrop } from '@renderer/services/fileDrop'
 import { installModWithPreview } from '@renderer/components/mods/DependencyInstallHost'
 import React, { useState, useEffect, useCallback, useRef } from 'react'
@@ -9,6 +10,7 @@ import {
   ArrowLeft,
   Play,
   FolderOpen,
+  Globe,
   PackageOpen,
   SlidersHorizontal,
   Sliders,
@@ -65,7 +67,7 @@ interface InstanceDetailPageProps {
   onNotification?: (message: string) => void
 }
 
-type DetailSubTab = 'shaders' | 'recovery' | 'config' | 'installation' | 'mods' | 'servers' | 'screenshots' | 'mcSettings'
+type DetailSubTab = 'shaders' | 'recovery' | 'config' | 'installation' | 'mods' | 'servers' | 'worlds' | 'screenshots' | 'mcSettings'
 
 const RAM_PRESETS = [
   { label: '2 GB', mb: 2048 },
@@ -611,6 +613,18 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
         >
           <Server size={16} />
           <span>Multiplayer Servers</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('worlds')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+            activeTab === 'worlds'
+              ? 'bg-primary/10 text-primary border border-primary/20'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-background-card'
+          }`}
+        >
+          <Globe size={16} />
+          <span>Worlds</span>
         </button>
 
         <button
@@ -1202,6 +1216,10 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
             }
           }}
         />
+      )}
+
+      {activeTab === 'worlds' && (
+        <WorldsPanel instance={instance} onQuickPlay={onQuickPlay} onNotification={onNotification} />
       )}
 
       {activeTab === 'screenshots' && (

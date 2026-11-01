@@ -221,6 +221,15 @@ export function createTauriBridge(): LauncherAPI {
       ping: (host: string, port?: number) =>
         invoke('servers_ping', { host, port })
     },
+    worlds: {
+      list: (instanceId: string) => invoke('worlds_list', { instanceId }),
+      rename: (instanceId: string, folderName: string, newName: string) =>
+        invoke('worlds_rename', { instanceId, folderName, newName }),
+      backup: (instanceId: string, folderName: string) => invoke('worlds_backup', { instanceId, folderName }),
+      remove: (instanceId: string, folderName: string) => invoke('worlds_delete', { instanceId, folderName }),
+      openFolder: (instanceId: string, folderName: string) =>
+        invoke('worlds_open_folder', { instanceId, folderName })
+    },
     skins: {
       list: () => invoke('skins_list'),
       getActive: () => invoke('skins_get_active'),

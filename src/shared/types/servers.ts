@@ -27,6 +27,10 @@ export interface SingleplayerWorldEntry {
 
 export type QuickPlayTarget = MinecraftServerEntry | SingleplayerWorldEntry
 
+export interface ManagedWorldEntry extends SingleplayerWorldEntry {
+  sizeBytes: number
+}
+
 export interface ServerPingStatus {
   online: boolean
   latencyMs: number

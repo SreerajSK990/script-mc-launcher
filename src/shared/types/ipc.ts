@@ -33,7 +33,8 @@ import type {
   QuickPlayLaunchOptions,
   MinecraftServerEntry,
   AddServerPayload,
-  RemoveServerPayload
+  RemoveServerPayload,
+  ManagedWorldEntry
 } from './servers'
 import type {
   SkinEntry,
@@ -201,6 +202,14 @@ export interface ServerActions {
   ping: (host: string, port?: number) => Promise<ServerPingStatus>
 }
 
+export interface WorldActions {
+  list: (instanceId: string) => Promise<ManagedWorldEntry[]>
+  rename: (instanceId: string, folderName: string, newName: string) => Promise<void>
+  backup: (instanceId: string, folderName: string) => Promise<string>
+  remove: (instanceId: string, folderName: string) => Promise<string>
+  openFolder: (instanceId: string, folderName: string) => Promise<void>
+}
+
 export interface SkinActions {
   list: () => Promise<{ activeSkinId: string | null; skins: SkinEntry[] }>
   getActive: () => Promise<string | null>
@@ -285,6 +294,7 @@ export interface LauncherAPI {
   java: JavaActions
   fonts: FontActions
   servers: ServerActions
+  worlds: WorldActions
   skins: SkinActions
   gameSettings: GameSettingsActions
   updater: UpdaterActions
