@@ -1,7 +1,21 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invoke as tauriInvoke, type InvokeArgs } from '@tauri-apps/api/core'
+import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { listen } from '@tauri-apps/api/event'
 import type { LauncherAPI } from '@shared/types/ipc'
 import type { LaunchProgressEvent, LaunchLogEvent } from '@shared/types/launch'
+
+async function invoke<T>(command: string, args?: InvokeArgs): Promise<T> {
+  try {
+    return await tauriInvoke<T>(command, args)
+  } catch (error) {
+    throw error instanceof Error ? error : new Error(String(error))
+  }
+}
+
+async function pickSinglePath(options: Parameters<typeof openDialog>[0]): Promise<string | null> {
+  const selected = await openDialog({ ...options, multiple: false })
+  return typeof selected === 'string' ? selected : null
+}
 
 export function isRunningInTauri(): boolean {
   return typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
@@ -51,7 +65,12 @@ export function createTauriBridge(): LauncherAPI {
       openExternal: (url: string) => invoke('system_open_external', { url }),
       openExternalUrl: (url: string) => invoke('system_open_external', { url }),
       openDirectory: (path: string) => invoke('system_open_directory', { dirPath: path }),
-      selectFile: async () => null
+      selectFile: (options) =>
+        pickSinglePath({
+          title: options?.title,
+          filters: options?.filters,
+          directory: false
+        })
     },
     instances: {
       list: () => invoke('instances_list'),
@@ -123,18 +142,10 @@ export function createTauriBridge(): LauncherAPI {
     },
     modpacks: {
       selectFile: () =>
-        new Promise<string | null>((resolve) => {
-          const input = document.createElement('input')
-          input.type = 'file'
-          input.accept = '.mrpack,.zip'
-          input.onchange = () => {
-            const file = input.files?.[0]
-            if (!file) return resolve(null)
-            const filePath = (file as { path?: string }).path
-            resolve(filePath || null)
-          }
-          input.oncancel = () => resolve(null)
-          input.click()
+        pickSinglePath({
+          title: 'Select a modpack archive',
+          filters: [{ name: 'Modpack archives', extensions: ['mrpack', 'zip'] }],
+          directory: false
         }),
       inspect: (filePath: string) => invoke('modpacks_inspect', { filePath }),
       import: (filePath: string, customName?: string) =>
@@ -169,20 +180,9 @@ export function createTauriBridge(): LauncherAPI {
       scanDirectory: (directoryPath: string) =>
         invoke('launchers_scan_directory', { directoryPath }),
       selectDirectory: () =>
-        new Promise<string | null>((resolve) => {
-          const input = document.createElement('input')
-          input.type = 'file'
-          input.setAttribute('webkitdirectory', 'true')
-          input.onchange = () => {
-            const file = input.files?.[0]
-            if (!file) return resolve(null)
-            const filePath = (file as { path?: string }).path
-            if (!filePath) return resolve(null)
-            const parent = filePath.replace(/[\\/][^\\/]+$/, '')
-            resolve(parent || filePath)
-          }
-          input.oncancel = () => resolve(null)
-          input.click()
+        pickSinglePath({
+          title: 'Select a launcher or instance folder',
+          directory: true
         }),
       clone: (payload) => invoke('launchers_clone', { payload }),
       onProgress: (callback) =>

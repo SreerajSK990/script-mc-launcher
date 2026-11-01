@@ -2,6 +2,7 @@ import type { ModUpdateResult } from '@shared/types/operations'
 import { UpdateReport } from '@renderer/components/mods/UpdateReport'
 import { ShadersPanel } from '@renderer/components/mods/ShadersPanel'
 import { RecoveryPanel } from '@renderer/components/instances/RecoveryPanel'
+import { useNativeFileDrop } from '@renderer/services/fileDrop'
 import { installModWithPreview } from '@renderer/components/mods/DependencyInstallHost'
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
@@ -381,15 +382,10 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
     })
   }
 
-  const handleModFilesDrop = async (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
+  const handleDroppedModPaths = async (droppedPaths: string[]) => {
     setIsDraggingMods(false)
 
-    const files = Array.from(e.dataTransfer.files)
-    const validPaths = files
-      .map((file) => window.launcherAPI.system.pathForFile(file))
-      .filter((p): p is string => Boolean(p && (p.toLowerCase().endsWith('.jar') || p.toLowerCase().endsWith('.zip'))))
+    const validPaths = droppedPaths.filter((p): p is string => Boolean(p && (p.toLowerCase().endsWith('.jar') || p.toLowerCase().endsWith('.zip'))))
 
     if (validPaths.length === 0) {
       setModsFeedbackMessage('Please drop valid .jar or .zip Minecraft mod files.')
@@ -415,6 +411,17 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
       setTimeout(() => setModsFeedbackMessage(null), 4000)
     }
   }
+
+  const handleModFilesDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    void handleDroppedModPaths(
+      Array.from(e.dataTransfer.files).map((file) => window.launcherAPI.system.pathForFile(file))
+    )
+  }
+
+  const modsDropZoneRef = useRef<HTMLDivElement>(null)
+  useNativeFileDrop(modsDropZoneRef, (paths) => void handleDroppedModPaths(paths), setIsDraggingMods)
 
   const handleDeleteScreenshot = (filename: string) => {
     setConfirmDialog({
@@ -914,6 +921,7 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
 
       {activeTab === 'mods' && (
         <div
+          ref={modsDropZoneRef}
           onDragOver={(e) => {
             e.preventDefault()
             setIsDraggingMods(true)

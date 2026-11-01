@@ -5,8 +5,12 @@ use crate::core::modpacks::{
 use tauri::{AppHandle, Emitter};
 
 #[tauri::command]
-pub fn modpacks_inspect(file_path: String) -> Result<ModpackManifestInfo, String> {
-    modpacks::inspect_modpack(&file_path)
+pub async fn modpacks_inspect(file_path: String) -> Result<ModpackManifestInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        modpacks::inspect_modpack(&file_path)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]

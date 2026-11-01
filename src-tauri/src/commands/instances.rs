@@ -27,8 +27,12 @@ pub async fn instances_update(payload: UpdateInstancePayload) -> Result<Instance
 
 #[tauri::command]
 pub async fn instances_delete(instance_id: String) -> Result<bool, String> {
-    safety::validate_identifier(&instance_id)?;
-    instances::delete_instance(&instance_id)
+    tauri::async_runtime::spawn_blocking(move || {
+        safety::validate_identifier(&instance_id)?;
+        instances::delete_instance(&instance_id)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -58,7 +62,11 @@ pub async fn instances_disband_group(group_name: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn instances_delete_group(group_name: String) -> Result<(), String> {
-    instances::delete_group(&group_name)
+    tauri::async_runtime::spawn_blocking(move || {
+        instances::delete_group(&group_name)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -85,8 +93,12 @@ pub async fn instances_repair(instance_id: String) -> Result<OperationStatus, St
 
 #[tauri::command]
 pub async fn instances_backup_saves(instance_id: String) -> Result<BackupResult, String> {
-    safety::validate_identifier(&instance_id)?;
-    instances::backup_saves(&instance_id)
+    tauri::async_runtime::spawn_blocking(move || {
+        safety::validate_identifier(&instance_id)?;
+        instances::backup_saves(&instance_id)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -94,6 +106,10 @@ pub async fn instances_clone(
     instance_id: String,
     custom_name: Option<String>,
 ) -> Result<InstanceConfiguration, String> {
-    safety::validate_identifier(&instance_id)?;
-    instances::clone_instance(&instance_id, custom_name)
+    tauri::async_runtime::spawn_blocking(move || {
+        safety::validate_identifier(&instance_id)?;
+        instances::clone_instance(&instance_id, custom_name)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }

@@ -1,6 +1,7 @@
 import type { ModUpdateResult } from '@shared/types/operations'
 import { UpdateReport } from '@renderer/components/mods/UpdateReport'
 import { ShadersPanel } from '@renderer/components/mods/ShadersPanel'
+import { useNativeFileDrop } from '@renderer/services/fileDrop'
 import { installModWithPreview } from '@renderer/components/mods/DependencyInstallHost'
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
@@ -157,9 +158,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
 
   const currentInstance = instances.find((i) => i.id === selectedInstanceId)
 
-  const handleModFilesDrop = async (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
+  const handleDroppedPaths = async (droppedPaths: string[]) => {
     setIsDraggingMods(false)
 
     if (!currentInstance) {
@@ -167,10 +166,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
       return
     }
 
-    const files = Array.from(e.dataTransfer.files)
-    const validPaths = files
-      .map((file) => window.launcherAPI.system.pathForFile(file))
-      .filter((p): p is string => Boolean(p && (p.toLowerCase().endsWith('.jar') || p.toLowerCase().endsWith('.zip'))))
+    const validPaths = droppedPaths.filter((p): p is string => Boolean(p && (p.toLowerCase().endsWith('.jar') || p.toLowerCase().endsWith('.zip'))))
 
     if (validPaths.length === 0) {
       onNotification(
@@ -228,6 +224,17 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
       onNotification('Failed to install dropped files.')
     }
   }
+
+  const handleModFilesDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    void handleDroppedPaths(
+      Array.from(e.dataTransfer.files).map((file) => window.launcherAPI.system.pathForFile(file))
+    )
+  }
+
+  const browserDropZoneRef = useRef<HTMLDivElement>(null)
+  useNativeFileDrop(browserDropZoneRef, (paths) => void handleDroppedPaths(paths), setIsDraggingMods)
 
   useEffect(() => {
     if (initialInstanceId) {
@@ -849,6 +856,7 @@ export const ModBrowserPage: React.FC<ModBrowserPageProps> = ({
 
   return (
     <div
+      ref={browserDropZoneRef}
       onDragOver={(e) => {
         e.preventDefault()
         setIsDraggingMods(true)

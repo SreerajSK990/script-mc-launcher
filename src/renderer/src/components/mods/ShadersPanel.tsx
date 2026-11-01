@@ -1,3 +1,4 @@
+import { useNativeFileDrop } from '@renderer/services/fileDrop'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Search,
@@ -359,14 +360,12 @@ export const ShadersPanel: React.FC<ShadersPanelProps> = ({
       setMessage('Shader pack(s) imported successfully.')
     })
 
-  const handleDrop = (event: React.DragEvent) => {
-    event.preventDefault()
-    event.stopPropagation()
+  const dropZoneRef = useRef<HTMLElement>(null)
+
+  const handleDroppedPaths = (droppedPaths: string[]) => {
     setIsDragging(false)
     if (!instance || busy) return
-    const paths = Array.from(event.dataTransfer.files)
-      .map((file) => window.launcherAPI.system.pathForFile(file))
-      .filter((p): p is string => Boolean(p && p.toLowerCase().endsWith('.zip')))
+    const paths = droppedPaths.filter((p): p is string => Boolean(p && p.toLowerCase().endsWith('.zip')))
     if (paths.length === 0) {
       setMessage('Please drop valid .zip shader pack files.')
       return
@@ -374,8 +373,19 @@ export const ShadersPanel: React.FC<ShadersPanelProps> = ({
     void importPaths(paths)
   }
 
+  const handleDrop = (event: React.DragEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    handleDroppedPaths(
+      Array.from(event.dataTransfer.files).map((file) => window.launcherAPI.system.pathForFile(file))
+    )
+  }
+
+  useNativeFileDrop(dropZoneRef, handleDroppedPaths, setIsDragging)
+
   return (
     <section
+      ref={dropZoneRef}
       className={`text-sm text-slate-300 relative ${
         isEmbeddedInModBrowser ? 'flex flex-col h-full overflow-hidden gap-3' : 'space-y-4'
       }`}
