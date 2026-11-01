@@ -79,6 +79,7 @@ pub async fn instances_toggle_favorite(instance_id: String) -> Result<InstanceCo
 #[tauri::command]
 pub async fn instances_repair(instance_id: String) -> Result<OperationStatus, String> {
     safety::validate_identifier(&instance_id)?;
+    let _operation_guard = crate::core::operations::reserve_instance(&instance_id, "The instance is being repaired")?;
     instances::repair_instance(&instance_id)
 }
 

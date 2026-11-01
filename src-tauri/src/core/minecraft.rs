@@ -4,6 +4,7 @@ use crate::core::java;
 use crate::core::download::{self, Checksum, DownloadTask};
 use crate::core::loaders;
 use crate::core::meta::{self, AssetIndexInfo, LibraryDownload, LibraryRule, VersionPackage};
+use crate::core::operations;
 use crate::core::paths;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -12,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::OnceLock;
 use std::time::Instant;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::Mutex;
 
@@ -48,8 +49,14 @@ pub struct QuickPlayLaunchOptions {
     pub world_folder: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct RunningProcess {
+    pid: u32,
+    stop_requested: bool,
+}
+
 pub struct ActiveProcessManager {
-    children: Mutex<HashMap<String, u32>>,
+    children: Mutex<HashMap<String, RunningProcess>>,
 }
 
 static PROCESS_MANAGER: OnceLock<ActiveProcessManager> = OnceLock::new();
@@ -69,25 +76,100 @@ pub async fn is_instance_running(instance_id: &str) -> bool {
 pub async fn stop_running_instance(instance_id: &str) -> bool {
     let mgr = get_process_manager();
     let mut map = mgr.children.lock().await;
-    if let Some(pid) = map.remove(instance_id) {
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt;
-            let _ = std::process::Command::new("taskkill")
-                .creation_flags(0x08000000)
-                .args(["/F", "/T", "/PID", &pid.to_string()])
-                .output();
-        }
-        #[cfg(not(target_os = "windows"))]
-        {
-            let _ = std::process::Command::new("kill")
-                .args(["-9", &pid.to_string()])
-                .output();
-        }
-        true
-    } else {
-        false
+    let Some(process) = map.get_mut(instance_id) else {
+        return false;
+    };
+    process.stop_requested = true;
+    let pid = process.pid;
+    drop(map);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        let _ = std::process::Command::new("taskkill")
+            .creation_flags(0x08000000)
+            .args(["/F", "/T", "/PID", &pid.to_string()])
+            .output();
     }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = std::process::Command::new("kill")
+            .args(["-9", &pid.to_string()])
+            .output();
+    }
+    true
+}
+
+fn timestamp_now() -> String {
+    chrono::Local::now().format("%H:%M:%S").to_string()
+}
+
+fn send_launch_status(app: &AppHandle, instance_id: &str, step: &str, status_text: &str) {
+    send_launch_progress(app, instance_id, step, status_text, None);
+}
+
+fn send_launch_progress(
+    app: &AppHandle,
+    instance_id: &str,
+    step: &str,
+    status_text: &str,
+    counts: Option<(usize, usize)>,
+) {
+    let _ = app.emit(
+        "launch:status",
+        LaunchProgressEvent {
+            instance_id: instance_id.to_string(),
+            step: step.to_string(),
+            status_text: status_text.to_string(),
+            current_items: counts.map(|(current, _)| current as u64),
+            total_items: counts.map(|(_, total)| total as u64),
+            percentage: counts.map(|(current, total)| {
+                if total == 0 {
+                    100
+                } else {
+                    ((current as f64 / total as f64) * 100.0).round() as u32
+                }
+            }),
+        },
+    );
+}
+
+fn send_launch_log(app: &AppHandle, instance_id: &str, text: &str, level: &str) {
+    let _ = app.emit(
+        "launch:log",
+        LaunchLogEvent {
+            instance_id: instance_id.to_string(),
+            text: text.to_string(),
+            level: level.to_string(),
+            timestamp: timestamp_now(),
+        },
+    );
+}
+
+pub fn decode_log_line(raw: &[u8]) -> String {
+    let trimmed = raw.strip_suffix(b"\n").unwrap_or(raw);
+    let trimmed = trimmed.strip_suffix(b"\r").unwrap_or(trimmed);
+    String::from_utf8_lossy(trimmed).into_owned()
+}
+
+fn spawn_log_forwarder<R>(app: AppHandle, instance_id: String, stream: R)
+where
+    R: tokio::io::AsyncRead + Unpin + Send + 'static,
+{
+    tokio::spawn(async move {
+        let mut reader = BufReader::new(stream);
+        let mut buffer = Vec::with_capacity(512);
+        loop {
+            buffer.clear();
+            match reader.read_until(b'\n', &mut buffer).await {
+                Ok(0) => break,
+                Ok(_) => {
+                    let line = decode_log_line(&buffer);
+                    send_launch_log(&app, &instance_id, &line, determine_log_level(&line));
+                }
+                Err(_) => break,
+            }
+        }
+    });
 }
 
 fn is_rule_allowed(rules: Option<&[LibraryRule]>) -> bool {
@@ -549,56 +631,37 @@ pub async fn launch_minecraft(
     instance_id: String,
     quick_play: Option<QuickPlayLaunchOptions>,
 ) -> Result<bool, String> {
+    let operation_guard = operations::reserve_instance(&instance_id, "Minecraft is launching or running")?;
+
     if is_instance_running(&instance_id).await {
         return Err("This instance is already running.".to_string());
     }
 
-    let emit_progress = |step: &str, status: &str, current: Option<u64>, total: Option<u64>, pct: Option<u32>| {
-        let payload = LaunchProgressEvent {
-            instance_id: instance_id.clone(),
-            step: step.to_string(),
-            status_text: status.to_string(),
-            current_items: current,
-            total_items: total,
-            percentage: pct,
-        };
-        let _ = app.emit("launch:status", payload.clone());
-        if let Some(main_win) = app.get_webview_window("main") {
-            let _ = main_win.emit("launch:status", payload);
-        }
-    };
+    let emit_progress = |step: &str, status: &str| send_launch_status(&app, &instance_id, step, status);
+    let emit_log = |text: &str, level: &str| send_launch_log(&app, &instance_id, text, level);
 
-    let emit_log = |text: &str, level: &str| {
-        let payload = LaunchLogEvent {
-            instance_id: instance_id.clone(),
-            text: text.to_string(),
-            level: level.to_string(),
-            timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-        };
-        let _ = app.emit("launch:log", payload.clone());
-        if let Some(main_win) = app.get_webview_window("main") {
-            let _ = main_win.emit("launch:log", payload);
-        }
-    };
-
-    emit_progress("FETCHING_METADATA", "Preparing instance environment...", None, None, None);
+    emit_progress("FETCHING_METADATA", "Preparing instance environment...");
     let instance = instances::get_instance_by_id(&instance_id)?
         .ok_or_else(|| format!("Instance {instance_id} not found"))?;
 
-    let account = auth::get_valid_active_account().await;
+    let resolution = auth::get_valid_active_account().await?;
+    if let Some(warning) = &resolution.warning {
+        emit_log(warning, "warn");
+    }
+    let account = resolution.account;
     emit_log(&format!("Authenticated as: {} ({})", account.username, account.account_type), "info");
 
     let base_package = meta::fetch_version_package(&instance.minecraft_version).await?;
     emit_log(&format!("Loaded version metadata for Minecraft {}", base_package.id), "info");
 
-    emit_progress("PREPARING_LOADER", &format!("Resolving {} configuration...", instance.loader_type), None, None, None);
+    emit_progress("PREPARING_LOADER", &format!("Resolving {} configuration...", instance.loader_type));
     let launch_config = loaders::resolve_instance_launch_configuration(&instance, base_package).await?;
     let resolved_package = launch_config.version_package;
     emit_log(&format!("Configured runtime for loader: {}", instance.loader_type), "info");
 
     let natives_dir = paths::get_instance_path(&instance.id).join("natives");
 
-    emit_progress("VERIFYING_LIBRARIES", "Verifying libraries and client jar...", None, None, None);
+    emit_progress("VERIFYING_LIBRARIES", "Verifying libraries and client jar...");
     let classpath_jars = prepare_minecraft_libraries(
         &resolved_package,
         &natives_dir,
@@ -607,11 +670,11 @@ pub async fn launch_minecraft(
     .await?;
     emit_log(&format!("Verified {} libraries on classpath", classpath_jars.len()), "info");
 
-    emit_progress("VERIFYING_ASSETS", "Verifying game assets...", None, None, None);
+    emit_progress("VERIFYING_ASSETS", "Verifying game assets...");
     prepare_minecraft_assets(&resolved_package.asset_index).await?;
     emit_log("All game assets verified successfully", "info");
 
-    emit_progress("BUILDING_ARGUMENTS", "Constructing JVM parameters...", None, None, None);
+    emit_progress("BUILDING_ARGUMENTS", "Constructing JVM parameters...");
     let path_sep = if cfg!(target_os = "windows") { ";" } else { ":" };
     let classpath_string = classpath_jars
         .iter()
@@ -639,17 +702,25 @@ pub async fn launch_minecraft(
         Err(error) => emit_log(&format!("Could not apply Mojang's logging configuration: {error}"), "warn"),
     }
 
-    emit_progress("STARTING_JAVA", "Resolving Java runtime for instance...", None, None, None);
+    emit_progress("STARTING_JAVA", "Resolving Java runtime for instance...");
     let java_executable = match &instance.java_path {
         Some(p) if !p.is_empty() => p.clone(),
         _ => match java::ensure_java_runtime(Some(&resolved_package), Some(&instance.minecraft_version)).await {
             Ok(exe) => exe,
-            Err(_) => "java".to_string(),
+            Err(error) => {
+                let fallback = crate::core::system::detect_system_java_path().unwrap_or_else(|| "java".to_string());
+                emit_log(
+                    &format!("Automatic Java setup failed ({error}). Falling back to system Java: {fallback}"),
+                    "warn",
+                );
+                fallback
+            }
         },
     };
 
     let working_dir = paths::get_instance_minecraft_path(&instance.id);
-    emit_progress("STARTING_JAVA", "Spawning Java Virtual Machine...", None, None, None);
+    fs::create_dir_all(&working_dir).map_err(|e| e.to_string())?;
+    emit_progress("STARTING_JAVA", "Spawning Java Virtual Machine...");
     emit_log(&format!("Executing Java: {java_executable}"), "info");
     emit_log(&format!("Main class: {main_class}"), "info");
     emit_log(&format!("Working directory: {}", working_dir.display()), "info");
@@ -670,145 +741,71 @@ pub async fn launch_minecraft(
     {
         let mgr = get_process_manager();
         let mut map = mgr.children.lock().await;
-        map.insert(instance_id.clone(), pid);
+        map.insert(instance_id.clone(), RunningProcess { pid, stop_requested: false });
     }
 
-    emit_progress("RUNNING", "Minecraft is running", None, None, None);
+    emit_progress("RUNNING", "Minecraft is running");
 
-    let stdout = child.stdout.take();
-    let stderr = child.stderr.take();
-
-    let app_clone_1 = app.clone();
-    let inst_id_1 = instance_id.clone();
-    if let Some(out) = stdout {
-        tokio::spawn(async move {
-            let mut reader = BufReader::new(out).lines();
-            while let Ok(Some(line)) = reader.next_line().await {
-                let level = determine_log_level(&line);
-                let payload = LaunchLogEvent {
-                    instance_id: inst_id_1.clone(),
-                    text: line,
-                    level: level.to_string(),
-                    timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                };
-                let _ = app_clone_1.emit("launch:log", payload.clone());
-                if let Some(main_win) = app_clone_1.get_webview_window("main") {
-                    let _ = main_win.emit("launch:log", payload);
-                }
-            }
-        });
+    if let Some(stdout) = child.stdout.take() {
+        spawn_log_forwarder(app.clone(), instance_id.clone(), stdout);
+    }
+    if let Some(stderr) = child.stderr.take() {
+        spawn_log_forwarder(app.clone(), instance_id.clone(), stderr);
     }
 
-    let app_clone_2 = app.clone();
-    let inst_id_2 = instance_id.clone();
-    if let Some(err) = stderr {
-        tokio::spawn(async move {
-            let mut reader = BufReader::new(err).lines();
-            while let Ok(Some(line)) = reader.next_line().await {
-                let level = determine_log_level(&line);
-                let payload = LaunchLogEvent {
-                    instance_id: inst_id_2.clone(),
-                    text: line,
-                    level: level.to_string(),
-                    timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                };
-                let _ = app_clone_2.emit("launch:log", payload.clone());
-                if let Some(main_win) = app_clone_2.get_webview_window("main") {
-                    let _ = main_win.emit("launch:log", payload);
-                }
-            }
-        });
-    }
-
-    let app_clone_3 = app.clone();
-    let inst_id_3 = instance_id.clone();
+    let exit_app = app.clone();
+    let exit_instance_id = instance_id.clone();
     let start_time = Instant::now();
 
     tokio::spawn(async move {
+        let _operation_guard = operation_guard;
         let status = child.wait().await;
-        {
+        let stop_requested = {
             let mgr = get_process_manager();
             let mut map = mgr.children.lock().await;
-            map.remove(&inst_id_3);
-        }
+            map.remove(&exit_instance_id)
+                .map(|process| process.stop_requested)
+                .unwrap_or(false)
+        };
 
         let duration_secs = start_time.elapsed().as_secs();
-        let exit_code = status.map(|s| s.code().unwrap_or(0)).unwrap_or(-1);
+        let exit_code = status.ok().and_then(|s| s.code());
 
-        if exit_code == 0 {
-            let log_payload = LaunchLogEvent {
-                instance_id: inst_id_3.clone(),
-                text: format!("Minecraft process completed cleanly (Duration: {duration_secs}s)"),
-                level: "info".to_string(),
-                timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-            };
-            let _ = app_clone_3.emit("launch:log", log_payload.clone());
-            if let Some(main_win) = app_clone_3.get_webview_window("main") {
-                let _ = main_win.emit("launch:log", log_payload);
-            }
-
-            let status_payload = LaunchProgressEvent {
-                instance_id: inst_id_3.clone(),
-                step: "COMPLETED".to_string(),
-                status_text: "Game closed".to_string(),
-                current_items: None,
-                total_items: None,
-                percentage: None,
-            };
-            let _ = app_clone_3.emit("launch:status", status_payload.clone());
-            if let Some(main_win) = app_clone_3.get_webview_window("main") {
-                let _ = main_win.emit("launch:status", status_payload);
-            }
+        if stop_requested {
+            send_launch_log(
+                &exit_app,
+                &exit_instance_id,
+                &format!("Minecraft was stopped (Duration: {duration_secs}s)"),
+                "info",
+            );
+            send_launch_status(&exit_app, &exit_instance_id, "CANCELLED", "Game stopped");
+        } else if exit_code == Some(0) {
+            send_launch_log(
+                &exit_app,
+                &exit_instance_id,
+                &format!("Minecraft process completed cleanly (Duration: {duration_secs}s)"),
+                "info",
+            );
+            send_launch_status(&exit_app, &exit_instance_id, "COMPLETED", "Game closed");
         } else {
-            let log_payload = LaunchLogEvent {
-                instance_id: inst_id_3.clone(),
-                text: format!("Minecraft process exited with code {exit_code}"),
-                level: "error".to_string(),
-                timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-            };
-            let _ = app_clone_3.emit("launch:log", log_payload.clone());
-            if let Some(main_win) = app_clone_3.get_webview_window("main") {
-                let _ = main_win.emit("launch:log", log_payload);
-            }
-
-            let status_payload = LaunchProgressEvent {
-                instance_id: inst_id_3.clone(),
-                step: "CRASHED".to_string(),
-                status_text: format!("Game closed with code {exit_code}"),
-                current_items: None,
-                total_items: None,
-                percentage: None,
-            };
-            let _ = app_clone_3.emit("launch:status", status_payload.clone());
-            if let Some(main_win) = app_clone_3.get_webview_window("main") {
-                let _ = main_win.emit("launch:status", status_payload);
-            }
+            let code_text = exit_code
+                .map(|code| code.to_string())
+                .unwrap_or_else(|| "unknown (terminated by a signal)".to_string());
+            send_launch_log(
+                &exit_app,
+                &exit_instance_id,
+                &format!("Minecraft process exited with code {code_text}"),
+                "error",
+            );
+            send_launch_status(
+                &exit_app,
+                &exit_instance_id,
+                "CRASHED",
+                &format!("Game closed with code {code_text}"),
+            );
         }
 
-        if let Ok(Some(inst)) = instances::get_instance_by_id(&inst_id_3) {
-            let session_mins = (duration_secs / 60).max(1);
-            let total_mins = if duration_secs >= 10 {
-                inst.total_play_time_minutes + session_mins
-            } else {
-                inst.total_play_time_minutes
-            };
-
-            let _ = instances::update_instance(instances::UpdateInstancePayload {
-                id: inst_id_3,
-                name: None,
-                minecraft_version: None,
-                loader_type: None,
-                loader_version: None,
-                java_path: None,
-                jvm_arguments: None,
-                ram_allocation_megabytes: None,
-                icon: None,
-                group: None,
-                is_favorite: None,
-                last_played_at: Some(chrono::Utc::now().to_rfc3339()),
-                total_play_time_minutes: Some(total_mins),
-            });
-        }
+        let _ = instances::record_play_session(&exit_instance_id, duration_secs);
     });
 
     Ok(true)
@@ -824,6 +821,12 @@ mod tests {
         let converted = convert_logging_configuration_for_console(official);
         assert!(!converted.contains("XMLLayout"));
         assert_eq!(converted.matches("%msg{nolookups}").count(), 2);
+    }
+
+    #[test]
+    fn log_lines_survive_invalid_utf8() {
+        assert_eq!(decode_log_line(b"[main/INFO]: caf\xe9 ok\r\n"), "[main/INFO]: caf\u{FFFD} ok");
+        assert_eq!(decode_log_line(b"plain"), "plain");
     }
 
     #[tokio::test]

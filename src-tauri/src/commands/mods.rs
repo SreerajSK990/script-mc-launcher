@@ -32,6 +32,7 @@ pub async fn mods_get_versions(
 
 #[tauri::command]
 pub async fn mods_install(payload: InstallModPayload) -> Result<InstalledModRecord, String> {
+    let _operation_guard = crate::core::operations::reserve_instance(&payload.instance_id, "Mods are being installed")?;
     mods::install_mod_to_instance(payload).await
 }
 
@@ -89,6 +90,7 @@ pub async fn mods_update_all(
     updates: Vec<ModUpdateInfo>,
 ) -> Result<ModUpdateResult, String> {
     safety::validate_identifier(&instance_id)?;
+    let _operation_guard = crate::core::operations::reserve_instance(&instance_id, "Mods are being updated")?;
     mods::update_all_mods(&instance_id, &updates).await
 }
 

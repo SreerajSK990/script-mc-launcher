@@ -1,6 +1,6 @@
 [package]
 name = "script-mc-launcher"
-version = "0.18.11"
+version = "0.18.12"
 description = "Custom modern Minecraft launcher with instance isolation and mod loader support"
 authors = ["Sreeraj SK"]
 edition = "2024"
@@ -34,6 +34,7 @@ open = "5.3"
 base64 = "0.22"
 md5 = "0.7"
 semver = "1"
+aes-gcm = "0.10"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }

@@ -60,6 +60,7 @@ pub fn content_backup_saves(instance_id: String) -> Result<BackupEntry, String> 
 pub fn content_restore_backup(instance_id: String, backup_id: String) -> Result<(), String> {
     safety::validate_identifier(&instance_id)?;
     safety::validate_file_name(&backup_id)?;
+    let _operation_guard = crate::core::operations::reserve_instance(&instance_id, "A backup is being restored")?;
     recovery::restore_backup(&instance_id, &backup_id)
 }
 

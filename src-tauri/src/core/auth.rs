@@ -57,8 +57,8 @@ pub struct AuthState {
     pub accounts: Vec<StoredAccount>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 struct SerializedAccountData {
     pub id: String,
     pub username: String,
@@ -66,13 +66,14 @@ struct SerializedAccountData {
     pub account_type: String,
     pub encrypted_access_token: String,
     pub encrypted_refresh_token: Option<String>,
+    #[serde(deserialize_with = "deserialize_timestamp")]
     pub expires_at: u64,
     pub skin_url: Option<String>,
     pub created_at: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 struct EncryptedAuthDatabase {
     pub active_account_id: Option<String>,
     pub accounts: Vec<SerializedAccountData>,
@@ -123,6 +124,37 @@ struct MinecraftProfile {
     pub skins: Option<Vec<MinecraftProfileSkin>>,
 }
 
+fn deserialize_timestamp<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(match value {
+        Some(serde_json::Value::Number(number)) => number
+            .as_u64()
+            .or_else(|| number.as_f64().filter(|v| v.is_finite() && *v >= 0.0).map(|v| v as u64))
+            .unwrap_or(0),
+        _ => 0,
+    })
+}
+
+#[derive(Debug, Clone)]
+pub struct ActiveAccountResolution {
+    pub account: StoredAccount,
+    pub warning: Option<String>,
+}
+
+fn quarantine_unreadable_auth_file(path: &std::path::Path, reason: &str) -> String {
+    let backup = path.with_file_name(format!("auth.json.unreadable-{}", Utc::now().format("%Y%m%d-%H%M%S")));
+    match fs::rename(path, &backup) {
+        Ok(()) => format!(
+            "Saved accounts could not be read ({reason}). The file was kept as {} and you may need to sign in again.",
+            backup.display()
+        ),
+        Err(_) => format!("Saved accounts could not be read ({reason})."),
+    }
+}
+
 fn get_auth_file_path() -> PathBuf {
     paths::get_launcher_root_directory().join("auth.json")
 }
@@ -142,7 +174,10 @@ pub fn load_stored_accounts() -> Result<(Option<String>, Vec<StoredAccount>), St
     }
 
     let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let db: EncryptedAuthDatabase = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+    let db: EncryptedAuthDatabase = match serde_json::from_str(&content) {
+        Ok(db) => db,
+        Err(error) => return Err(quarantine_unreadable_auth_file(&path, &error.to_string())),
+    };
 
     let mut needs_resealing = false;
     let mut all_secrets_opened = true;
@@ -240,7 +275,7 @@ pub fn login_offline(username: &str) -> Result<StoredAccount, String> {
         created_at: Utc::now().to_rfc3339(),
     };
 
-    let (_, mut accounts) = load_stored_accounts().unwrap_or((None, Vec::new()));
+    let (_, mut accounts) = load_stored_accounts()?;
     accounts.retain(|a| a.id != account_id);
     accounts.insert(0, new_account.clone());
 
@@ -481,7 +516,7 @@ pub async fn exchange_code_for_minecraft_account(code: &str) -> Result<StoredAcc
         created_at: Utc::now().to_rfc3339(),
     };
 
-    let (_, mut accounts) = load_stored_accounts().unwrap_or((None, Vec::new()));
+    let (_, mut accounts) = load_stored_accounts()?;
     accounts.retain(|a| a.id != new_account.id);
     accounts.insert(0, new_account.clone());
 
@@ -674,7 +709,7 @@ pub async fn refresh_microsoft_account(account: &StoredAccount) -> Result<Stored
         created_at: account.created_at.clone(),
     };
 
-    let (_, mut accounts) = load_stored_accounts().unwrap_or((None, Vec::new()));
+    let (_, mut accounts) = load_stored_accounts()?;
     for acc in &mut accounts {
         if acc.id == updated_account.id {
             *acc = updated_account.clone();
@@ -685,38 +720,38 @@ pub async fn refresh_microsoft_account(account: &StoredAccount) -> Result<Stored
     Ok(updated_account)
 }
 
-pub async fn get_valid_active_account() -> StoredAccount {
-    let auth_state = get_auth_state().unwrap_or(AuthState {
-        active_account_id: None,
-        active_account: None,
-        accounts: Vec::new(),
-    });
-
+pub async fn get_valid_active_account() -> Result<ActiveAccountResolution, String> {
+    let auth_state = get_auth_state()?;
     let active_account = auth_state
         .active_account
         .or_else(|| auth_state.accounts.first().cloned());
 
-    if let Some(acc) = active_account {
-        if acc.account_type == "microsoft" {
-            let now_ms = Utc::now().timestamp_millis() as u64;
-            if now_ms + 5 * 60 * 1000 >= acc.expires_at {
-                if let Ok(refreshed) = refresh_microsoft_account(&acc).await {
-                    return refreshed;
-                }
-            }
-        }
-        return acc;
+    let Some(account) = active_account else {
+        return Ok(ActiveAccountResolution {
+            account: login_offline("Player")?,
+            warning: Some("No player account connected. Created a default \"Player\" offline profile.".to_string()),
+        });
+    };
+
+    if account.account_type != "microsoft" {
+        return Ok(ActiveAccountResolution { account, warning: None });
     }
 
-    login_offline("Player").unwrap_or_else(|_| StoredAccount {
-        id: "offline-player".to_string(),
-        username: "Player".to_string(),
-        uuid: generate_offline_player_uuid("Player"),
-        account_type: "offline".to_string(),
-        access_token: "0".to_string(),
-        refresh_token: None,
-        expires_at: u64::MAX,
-        skin_url: None,
-        created_at: Utc::now().to_rfc3339(),
-    })
+    let now_ms = Utc::now().timestamp_millis() as u64;
+    let token_missing = account.access_token.is_empty();
+    let token_expiring = now_ms + 5 * 60 * 1000 >= account.expires_at;
+    if !token_missing && !token_expiring {
+        return Ok(ActiveAccountResolution { account, warning: None });
+    }
+
+    match refresh_microsoft_account(&account).await {
+        Ok(refreshed) => Ok(ActiveAccountResolution { account: refreshed, warning: None }),
+        Err(error) => Ok(ActiveAccountResolution {
+            warning: Some(format!(
+                "Could not refresh the Microsoft session for {} ({error}). Singleplayer still works, but servers may reject the login until you sign in again.",
+                account.username
+            )),
+            account,
+        }),
+    }
 }

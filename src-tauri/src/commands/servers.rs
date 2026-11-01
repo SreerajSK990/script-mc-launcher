@@ -17,11 +17,13 @@ pub async fn servers_list_instance(instance_id: String) -> Result<Vec<MinecraftS
 
 #[tauri::command]
 pub async fn servers_add(payload: AddServerPayload) -> Result<Vec<MinecraftServerEntry>, String> {
+    let _operation_guard = crate::core::operations::reserve_instance(&payload.instance_id, "The server list is being updated")?;
     servers::add_instance_server(&payload.instance_id, &payload.name, &payload.ip)
 }
 
 #[tauri::command]
 pub async fn servers_remove(payload: RemoveServerPayload) -> Result<Vec<MinecraftServerEntry>, String> {
+    let _operation_guard = crate::core::operations::reserve_instance(&payload.instance_id, "The server list is being updated")?;
     servers::remove_instance_server(&payload.instance_id, &payload.server_ip)
 }
 

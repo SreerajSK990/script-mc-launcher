@@ -122,39 +122,64 @@ pub fn create_saves_backup(instance_id: &str) -> Result<BackupEntry, String> {
     })
 }
 
-pub fn restore_backup(instance_id: &str, backup_id: &str) -> Result<(), String> {
-    let legacy_dir = paths::get_instance_path(instance_id).join("backups");
-    let target_archive = legacy_dir.join(backup_id);
-    if !target_archive.is_file() {
-        return Err(format!("Backup archive not found: {backup_id}"));
-    }
-
-    let saves_dir = paths::get_instance_minecraft_path(instance_id).join("saves");
-    if !saves_dir.exists() {
-        fs::create_dir_all(&saves_dir).map_err(|e| e.to_string())?;
-    }
-
-    let file = fs::File::open(&target_archive).map_err(|e| e.to_string())?;
+fn extract_backup_archive(archive_path: &Path, destination: &Path) -> Result<(), String> {
+    let file = fs::File::open(archive_path).map_err(|e| e.to_string())?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
+    fs::create_dir_all(destination).map_err(|e| e.to_string())?;
 
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
         let Some(entry_path) = entry.enclosed_name() else {
             return Err(format!("Backup archive contains an unsafe path: {}", entry.name()));
         };
-        let out_path = saves_dir.join(entry_path);
+        let out_path = destination.join(entry_path);
 
         if entry.is_dir() {
             fs::create_dir_all(&out_path).map_err(|e| e.to_string())?;
         } else {
             if let Some(parent) = out_path.parent() {
-                if !parent.exists() {
-                    fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-                }
+                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
             }
             let mut outfile = fs::File::create(&out_path).map_err(|e| e.to_string())?;
             std::io::copy(&mut entry, &mut outfile).map_err(|e| e.to_string())?;
         }
+    }
+    Ok(())
+}
+
+pub fn restore_backup(instance_id: &str, backup_id: &str) -> Result<(), String> {
+    crate::core::safety::validate_file_name(backup_id)?;
+    let legacy_dir = paths::get_instance_path(instance_id).join("backups");
+    let target_archive = legacy_dir.join(backup_id);
+    if !target_archive.is_file() {
+        return Err(format!("Backup archive not found: {backup_id}"));
+    }
+
+    let minecraft_dir = paths::get_instance_minecraft_path(instance_id);
+    fs::create_dir_all(&minecraft_dir).map_err(|e| e.to_string())?;
+    let stamp = Utc::now().format("%Y%m%d-%H%M%S").to_string();
+    let staging_dir = minecraft_dir.join(format!("saves.restoring-{stamp}"));
+    let saves_dir = minecraft_dir.join("saves");
+    let previous_dir = minecraft_dir.join(format!("saves.before-restore-{stamp}"));
+
+    if let Err(error) = extract_backup_archive(&target_archive, &staging_dir) {
+        let _ = fs::remove_dir_all(&staging_dir);
+        return Err(error);
+    }
+
+    if saves_dir.exists() {
+        if let Err(error) = fs::rename(&saves_dir, &previous_dir) {
+            let _ = fs::remove_dir_all(&staging_dir);
+            return Err(format!("Could not move the current worlds aside (is the game still open?): {error}"));
+        }
+    }
+
+    if let Err(error) = fs::rename(&staging_dir, &saves_dir) {
+        if previous_dir.exists() {
+            let _ = fs::rename(&previous_dir, &saves_dir);
+        }
+        let _ = fs::remove_dir_all(&staging_dir);
+        return Err(format!("Could not put the restored worlds in place: {error}"));
     }
 
     Ok(())
@@ -216,4 +241,40 @@ pub fn plan_mods(payloads: Vec<InstallModPayload>) -> Result<DependencyPlan, Str
         reused_items,
         warnings,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn write_archive(path: &Path, entries: &[(&str, &str)]) {
+        let mut writer = zip::ZipWriter::new(fs::File::create(path).unwrap());
+        for (name, content) in entries {
+            writer
+                .start_file(*name, zip::write::SimpleFileOptions::default())
+                .unwrap();
+            writer.write_all(content.as_bytes()).unwrap();
+        }
+        writer.finish().unwrap();
+    }
+
+    #[test]
+    fn extraction_rejects_escaping_entries_and_restores_nested_files() {
+        let root = std::env::temp_dir().join(format!("script-launcher-restore-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+
+        let good = root.join("good.zip");
+        write_archive(&good, &[("World/level.dat", "data")]);
+        extract_backup_archive(&good, &root.join("out")).unwrap();
+        assert_eq!(fs::read_to_string(root.join("out").join("World").join("level.dat")).unwrap(), "data");
+
+        let evil = root.join("evil.zip");
+        write_archive(&evil, &[("../escaped.txt", "x")]);
+        assert!(extract_backup_archive(&evil, &root.join("evil-out")).is_err());
+        assert!(!root.join("escaped.txt").exists());
+
+        fs::remove_dir_all(root).unwrap();
+    }
 }

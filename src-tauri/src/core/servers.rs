@@ -468,14 +468,59 @@ pub fn get_all_quick_play_targets() -> Result<Vec<QuickPlayTarget>, String> {
     Ok(targets)
 }
 
-pub fn write_servers_dat(mc_dir: &Path, servers: Vec<NbtServerEntry>) -> Result<(), String> {
-    let servers_file = ServersDatFile { servers };
-    let bytes = fastnbt::to_bytes(&servers_file).map_err(|e| e.to_string())?;
+fn normalize_server_address(address: &str) -> (String, u16) {
+    let trimmed = address.trim().to_lowercase();
+    match trimmed.rsplit_once(':') {
+        Some((host, port)) if !host.contains(':') => (host.to_string(), port.parse().unwrap_or(25565)),
+        _ => (trimmed, 25565),
+    }
+}
 
-    fs::create_dir_all(mc_dir).map_err(|e| e.to_string())?;
+pub fn addresses_match(left: &str, right: &str) -> bool {
+    normalize_server_address(left) == normalize_server_address(right)
+}
+
+fn read_servers_dat_value(mc_dir: &Path) -> Result<fastnbt::Value, String> {
+    let servers_file = mc_dir.join("servers.dat");
+    if !servers_file.is_file() {
+        return Ok(fastnbt::Value::Compound(std::collections::HashMap::new()));
+    }
+    let bytes = fs::read(&servers_file).map_err(|e| e.to_string())?;
+    fastnbt::from_bytes::<fastnbt::Value>(&bytes)
+        .map_err(|e| format!("servers.dat could not be read, so it was left untouched: {e}"))
+}
+
+fn edit_server_list<F>(mc_dir: &Path, edit: F) -> Result<(), String>
+where
+    F: FnOnce(&mut Vec<fastnbt::Value>),
+{
+    let mut root = read_servers_dat_value(mc_dir)?;
+    let fastnbt::Value::Compound(root_compound) = &mut root else {
+        return Err("servers.dat has an unexpected structure, so it was left untouched".to_string());
+    };
+    let servers_entry = root_compound
+        .entry("servers".to_string())
+        .or_insert_with(|| fastnbt::Value::List(Vec::new()));
+    let fastnbt::Value::List(servers) = servers_entry else {
+        return Err("servers.dat has an unexpected structure, so it was left untouched".to_string());
+    };
+    edit(servers);
+    let bytes = fastnbt::to_bytes(&root).map_err(|e| e.to_string())?;
     let target = mc_dir.join("servers.dat");
-    fs::write(target, bytes).map_err(|e| e.to_string())?;
-    Ok(())
+    if target.is_file() {
+        let _ = fs::copy(&target, mc_dir.join("servers.dat_old"));
+    }
+    crate::core::fs_util::write_bytes_atomic(&target, &bytes)
+}
+
+fn server_entry_address(entry: &fastnbt::Value) -> Option<&str> {
+    match entry {
+        fastnbt::Value::Compound(fields) => match fields.get("ip") {
+            Some(fastnbt::Value::String(ip)) => Some(ip.as_str()),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 pub fn add_instance_server(
@@ -487,37 +532,28 @@ pub fn add_instance_server(
     let instance = instances::get_instance_by_id(instance_id)?
         .ok_or_else(|| format!("Instance not found: {instance_id}"))?;
 
-    let existing = get_instance_servers(&instance);
     let norm_ip = ip.trim();
+    if norm_ip.is_empty() {
+        return Err("Server address cannot be empty".to_string());
+    }
     let norm_name = if name.trim().is_empty() { norm_ip } else { name.trim() };
 
-    let mut remaining: Vec<NbtServerEntry> = existing
-        .into_iter()
-        .filter(|s| {
-            let full = format!("{}:{}", s.ip, s.port);
-            !s.ip.eq_ignore_ascii_case(norm_ip) && !full.eq_ignore_ascii_case(norm_ip)
-        })
-        .map(|s| NbtServerEntry {
-            name: s.name,
-            ip: if s.port != 25565 {
-                format!("{}:{}", s.ip, s.port)
-            } else {
-                s.ip
-            },
-            icon: s.icon.map(|ic| ic.replace("data:image/png;base64,", "")),
-            accept_textures: None,
-        })
-        .collect();
-
-    remaining.push(NbtServerEntry {
-        name: norm_name.to_string(),
-        ip: norm_ip.to_string(),
-        icon: None,
-        accept_textures: None,
-    });
-
     let mc_dir = paths::get_instance_minecraft_path(instance_id);
-    write_servers_dat(&mc_dir, remaining)?;
+    edit_server_list(&mc_dir, |servers| {
+        if let Some(existing) = servers
+            .iter_mut()
+            .find(|entry| server_entry_address(entry).is_some_and(|address| addresses_match(address, norm_ip)))
+        {
+            if let fastnbt::Value::Compound(fields) = existing {
+                fields.insert("name".to_string(), fastnbt::Value::String(norm_name.to_string()));
+            }
+            return;
+        }
+        let mut fields = std::collections::HashMap::new();
+        fields.insert("name".to_string(), fastnbt::Value::String(norm_name.to_string()));
+        fields.insert("ip".to_string(), fastnbt::Value::String(norm_ip.to_string()));
+        servers.push(fastnbt::Value::Compound(fields));
+    })?;
     Ok(get_instance_servers(&instance))
 }
 
@@ -529,29 +565,10 @@ pub fn remove_instance_server(
     let instance = instances::get_instance_by_id(instance_id)?
         .ok_or_else(|| format!("Instance not found: {instance_id}"))?;
 
-    let existing = get_instance_servers(&instance);
-    let norm_target = server_ip.trim();
-
-    let remaining: Vec<NbtServerEntry> = existing
-        .into_iter()
-        .filter(|s| {
-            let full = format!("{}:{}", s.ip, s.port);
-            !s.ip.eq_ignore_ascii_case(norm_target) && !full.eq_ignore_ascii_case(norm_target)
-        })
-        .map(|s| NbtServerEntry {
-            name: s.name,
-            ip: if s.port != 25565 {
-                format!("{}:{}", s.ip, s.port)
-            } else {
-                s.ip
-            },
-            icon: s.icon.map(|ic| ic.replace("data:image/png;base64,", "")),
-            accept_textures: None,
-        })
-        .collect();
-
     let mc_dir = paths::get_instance_minecraft_path(instance_id);
-    write_servers_dat(&mc_dir, remaining)?;
+    edit_server_list(&mc_dir, |servers| {
+        servers.retain(|entry| !server_entry_address(entry).is_some_and(|address| addresses_match(address, server_ip)));
+    })?;
     Ok(get_instance_servers(&instance))
 }
 
@@ -559,4 +576,55 @@ pub fn list_instance_servers(instance_id: &str) -> Result<Vec<MinecraftServerEnt
     let instance = instances::get_instance_by_id(instance_id)?
         .ok_or_else(|| format!("Instance not found: {instance_id}"))?;
     Ok(get_instance_servers(&instance))
+}
+
+#[cfg(test)]
+mod server_list_tests {
+    use super::*;
+
+    #[test]
+    #[ignore]
+    fn real_servers_dat_round_trips() {
+        let directory = std::path::PathBuf::from(std::env::var("SERVERS_DAT_DIR").unwrap());
+        let original = read_servers_dat_value(&directory).unwrap();
+        let encoded = fastnbt::to_bytes(&original).unwrap();
+        let decoded: fastnbt::Value = fastnbt::from_bytes(&encoded).unwrap();
+        assert_eq!(original, decoded);
+    }
+
+    #[test]
+    fn address_matching_handles_default_port() {
+        assert!(addresses_match("Play.Example.com", "play.example.com:25565"));
+        assert!(!addresses_match("play.example.com:25566", "play.example.com"));
+    }
+
+    #[test]
+    fn edits_preserve_unknown_server_fields() {
+        let directory = std::env::temp_dir().join(format!("script-launcher-servers-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir_all(&directory).unwrap();
+        edit_server_list(&directory, |servers| {
+            let mut fields = std::collections::HashMap::new();
+            fields.insert("name".to_string(), fastnbt::Value::String("Keep".into()));
+            fields.insert("ip".to_string(), fastnbt::Value::String("keep.example".into()));
+            fields.insert("acceptTextures".to_string(), fastnbt::Value::Byte(1));
+            servers.push(fastnbt::Value::Compound(fields));
+            let mut other = std::collections::HashMap::new();
+            other.insert("name".to_string(), fastnbt::Value::String("Drop".into()));
+            other.insert("ip".to_string(), fastnbt::Value::String("drop.example".into()));
+            servers.push(fastnbt::Value::Compound(other));
+        })
+        .unwrap();
+        edit_server_list(&directory, |servers| {
+            servers.retain(|entry| server_entry_address(entry) != Some("drop.example"));
+        })
+        .unwrap();
+        let root = read_servers_dat_value(&directory).unwrap();
+        let fastnbt::Value::Compound(fields) = root else { panic!() };
+        let Some(fastnbt::Value::List(servers)) = fields.get("servers") else { panic!() };
+        assert_eq!(servers.len(), 1);
+        let fastnbt::Value::Compound(kept) = &servers[0] else { panic!() };
+        assert_eq!(kept.get("acceptTextures"), Some(&fastnbt::Value::Byte(1)));
+        fs::remove_dir_all(directory).unwrap();
+    }
 }

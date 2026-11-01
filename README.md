@@ -2,7 +2,7 @@
 
 A fast, sleek, and modular Minecraft launcher built with **Electron**, **React**, **TypeScript**, and **Tailwind CSS**.
 
-**Latest release: [v0.18.11](https://github.com/SreerajSK990/script-mc-launcher/releases/tag/v0.18.11)** — security hardening for modpack imports, encrypted account tokens, checksum-verified updates, Log4Shell protection for older Minecraft versions, and a shared retrying downloader. Read the [release notes](release-notes/v0.18.11.md) for details.
+**Latest release: [v0.18.12](https://github.com/SreerajSK990/script-mc-launcher/releases/tag/v0.18.12)** — crash-proof game log reading, per-instance task locking, Electron account migration, safe world restores, and server lists that keep their settings. Read the [release notes](release-notes/v0.18.12.md) for details.
 
 Most Minecraft launchers out there either look like they're stuck in 2010 with clunky Java Swing windows, or they're bloated with electron bloatware and ads. Script Launcher is built to be fast, clean, and completely isolated so your mod setups and game versions never conflict with each other.
 

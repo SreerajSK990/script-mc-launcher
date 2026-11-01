@@ -12,6 +12,7 @@ pub mod meta;
 pub mod minecraft;
 pub mod mods;
 pub mod net;
+pub mod operations;
 pub mod modpacks;
 pub mod paths;
 pub mod recovery;

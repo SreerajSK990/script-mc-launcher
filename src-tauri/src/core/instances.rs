@@ -9,25 +9,51 @@ use std::path::Path;
 use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
 
+fn default_loader_type() -> String {
+    "vanilla".to_string()
+}
+
+fn default_ram_allocation() -> u32 {
+    4096
+}
+
+fn deserialize_present<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Ok(Some(Option::<T>::deserialize(deserializer)?))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstanceConfiguration {
     pub id: String,
     pub name: String,
     pub minecraft_version: String,
+    #[serde(default = "default_loader_type")]
     pub loader_type: String,
+    #[serde(default)]
     pub loader_version: Option<String>,
+    #[serde(default)]
     pub java_path: Option<String>,
+    #[serde(default)]
     pub jvm_arguments: Vec<String>,
+    #[serde(default = "default_ram_allocation")]
     pub ram_allocation_megabytes: u32,
     pub icon_path: Option<String>,
     pub icon: Option<String>,
     pub banner_path: Option<String>,
     pub group: Option<String>,
     pub is_favorite: Option<bool>,
+    #[serde(default)]
     pub created_at: String,
+    #[serde(default)]
     pub last_played_at: Option<String>,
+    #[serde(default)]
     pub total_play_time_minutes: u64,
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,18 +75,54 @@ pub struct CreateInstancePayload {
 #[serde(rename_all = "camelCase")]
 pub struct UpdateInstancePayload {
     pub id: String,
+    #[serde(default)]
     pub name: Option<String>,
+    #[serde(default)]
     pub minecraft_version: Option<String>,
+    #[serde(default)]
     pub loader_type: Option<String>,
-    pub loader_version: Option<String>,
-    pub java_path: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_present")]
+    pub loader_version: Option<Option<String>>,
+    #[serde(default, deserialize_with = "deserialize_present")]
+    pub java_path: Option<Option<String>>,
+    #[serde(default)]
     pub jvm_arguments: Option<Vec<String>>,
+    #[serde(default)]
     pub ram_allocation_megabytes: Option<u32>,
+    #[serde(default)]
     pub icon: Option<String>,
-    pub group: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_present")]
+    pub group: Option<Option<String>>,
+    #[serde(default)]
     pub is_favorite: Option<bool>,
-    pub last_played_at: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_present")]
+    pub last_played_at: Option<Option<String>>,
+    #[serde(default)]
     pub total_play_time_minutes: Option<u64>,
+}
+
+impl UpdateInstancePayload {
+    pub fn for_instance(instance_id: &str) -> Self {
+        Self {
+            id: instance_id.to_string(),
+            name: None,
+            minecraft_version: None,
+            loader_type: None,
+            loader_version: None,
+            java_path: None,
+            jvm_arguments: None,
+            ram_allocation_megabytes: None,
+            icon: None,
+            group: None,
+            is_favorite: None,
+            last_played_at: None,
+            total_play_time_minutes: None,
+        }
+    }
+}
+
+fn clean_optional_text(value: Option<String>) -> Option<String> {
+    value.map(|text| text.trim().to_string()).filter(|text| !text.is_empty())
 }
 
 pub fn default_jvm_arguments() -> Vec<String> {
@@ -167,6 +229,7 @@ pub fn create_new_instance(payload: CreateInstancePayload) -> Result<InstanceCon
         created_at: now,
         last_played_at: None,
         total_play_time_minutes: 0,
+        extra: serde_json::Map::new(),
     };
 
     let config_path = paths::get_instance_config_path(&instance.id);
@@ -180,37 +243,48 @@ pub fn update_instance(payload: UpdateInstancePayload) -> Result<InstanceConfigu
         .ok_or_else(|| format!("Instance not found: {}", payload.id))?;
 
     if let Some(name) = payload.name {
-        instance.name = name.trim().to_string();
+        let trimmed = name.trim();
+        if !trimmed.is_empty() {
+            instance.name = trimmed.to_string();
+        }
     }
+    let previous_loader = instance.loader_type.clone();
+    let previous_version = instance.minecraft_version.clone();
     if let Some(version) = payload.minecraft_version {
         instance.minecraft_version = version;
     }
     if let Some(loader) = payload.loader_type {
         instance.loader_type = loader;
     }
-    if payload.loader_version.is_some() {
-        instance.loader_version = payload.loader_version;
+    let loader_changed = instance.loader_type != previous_loader || instance.minecraft_version != previous_version;
+    match payload.loader_version {
+        Some(loader_version) => instance.loader_version = clean_optional_text(loader_version),
+        None if loader_changed => instance.loader_version = None,
+        None => {}
     }
-    if payload.java_path.is_some() {
-        instance.java_path = payload.java_path;
+    if instance.loader_type == "vanilla" {
+        instance.loader_version = None;
+    }
+    if let Some(java_path) = payload.java_path {
+        instance.java_path = clean_optional_text(java_path);
     }
     if let Some(jvm_args) = payload.jvm_arguments {
         instance.jvm_arguments = jvm_args;
     }
     if let Some(ram) = payload.ram_allocation_megabytes {
-        instance.ram_allocation_megabytes = ram;
+        instance.ram_allocation_megabytes = ram.max(512);
     }
     if let Some(icon) = payload.icon {
         instance.icon = Some(icon);
     }
-    if payload.group.is_some() {
-        instance.group = payload.group.map(|g| g.trim().to_string());
+    if let Some(group) = payload.group {
+        instance.group = clean_optional_text(group);
     }
     if let Some(fav) = payload.is_favorite {
         instance.is_favorite = Some(fav);
     }
-    if payload.last_played_at.is_some() {
-        instance.last_played_at = payload.last_played_at;
+    if let Some(last_played_at) = payload.last_played_at {
+        instance.last_played_at = last_played_at;
     }
     if let Some(playtime) = payload.total_play_time_minutes {
         instance.total_play_time_minutes = playtime;
@@ -222,7 +296,19 @@ pub fn update_instance(payload: UpdateInstancePayload) -> Result<InstanceConfigu
     Ok(instance)
 }
 
+pub fn record_play_session(instance_id: &str, duration_secs: u64) -> Result<InstanceConfiguration, String> {
+    let mut instance = get_instance_by_id(instance_id)?
+        .ok_or_else(|| format!("Instance not found: {instance_id}"))?;
+    if duration_secs >= 10 {
+        instance.total_play_time_minutes += (duration_secs / 60).max(1);
+    }
+    instance.last_played_at = Some(Utc::now().to_rfc3339());
+    write_json_atomic(&paths::get_instance_config_path(instance_id), &instance)?;
+    Ok(instance)
+}
+
 pub fn delete_instance(instance_id: &str) -> Result<bool, String> {
+    let _guard = crate::core::operations::reserve_instance(instance_id, "Another task is using this instance")?;
     let instance_dir = paths::get_instance_path(instance_id);
     if instance_dir.exists() {
         fs::remove_dir_all(&instance_dir).map_err(|e| e.to_string())?;
@@ -311,19 +397,8 @@ pub fn rename_group(old_name: &str, new_name: &str) -> Result<(), String> {
     for instance in instances {
         if instance.group.as_deref() == Some(target) {
             update_instance(UpdateInstancePayload {
-                id: instance.id,
-                name: None,
-                minecraft_version: None,
-                loader_type: None,
-                loader_version: None,
-                java_path: None,
-                jvm_arguments: None,
-                ram_allocation_megabytes: None,
-                icon: None,
-                group: if clean_new.is_empty() { None } else { Some(clean_new.to_string()) },
-                is_favorite: None,
-                last_played_at: None,
-                total_play_time_minutes: None,
+                group: Some(Some(clean_new.to_string())),
+                ..UpdateInstancePayload::for_instance(&instance.id)
             })?;
         }
     }
@@ -484,3 +559,29 @@ pub fn clone_instance(instance_id: &str, custom_name: Option<String>) -> Result<
     Ok(new_instance)
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn update_payload_distinguishes_missing_and_null() {
+        let cleared: UpdateInstancePayload = serde_json::from_str(r#"{"id":"a","javaPath":null}"#).unwrap();
+        assert_eq!(cleared.java_path, Some(None));
+        let untouched: UpdateInstancePayload = serde_json::from_str(r#"{"id":"a"}"#).unwrap();
+        assert_eq!(untouched.java_path, None);
+        let set: UpdateInstancePayload = serde_json::from_str(r#"{"id":"a","javaPath":"C:/java.exe"}"#).unwrap();
+        assert_eq!(set.java_path, Some(Some("C:/java.exe".to_string())));
+    }
+
+    #[test]
+    fn legacy_instance_files_load_and_keep_unknown_fields() {
+        let raw = r#"{"id":"old","name":"Old","minecraftVersion":"1.20.1","createdAt":"2025","modpackSource":{"id":42}}"#;
+        let instance: InstanceConfiguration = serde_json::from_str(raw).unwrap();
+        assert_eq!(instance.loader_type, "vanilla");
+        assert_eq!(instance.ram_allocation_megabytes, 4096);
+        assert_eq!(instance.total_play_time_minutes, 0);
+        let written = serde_json::to_value(&instance).unwrap();
+        assert_eq!(written["modpackSource"]["id"], 42);
+    }
+}
