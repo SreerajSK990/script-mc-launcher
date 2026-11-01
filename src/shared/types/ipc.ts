@@ -12,7 +12,8 @@ import type {
   InstalledResourcePackRecord,
   ModSource,
   ModUpdateInfo,
-  ModDetail
+  ModDetail,
+  ManualDownloadStatus
 } from './mods'
 import type {
   ModpackManifestInfo,
@@ -142,6 +143,7 @@ export interface ModActions {
   onUpdateProgress: (
     callback: (event: { message: string; current: number; total: number }) => void
   ) => () => void
+  pendingDownloads: (instanceId: string) => Promise<ManualDownloadStatus>
 }
 
 export interface ModpackActions {

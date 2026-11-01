@@ -75,6 +75,22 @@ export interface InstalledResourcePackRecord {
   description?: string
 }
 
+export interface PendingManualDownload {
+  fileName: string
+  displayName: string
+  projectId: string
+  fileId: string
+  sha1?: string | null
+  targetFolder: string
+  pageUrl: string
+}
+
+export interface ManualDownloadStatus {
+  pending: PendingManualDownload[]
+  resolved: string[]
+  watchedFolder?: string | null
+}
+
 export interface ModSearchParams {
   query?: string
   minecraftVersion?: string

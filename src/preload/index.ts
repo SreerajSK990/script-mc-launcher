@@ -143,7 +143,8 @@ const launcherAPI: LauncherAPI = {
       return () => {
         ipcRenderer.removeListener(IPC_CHANNELS.MODS_UPDATE_PROGRESS_EVENT, handler)
       }
-    }
+    },
+    pendingDownloads: async () => ({ pending: [], resolved: [], watchedFolder: null })
   },
   modpacks: {
     selectFile: () => ipcRenderer.invoke(IPC_CHANNELS.MODPACKS_SELECT_FILE),

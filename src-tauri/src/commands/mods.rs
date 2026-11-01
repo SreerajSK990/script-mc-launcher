@@ -110,3 +110,13 @@ pub async fn mods_install_dropped(
     safety::validate_identifier(&instance_id)?;
     mods::install_dropped_mod_files(&instance_id, &file_paths)
 }
+
+#[tauri::command]
+pub async fn mods_pending_downloads(
+    instance_id: String,
+) -> Result<crate::core::manual_downloads::ManualDownloadStatus, String> {
+    safety::validate_identifier(&instance_id)?;
+    tauri::async_runtime::spawn_blocking(move || crate::core::manual_downloads::resolve_pending_downloads(&instance_id))
+        .await
+        .map_err(|e| e.to_string())?
+}

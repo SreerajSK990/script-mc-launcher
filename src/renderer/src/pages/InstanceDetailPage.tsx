@@ -1,4 +1,5 @@
 import type { ModUpdateResult } from '@shared/types/operations'
+import type { ManualDownloadStatus } from '@shared/types/mods'
 import { UpdateReport } from '@renderer/components/mods/UpdateReport'
 import { ShadersPanel } from '@renderer/components/mods/ShadersPanel'
 import { RecoveryPanel } from '@renderer/components/instances/RecoveryPanel'
@@ -163,6 +164,7 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
   const [updateProgress, setUpdateProgress] = useState<{ message: string; current: number; total: number } | null>(null)
   const [isDraggingMods, setIsDraggingMods] = useState(false)
   const [isExportingModpack, setIsExportingModpack] = useState(false)
+  const [manualDownloads, setManualDownloads] = useState<ManualDownloadStatus | null>(null)
 
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean
@@ -206,6 +208,32 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
       if (!silent) setIsLoadingMods(false)
     }
   }, [instance.id])
+
+  useEffect(() => {
+    if (activeTab !== 'mods') return
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const check = async () => {
+      try {
+        const status = await window.launcherAPI.mods.pendingDownloads(instance.id)
+        if (cancelled) return
+        setManualDownloads(status)
+        if (status.resolved.length > 0) {
+          await loadMods(true)
+        }
+        if (status.pending.length > 0) {
+          timer = setTimeout(check, 4000)
+        }
+      } catch {
+        setManualDownloads(null)
+      }
+    }
+    void check()
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [activeTab, instance.id, loadMods])
 
   const checkForUpdates = useCallback(async (forceRefresh = false) => {
     if (!window.launcherAPI?.mods) return
@@ -1049,6 +1077,35 @@ export const InstanceDetailPage: React.FC<InstanceDetailPageProps> = ({
               <p className="text-xs text-slate-300 mt-1">
                 Release .jar or .zip files to automatically install them into {instance.name}
               </p>
+            </div>
+          )}
+
+          {manualDownloads && manualDownloads.pending.length > 0 && (
+            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/25 text-xs text-amber-100 space-y-2">
+              <p className="font-semibold text-amber-300">
+                {manualDownloads.pending.length} file(s) must be downloaded from CurseForge by hand
+              </p>
+              <p className="text-amber-100/80">
+                Their authors do not allow launchers to download them. Open each page and download the file. The launcher
+                picks it up from {manualDownloads.watchedFolder || 'your Downloads folder'} automatically.
+              </p>
+              <ul className="space-y-1.5">
+                {manualDownloads.pending.map((item) => (
+                  <li key={item.fileName} className="flex items-center justify-between gap-2">
+                    <span className="truncate">
+                      {item.displayName} <span className="text-amber-100/60 font-mono">({item.fileName})</span>
+                    </span>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={ExternalLink}
+                      onClick={() => void window.launcherAPI.system.openExternalUrl(item.pageUrl)}
+                    >
+                      Open page
+                    </Button>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 

@@ -336,7 +336,7 @@ where
     let mut cleanup = PartialInstanceCleanup {
         instance_id: Some(instance.id.clone()),
     };
-    let mut skipped_files: Vec<String> = Vec::new();
+    let mut skipped_files: Vec<crate::core::manual_downloads::PendingDownload> = Vec::new();
     let minecraft_dir = paths::get_instance_minecraft_path(&instance.id);
     fs::create_dir_all(&minecraft_dir).map_err(|e| e.to_string())?;
 
@@ -523,11 +523,20 @@ where
             let class_ids = fetch_curseforge_class_ids(&project_ids, &api_key).await?;
 
             for f in fetched_files {
+                let target_folder = curseforge_target_folder(f.mod_id.and_then(|id| class_ids.get(&id).copied()));
                 let Some(dl_url) = f.download_url.clone() else {
-                    skipped_files.push(f.display_name.clone().unwrap_or_else(|| f.file_name.clone()));
+                    let project_id = f.mod_id.unwrap_or(f.id).to_string();
+                    skipped_files.push(crate::core::manual_downloads::PendingDownload {
+                        file_name: f.file_name.clone(),
+                        display_name: f.display_name.clone().unwrap_or_else(|| f.file_name.clone()),
+                        page_url: format!("https://www.curseforge.com/projects/{project_id}/files/{}", f.id),
+                        project_id,
+                        file_id: f.id.to_string(),
+                        sha1: f.hashes.as_ref().and_then(|hashes| hashes.iter().find(|h| h.algo == 1).map(|h| h.value.clone())),
+                        target_folder: target_folder.to_string(),
+                    });
                     continue;
                 };
-                let target_folder = curseforge_target_folder(f.mod_id.and_then(|id| class_ids.get(&id).copied()));
                 {
                     let target_dir = minecraft_dir.join(target_folder);
                     fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
@@ -605,15 +614,15 @@ where
     let mods_meta_path = get_mods_metadata_path(&instance.id);
     let _ = write_json_atomic(&mods_meta_path, &installed_mods);
 
+    crate::core::manual_downloads::save_pending(&instance.id, &skipped_files)?;
     cleanup.disarm();
     let completion_message = if skipped_files.is_empty() {
         format!("Successfully installed {}!", instance.name)
     } else {
         format!(
-            "Installed {}, but {} file(s) must be downloaded manually from CurseForge: {}",
+            "Installed {}, but {} file(s) must be downloaded manually from CurseForge. Open the instance's Mods tab to finish.",
             instance.name,
-            skipped_files.len(),
-            skipped_files.join(", ")
+            skipped_files.len()
         )
     };
     progress(ModpackImportProgressEvent {

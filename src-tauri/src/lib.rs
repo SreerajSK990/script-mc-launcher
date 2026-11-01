@@ -122,6 +122,7 @@ pub fn run() {
             mods_check_updates,
             mods_update_all,
             mods_install_dropped,
+            mods_pending_downloads,
             resourcepacks_list_installed,
             resourcepacks_install,
             resourcepacks_toggle_installed,

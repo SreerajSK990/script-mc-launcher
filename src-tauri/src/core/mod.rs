@@ -10,6 +10,7 @@ pub mod game_settings;
 pub mod instances;
 pub mod java;
 pub mod loaders;
+pub mod manual_downloads;
 pub mod meta;
 pub mod minecraft;
 pub mod mod_metadata;
