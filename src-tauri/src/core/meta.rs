@@ -89,6 +89,15 @@ pub struct LibraryDownload {
     pub downloads: Option<LibraryDownloadClassifier>,
     pub rules: Option<Vec<LibraryRule>>,
     pub natives: Option<HashMap<String, String>>,
+    #[serde(default)]
+    pub extract: Option<LibraryExtractRules>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryExtractRules {
+    #[serde(default)]
+    pub exclude: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

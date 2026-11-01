@@ -86,10 +86,31 @@ pub fn resolve_mojang_platform() -> &'static str {
     }
 }
 
+pub const KNOWN_JAVA_COMPONENTS: [(&str, &str, u32); 6] = [
+    ("jre-legacy", "Java 8", 8),
+    ("java-runtime-alpha", "Java 16", 16),
+    ("java-runtime-beta", "Java 17 (early)", 17),
+    ("java-runtime-gamma", "Java 17", 17),
+    ("java-runtime-delta", "Java 21", 21),
+    ("java-runtime-epsilon", "Java 25", 25),
+];
+
+const COMPLETION_MARKER_NAME: &str = ".script-launcher-complete";
+
+pub fn is_known_java_component(value: &str) -> bool {
+    KNOWN_JAVA_COMPONENTS.iter().any(|(component, _, _)| *component == value)
+}
+
 pub fn resolve_java_component_for_version(
     version_package: Option<&VersionPackage>,
     minecraft_version: Option<&str>,
 ) -> String {
+    if let Some(requested) = minecraft_version {
+        if is_known_java_component(requested) {
+            return requested.to_string();
+        }
+    }
+
     if let Some(pkg) = version_package {
         if let Some(java_ver) = &pkg.java_version {
             if !java_ver.component.is_empty() {
@@ -103,12 +124,17 @@ pub fn resolve_java_component_for_version(
         .unwrap_or("1.21.1");
 
     let parts: Vec<u32> = ver_str
-        .split('.')
+        .split(['.', '-'])
         .map(|p| p.parse::<u32>().unwrap_or(0))
         .collect();
 
-    let minor = if parts.len() >= 2 { parts[1] } else { 0 };
-    let patch = if parts.len() >= 3 { parts[2] } else { 0 };
+    let major = parts.first().copied().unwrap_or(0);
+    if major >= 26 {
+        return "java-runtime-epsilon".to_string();
+    }
+
+    let minor = parts.get(1).copied().unwrap_or(0);
+    let patch = parts.get(2).copied().unwrap_or(0);
 
     if minor < 17 {
         "jre-legacy".to_string()
@@ -129,20 +155,27 @@ pub fn get_java_executable_path(component: &str) -> PathBuf {
     let comp_dir = get_java_component_directory(component);
     if cfg!(target_os = "windows") {
         comp_dir.join("bin").join("java.exe")
+    } else if cfg!(target_os = "macos") {
+        let bundled = comp_dir.join("jre.bundle").join("Contents").join("Home").join("bin").join("java");
+        if bundled.exists() {
+            bundled
+        } else {
+            comp_dir.join("bin").join("java")
+        }
     } else {
         comp_dir.join("bin").join("java")
     }
 }
 
+fn completion_marker_path(component: &str) -> PathBuf {
+    get_java_component_directory(component).join(COMPLETION_MARKER_NAME)
+}
+
 pub fn is_java_runtime_installed(component: &str) -> bool {
-    let exe_path = get_java_executable_path(component);
-    if !exe_path.exists() {
-        return false;
-    }
-    match fs::metadata(&exe_path) {
-        Ok(m) => m.is_file() && m.len() > 0,
-        Err(_) => false,
-    }
+    completion_marker_path(component).is_file()
+        && fs::metadata(get_java_executable_path(component))
+            .map(|m| m.is_file() && m.len() > 0)
+            .unwrap_or(false)
 }
 
 pub async fn fetch_mojang_java_products() -> Result<MojangJavaAllProducts, String> {
@@ -183,6 +216,17 @@ pub async fn ensure_java_runtime(
     version_package: Option<&VersionPackage>,
     minecraft_version: Option<&str>,
 ) -> Result<String, String> {
+    ensure_java_runtime_with_progress(version_package, minecraft_version, |_, _| {}).await
+}
+
+pub async fn ensure_java_runtime_with_progress<F>(
+    version_package: Option<&VersionPackage>,
+    minecraft_version: Option<&str>,
+    on_progress: F,
+) -> Result<String, String>
+where
+    F: Fn(usize, usize) + Send + Sync + 'static,
+{
     let component = resolve_java_component_for_version(version_package, minecraft_version);
     let exe_path = get_java_executable_path(&component);
 
@@ -236,8 +280,9 @@ pub async fn ensure_java_runtime(
         }
     }
 
-    download::ensure_files(download_tasks, 12, |_, _| {}).await?;
+    download::ensure_files(download_tasks, 12, on_progress).await?;
     mark_files_executable(&executable_files);
+    let _ = fs::write(completion_marker_path(&component), &chosen_product.manifest.sha1);
 
     if is_java_runtime_installed(&component) {
         Ok(exe_path.to_string_lossy().to_string())
@@ -258,25 +303,35 @@ fn mark_files_executable(files: &[PathBuf]) {
 fn mark_files_executable(_files: &[PathBuf]) {}
 
 pub fn get_managed_java_runtimes_summary() -> Vec<ManagedJavaRuntimeInfo> {
-    let components = [
-        ("jre-legacy", "Java 8", 8u32),
-        ("java-runtime-alpha", "Java 16", 16u32),
-        ("java-runtime-gamma", "Java 17", 17u32),
-        ("java-runtime-delta", "Java 21", 21u32),
-    ];
-
-    components
+    KNOWN_JAVA_COMPONENTS
         .iter()
-        .map(|(component, name, major)| {
-            let is_installed = is_java_runtime_installed(component);
-            let exe_path = get_java_executable_path(component);
-            ManagedJavaRuntimeInfo {
-                component: component.to_string(),
-                version_name: name.to_string(),
-                major_version: *major,
-                is_installed,
-                executable_path: exe_path.to_string_lossy().to_string(),
-            }
+        .filter(|(component, _, _)| *component != "java-runtime-beta")
+        .map(|(component, name, major)| ManagedJavaRuntimeInfo {
+            component: component.to_string(),
+            version_name: name.to_string(),
+            major_version: *major,
+            is_installed: is_java_runtime_installed(component),
+            executable_path: get_java_executable_path(component).to_string_lossy().to_string(),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn component_names_are_used_directly() {
+        assert_eq!(resolve_java_component_for_version(None, Some("java-runtime-delta")), "java-runtime-delta");
+        assert_eq!(resolve_java_component_for_version(None, Some("java-runtime-epsilon")), "java-runtime-epsilon");
+    }
+
+    #[test]
+    fn versions_map_to_expected_runtimes() {
+        assert_eq!(resolve_java_component_for_version(None, Some("1.12.2")), "jre-legacy");
+        assert_eq!(resolve_java_component_for_version(None, Some("1.17.1")), "java-runtime-alpha");
+        assert_eq!(resolve_java_component_for_version(None, Some("1.20.4")), "java-runtime-gamma");
+        assert_eq!(resolve_java_component_for_version(None, Some("1.21.1")), "java-runtime-delta");
+        assert_eq!(resolve_java_component_for_version(None, Some("26.3")), "java-runtime-epsilon");
+    }
 }

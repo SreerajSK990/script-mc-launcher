@@ -236,9 +236,23 @@ where
     Err(last_error)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExistingFilePolicy {
+    VerifyChecksum,
+    TrustMatchingSize,
+}
+
 pub async fn ensure_file(task: &DownloadTask) -> Result<(), String> {
+    ensure_file_with_policy(task, ExistingFilePolicy::VerifyChecksum).await
+}
+
+pub async fn ensure_file_with_policy(task: &DownloadTask, policy: ExistingFilePolicy) -> Result<(), String> {
     let destination = task.destination.clone();
-    let checksum = task.checksum.clone();
+    let checksum = match policy {
+        ExistingFilePolicy::VerifyChecksum => task.checksum.clone(),
+        ExistingFilePolicy::TrustMatchingSize if task.size.is_some() => None,
+        ExistingFilePolicy::TrustMatchingSize => task.checksum.clone(),
+    };
     let size = task.size;
     let already_valid = tokio::task::spawn_blocking(move || file_satisfies(&destination, checksum.as_ref(), size))
         .await
@@ -254,6 +268,18 @@ pub async fn ensure_files<F>(tasks: Vec<DownloadTask>, concurrency: usize, on_pr
 where
     F: Fn(usize, usize) + Send + Sync + 'static,
 {
+    ensure_files_with_policy(tasks, concurrency, ExistingFilePolicy::VerifyChecksum, on_progress).await
+}
+
+pub async fn ensure_files_with_policy<F>(
+    tasks: Vec<DownloadTask>,
+    concurrency: usize,
+    policy: ExistingFilePolicy,
+    on_progress: F,
+) -> Result<(), String>
+where
+    F: Fn(usize, usize) + Send + Sync + 'static,
+{
     let mut seen_destinations = HashSet::new();
     let unique_tasks: Vec<DownloadTask> = tasks
         .into_iter()
@@ -262,6 +288,7 @@ where
 
     let total = unique_tasks.len();
     if total == 0 {
+        on_progress(0, 0);
         return Ok(());
     }
 
@@ -276,7 +303,7 @@ where
         let on_progress = on_progress.clone();
         workers.spawn(async move {
             let _permit = semaphore.acquire_owned().await.map_err(|e| e.to_string())?;
-            ensure_file(&task).await?;
+            ensure_file_with_policy(&task, policy).await?;
             let done = completed.fetch_add(1, Ordering::SeqCst) + 1;
             on_progress(done, total);
             Ok::<(), String>(())

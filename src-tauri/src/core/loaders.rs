@@ -1,6 +1,6 @@
 use crate::core::download::{Checksum, DownloadTask};
 use crate::core::instances::InstanceConfiguration;
-use crate::core::meta::{self, VersionPackage};
+use crate::core::meta::{self, LibraryDownload, VersionPackage};
 use crate::core::paths;
 use std::path::PathBuf;
 
@@ -49,6 +49,40 @@ pub fn convert_maven_coordinate_to_path(
     Ok(format!("{group_dir}/{artifact_id}/{version}/{file_name}"))
 }
 
+pub async fn resolve_required_component_libraries(
+    component: &meta::PrismComponentVersion,
+    minecraft_version: &str,
+) -> Result<Vec<LibraryDownload>, String> {
+    let mut libraries = Vec::new();
+    for requirement in component.requires.as_deref().unwrap_or_default() {
+        if requirement.uid == "net.minecraft" {
+            continue;
+        }
+        let version = match requirement.equals.clone() {
+            Some(exact) => exact,
+            None => {
+                let index = meta::fetch_prism_component_index(&requirement.uid).await?;
+                let matching_minecraft = index.versions.iter().find(|entry| entry.version == minecraft_version);
+                match matching_minecraft
+                    .map(|entry| entry.version.clone())
+                    .or_else(|| requirement.suggests.clone())
+                {
+                    Some(version) => version,
+                    None => {
+                        return Err(format!(
+                            "{} requires {} for Minecraft {minecraft_version}, but no matching version was found",
+                            component.uid, requirement.uid
+                        ))
+                    }
+                }
+            }
+        };
+        let required = meta::fetch_prism_component_version(&requirement.uid, &version).await?;
+        libraries.extend(required.libraries.unwrap_or_default());
+    }
+    Ok(libraries)
+}
+
 pub async fn resolve_instance_launch_configuration(
     instance: &InstanceConfiguration,
     base_version_package: VersionPackage,
@@ -83,8 +117,10 @@ async fn prepare_fabric_launch_configuration(
     };
 
     let comp = meta::fetch_prism_component_version("net.fabricmc.fabric-loader", &loader_version).await?;
+    let required_libraries = resolve_required_component_libraries(&comp, &instance.minecraft_version).await?;
 
     let mut merged_libraries = base_version_package.libraries.clone();
+    merged_libraries.extend(required_libraries);
     if let Some(extra_libs) = comp.libraries {
         merged_libraries.extend(extra_libs);
     }
@@ -119,8 +155,10 @@ async fn prepare_quilt_launch_configuration(
     };
 
     let comp = meta::fetch_prism_component_version("org.quiltmc.quilt-loader", &loader_version).await?;
+    let required_libraries = resolve_required_component_libraries(&comp, &instance.minecraft_version).await?;
 
     let mut merged_libraries = base_version_package.libraries.clone();
+    merged_libraries.extend(required_libraries);
     if let Some(extra_libs) = comp.libraries {
         merged_libraries.extend(extra_libs);
     }
