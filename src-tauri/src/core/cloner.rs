@@ -8,7 +8,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -136,6 +136,20 @@ fn count_files_and_check_saves(game_dir: &Path) -> (usize, bool, usize) {
     (mod_count, has_saves, saves_count)
 }
 
+pub fn resolve_prism_game_directory(instance_dir: &Path) -> PathBuf {
+    [".minecraft", "minecraft"]
+        .iter()
+        .map(|name| instance_dir.join(name))
+        .find(|candidate| candidate.is_dir())
+        .unwrap_or_else(|| instance_dir.to_path_buf())
+}
+
+const GAME_CONTENT_MARKERS: [&str; 6] = ["mods", "config", "saves", "resourcepacks", "shaderpacks", "options.txt"];
+
+pub fn has_game_content(game_dir: &Path) -> bool {
+    GAME_CONTENT_MARKERS.iter().any(|name| game_dir.join(name).exists())
+}
+
 pub fn parse_prism_instance(instance_dir: &Path) -> Option<DiscoveredExternalInstance> {
     let pack_json_path = instance_dir.join("mmc-pack.json");
     if !pack_json_path.is_file() {
@@ -209,12 +223,7 @@ pub fn parse_prism_instance(instance_dir: &Path) -> Option<DiscoveredExternalIns
         }
     }
 
-    let dot_mc = instance_dir.join(".minecraft");
-    let game_dir = if dot_mc.is_dir() {
-        dot_mc
-    } else {
-        instance_dir.to_path_buf()
-    };
+    let game_dir = resolve_prism_game_directory(instance_dir);
 
     let (mod_count, has_saves, saves_count) = count_files_and_check_saves(&game_dir);
 
@@ -741,6 +750,12 @@ where
     F: Fn(CloneProgressEvent),
 {
     let source = payload.source_instance;
+    if !has_game_content(Path::new(&source.game_directory)) {
+        return Err(format!(
+            "No Minecraft files (mods, config, saves or options) were found in {}. Nothing was imported.",
+            source.game_directory
+        ));
+    }
     let custom_name = payload.custom_name;
     let copy_saves = payload.copy_saves;
 
@@ -923,6 +938,36 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn prism_game_directory_prefers_dot_minecraft_then_minecraft() {
+        let root = std::env::temp_dir().join(format!("script-launcher-prism-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("minecraft").join("mods")).unwrap();
+        assert_eq!(resolve_prism_game_directory(&root), root.join("minecraft"));
+        assert!(has_game_content(&resolve_prism_game_directory(&root)));
+        fs::create_dir_all(root.join(".minecraft")).unwrap();
+        assert_eq!(resolve_prism_game_directory(&root), root.join(".minecraft"));
+        fs::remove_dir_all(&root).unwrap();
+        fs::create_dir_all(&root).unwrap();
+        assert_eq!(resolve_prism_game_directory(&root), root);
+        assert!(!has_game_content(&root));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[ignore]
+    fn scans_real_prism_instances() {
+        let instances = std::path::PathBuf::from(std::env::var("APPDATA").unwrap())
+            .join("PrismLauncher")
+            .join("instances");
+        for entry in fs::read_dir(instances).unwrap().flatten() {
+            if let Some(found) = parse_prism_instance(&entry.path()) {
+                println!("{} | {} {} | mods {} | {}", found.name, found.loader_type, found.minecraft_version, found.total_mod_count, found.game_directory);
+                assert!(found.total_mod_count > 0);
+            }
+        }
+    }
 
     #[test]
     #[ignore]
