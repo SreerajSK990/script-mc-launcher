@@ -2,7 +2,7 @@
 
 A fast, sleek, and modular Minecraft launcher with a native **Rust** backend on **Tauri 2** and a **React**, **TypeScript** and **Tailwind CSS** interface.
 
-**Latest release: [v0.24.1](https://github.com/SreerajSK990/script-mc-launcher/releases/tag/v0.24.1)** — Prism Launcher imports find the `minecraft` game folder used by current Prism versions, so mods, configs and worlds come across again. Read the [release notes](release-notes/v0.24.1.md) for details.
+**Latest release: [v0.24.2](https://github.com/SreerajSK990/script-mc-launcher/releases/tag/v0.24.2)** — The mouse wheel scrolls pages and lists again wherever the pointer is, including over the installed mods list, cards and icons. Read the [release notes](release-notes/v0.24.2.md) for details.
 
 Most Minecraft launchers out there either look like they're stuck in 2010 with clunky Java Swing windows, or they're bloated with electron bloatware and ads. Script Launcher is built to be fast, clean, and completely isolated so your mod setups and game versions never conflict with each other.
 
